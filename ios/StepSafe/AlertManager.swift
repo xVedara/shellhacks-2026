@@ -8,7 +8,8 @@ import simd
 /// Spatial tones go through one AVAudioEngine + AVAudioEnvironmentNode (HRTF), placed at the
 /// hazard's world point, with the listener following the ARKit camera (head mount: phone pose = head pose).
 /// Public methods are called on the main thread, except setListenerPose (any thread). Every audio-node
-/// mutation and all speech run on one serial `audioQueue`.
+/// mutation and all speech run on one serial `audioQueue`. Remote-command handlers arrive on an
+/// arbitrary queue and hop to main before touching policy or SwiftUI callbacks.
 final class AlertManager {
     enum Tone: CaseIterable {
         case dropOff, headHeight, ground
@@ -235,8 +236,22 @@ final class AlertManager {
 
     private var now: Double { ProcessInfo.processInfo.systemUptime }
     private var playingPriority: Int? {
-        guard speech.isSpeaking || now < busyUntil else { current = nil; return nil }
+        // AVSpeechSynthesizer is not thread-safe: speak and stop run on audioQueue, so isSpeaking does too.
+        let speaking = audioQueue.sync { speech.isSpeaking }
+        guard speaking || now < busyUntil else { current = nil; return nil }
         return current?.priority
+    }
+
+    /// Remote-command handlers are not on main. Already-on-main calls run inline so a double-press
+    /// keeps its timing; otherwise the work is serialized with analysis updates and SwiftUI.
+    private func onMain(_ body: @escaping (AlertManager) -> Void) {
+        if Thread.isMainThread {
+            body(self)
+        } else {
+            DispatchQueue.main.async { [weak self] in
+                if let self { body(self) }
+            }
+        }
     }
 
     /// What is playing, for the hazard cut-off rules (AlertPolicy.mayStart).
@@ -496,18 +511,19 @@ final class AlertManager {
         let cc = MPRemoteCommandCenter.shared()
         cc.togglePlayPauseCommand.isEnabled = true
         cc.togglePlayPauseCommand.addTarget { [weak self] _ in
-            self?.handlePress(source: "togglePlayPause")
+            self?.onMain { $0.handlePress(source: "togglePlayPause") }
             return .success
         }
         // play/pause also arrive when an AirPod is taken out or put in: ignore them right after a route change.
         for (command, name) in [(cc.playCommand, "play"), (cc.pauseCommand, "pause")] {
             command.isEnabled = true
             command.addTarget { [weak self] _ in
-                guard let self else { return .success }
-                if self.now - self.lastRouteChange < 1.5 {
-                    self.log.info("remote command \(name, privacy: .public) ignored (route change)")
-                } else {
-                    self.handlePress(source: name)
+                self?.onMain { manager in
+                    if manager.now - manager.lastRouteChange < 1.5 {
+                        manager.log.info("remote command \(name, privacy: .public) ignored (route change)")
+                    } else {
+                        manager.handlePress(source: name)
+                    }
                 }
                 return .success
             }
@@ -515,8 +531,10 @@ final class AlertManager {
         // AirPods double-press arrives as next track.
         cc.nextTrackCommand.isEnabled = true
         cc.nextTrackCommand.addTarget { [weak self] _ in
-            self?.log.info("remote command nextTrack -> mute toggle")
-            self?.toggleMute()
+            self?.onMain { manager in
+                manager.log.info("remote command nextTrack -> mute toggle")
+                manager.toggleMute()
+            }
             return .success
         }
     }
