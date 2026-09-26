@@ -41,6 +41,12 @@ describe('taxonomy', () => {
     expect(labelsFor('trash-bin', 'ground')).toEqual({ spokenLabel_en: 'trash bin', spokenLabel_es: 'cubo de basura' });
     expect(labelsFor('low-branch', 'head')).toEqual({ spokenLabel_en: 'low branch at head height', spokenLabel_es: 'rama baja a la altura de la cabeza' });
     expect(labelsFor('curb', 'dropoff')).toEqual({ spokenLabel_en: 'drop-off: curb', spokenLabel_es: 'desnivel: bordillo' });
+    expect(labelsFor('broken-sidewalk', 'dropoff')).toEqual({ spokenLabel_en: 'drop-off: broken sidewalk', spokenLabel_es: 'desnivel: acera rota' });
+    // a non-drop type in the dropoff band speaks the drop alone, never an unrelated object
+    expect(labelsFor('person', 'dropoff')).toEqual({ spokenLabel_en: 'drop-off', spokenLabel_es: 'desnivel' });
+    expect(labelsFor('not-a-type', 'dropoff')).toEqual({ spokenLabel_en: 'drop-off', spokenLabel_es: 'desnivel' });
+    expect(labelsFor('person', 'ground')).toEqual({ spokenLabel_en: 'person', spokenLabel_es: 'persona' });
+    expect(labelsFor('person', 'head')).toEqual({ spokenLabel_en: 'person at head height', spokenLabel_es: 'persona a la altura de la cabeza' });
     expect(labelsFor('not-a-type', 'ground')).toEqual({ spokenLabel_en: 'obstacle', spokenLabel_es: 'obstáculo' });
     for (const e of TAXONOMY)
       for (const band of ['ground', 'head', 'dropoff'] as const)

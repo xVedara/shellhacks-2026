@@ -98,10 +98,21 @@ export const taxonomyEntry = (id: unknown): HazardType =>
   BY_ID.get(typeof id === 'string' ? id.trim().toLowerCase().replace(/\s+/g, '-') : '') ?? BY_ID.get(OBSTACLE)!;
 export const isTypeId = (id: unknown): id is string => typeof id === 'string' && BY_ID.has(id);
 
+/** Types that are themselves a drop; only these are named after "drop-off:". */
+export const DROP_TYPES: ReadonlySet<string> = new Set([
+  ...TAXONOMY.filter((e) => e.defaultHeightBand === 'dropoff').map((e) => e.id), // hatch, trench, manhole, pothole, curb, ...
+  'broken-sidewalk', // a sunken or broken slab edge
+]);
+
 /** The only source of spoken labels. */
 export function labelsFor(id: string, band: HeightBand) {
-  const { en, es } = taxonomyEntry(id);
+  const { id: type, en, es } = taxonomyEntry(id);
   if (band === 'head') return { spokenLabel_en: `${en} at head height`, spokenLabel_es: `${es} a la altura de la cabeza` };
-  if (band === 'dropoff') return { spokenLabel_en: `drop-off: ${en}`, spokenLabel_es: `desnivel: ${es}` };
+  if (band === 'dropoff') {
+    // the depth sensor saw a drop, but a non-drop type ("person") would name the wrong thing: speak the drop alone
+    return DROP_TYPES.has(type)
+      ? { spokenLabel_en: `drop-off: ${en}`, spokenLabel_es: `desnivel: ${es}` }
+      : { spokenLabel_en: 'drop-off', spokenLabel_es: 'desnivel' };
+  }
   return { spokenLabel_en: en, spokenLabel_es: es };
 }

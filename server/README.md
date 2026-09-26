@@ -90,7 +90,7 @@ Additive to PLAN.md section 6; nothing existing changed shape.
   or not a number); a non-object answer is a naming failure. Label text the model adds anyway is dropped. Labels are
   derived on every read and emit (summary, `/near`, detail, merge and create responses, SSE) from the stored type
   and heightBand, so stored label fields never reach a client; a legacy or unknown type reads as `obstacle`: ground `<en>` / `<es>`, head
-  `<en> at head height` / `<es> a la altura de la cabeza`, dropoff `drop-off: <en>` / `desnivel: <es>`. Every
+  `<en> at head height` / `<es> a la altura de la cabeza`, dropoff `drop-off: <en>` / `desnivel: <es>` for drop types (entries whose default band is dropoff, plus broken-sidewalk) and just `drop-off` / `desnivel` for any other type, so an unrelated object is never named. Every
   template is at most 60 characters (tested for all entries and bands). Ollama's MLX backend does not always honor
   `format` and may wrap the JSON in a code fence, so the text between the first `{` and last `}` is parsed.
 - **`GET /tts?text=&lang=en|es`** returns `audio/mpeg` (`Cache-Control: public, max-age=86400`). `text` is NFC

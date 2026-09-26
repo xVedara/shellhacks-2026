@@ -440,7 +440,7 @@ describe('audit fixes', () => {
       type: 'low-branch', heightBand: 'head', label: 'low branch at head height', spokenLabel_es: 'rama baja a la altura de la cabeza',
     });
     await agree({ heightBand: 'dropoff' });
-    expect(await detail(body.id)).toMatchObject({ type: 'low-branch', label: 'drop-off: low branch', spokenLabel_es: 'desnivel: rama baja' });
+    expect(await detail(body.id)).toMatchObject({ type: 'low-branch', label: 'drop-off', spokenLabel_es: 'desnivel' });
   });
 
   it('model output never reaches spoken labels, whatever the namer returns', async () => {
