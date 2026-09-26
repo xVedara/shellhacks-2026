@@ -225,20 +225,51 @@ export function getDeviceId(): string {
   return memoryDeviceId;
 }
 
-export function getVotedIds(): Set<string> {
+// Stable set so a store subscriber can compare with Object.is. A fresh Set every read loops.
+let votedSnapshot = new Set<string>();
+let votedLoaded = false;
+const votedListeners = new Set<() => void>();
+
+function loadVoted() {
+  if (votedLoaded) return;
+  votedLoaded = true;
   try {
     const stored = JSON.parse(readStorage("stepsafe.voted") ?? "[]");
     if (Array.isArray(stored)) stored.forEach((id) => memoryVoted.add(String(id)));
   } catch {
     /* corrupt value: ignore */
   }
-  return new Set(memoryVoted);
+  votedSnapshot = new Set(memoryVoted);
+}
+
+export function getVotedIds(): Set<string> {
+  loadVoted();
+  return votedSnapshot;
+}
+
+export function subscribeVoted(onChange: () => void) {
+  votedListeners.add(onChange);
+  const onStorage = (event: StorageEvent) => {
+    if (event.key !== "stepsafe.voted") return;
+    votedLoaded = false;
+    memoryVoted.clear();
+    loadVoted();
+    onChange();
+  };
+  window.addEventListener("storage", onStorage);
+  return () => {
+    votedListeners.delete(onChange);
+    window.removeEventListener("storage", onStorage);
+  };
 }
 
 export function rememberVote(id: string) {
+  loadVoted();
   memoryVoted.add(id);
+  votedSnapshot = new Set(memoryVoted);
   // ponytail: keeps the newest 500 ids; older votes may reappear in the queue (server still holds the vote).
-  writeStorage("stepsafe.voted", JSON.stringify([...getVotedIds()].slice(-500)));
+  writeStorage("stepsafe.voted", JSON.stringify([...votedSnapshot].slice(-500)));
+  votedListeners.forEach((onChange) => onChange());
 }
 
 // --- formatting ---

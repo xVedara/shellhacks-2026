@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Crop, HazardHeading, useHazardDetail } from "@/components/HazardDetail";
 import Map from "@/components/Map";
 import { ConnectionBadge, Notice, PageBar, linkClass, primaryButton, secondaryButton } from "@/components/ui";
@@ -15,7 +15,6 @@ import {
   RECLASSIFY_THRESHOLD,
   api,
   formatLength,
-  getVotedIds,
   rememberVote,
   typeDisplayName,
   applyTypePick,
@@ -25,6 +24,7 @@ import {
   type ReclassifyPickState,
 } from "@/lib/api";
 import { announceAction, useLiveHazards, useTaxonomy } from "@/lib/hooks";
+import { useVotedIds } from "@/lib/use-voted";
 
 type Panel = null | "reclassify" | "report";
 
@@ -34,7 +34,7 @@ const voteButton =
 export default function VerifyPage() {
   const { hazards, connection, loaded, error, detailVersion } = useLiveHazards();
   const { taxonomy, error: taxonomyError, retry: retryTaxonomy } = useTaxonomy();
-  const [voted, setVoted] = useState<Set<string>>(() => (typeof window === "undefined" ? new Set() : getVotedIds()));
+  const voted = useVotedIds();
   const [skipped, setSkipped] = useState<Set<string>>(new Set());
   const [pinnedId, setPinnedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -65,21 +65,35 @@ export default function VerifyPage() {
   const measured = (m: number | null | undefined) =>
     !ready ? (detailError ? "—" : "Loading…") : m != null ? formatLength(m) : "Not measured";
 
-  const skip = useCallback(() => {
-    if (!currentId) return;
-    setSkipped((s) => new Set(s).add(currentId));
-    setMessage(null);
-  }, [currentId]);
+  const hazardName = useCallback(
+    (h: { label: string; type: string; sample: boolean }) =>
+      `${h.sample ? "Sample " : ""}${h.label || typeDisplayName(h.type, taxonomy)}`,
+    [taxonomy],
+  );
 
+  const skip = useCallback(() => {
+    if (!currentId || !current) return;
+    const next = queue.find((h) => h.id !== currentId);
+    const name = hazardName(current);
+    setSkipped((s) => new Set(s).add(currentId));
+    // The card swaps in place. A live message is what tells a screen reader it moved.
+    setMessage({
+      tone: "info",
+      text: next ? `Skipped ${name}. Next: ${hazardName(next)}.` : `Skipped ${name}. Nothing left in this pass.`,
+    });
+  }, [current, currentId, hazardName, queue]);
+
+  // `busy` flips on the next render, so a second click in the same turn would POST again.
+  const voteLock = useRef(false);
   const vote = useCallback(
     async (dir: "up" | "down") => {
-      if (!currentId || busy || !ready) return;
+      if (!currentId || voteLock.current || !ready) return;
+      voteLock.current = true;
       setBusy(true);
       setMessage(null);
       try {
         const res = await api.vote(currentId, dir);
         rememberVote(currentId);
-        setVoted((s) => new Set(s).add(currentId));
         setMessage({
           tone: "info",
           text: `${dir === "up" ? "Upvoted: still there" : "Downvoted: gone or not a hazard"}. Confidence is now ${res.confidence.toFixed(1)}${res.status === "cleared" ? " and the hazard is cleared" : ""}.`,
@@ -89,10 +103,11 @@ export default function VerifyPage() {
         if (e instanceof ApiError && e.code === "not_found") setSkipped((s) => new Set(s).add(currentId));
         setMessage({ tone: "warn", text: e instanceof Error ? e.message : String(e) });
       } finally {
+        voteLock.current = false;
         setBusy(false);
       }
     },
-    [currentId, busy, ready],
+    [currentId, ready],
   );
 
   useEffect(() => {
@@ -338,6 +353,7 @@ function ReclassifyForm({
   const [autoFilled, setAutoFilled] = useState<ReclassifyPickState["autoFilled"]>({ category: false, heightBand: false });
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ tone: "info" | "warn"; text: string } | null>(null);
+  const submitLock = useRef(false);
 
   const grouped = useMemo(
     () => CATEGORIES.map((c) => ({ category: c, options: (taxonomy ?? []).filter((t) => t.category === c) })),
@@ -373,7 +389,8 @@ function ReclassifyForm({
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (empty) return;
+    if (empty || submitLock.current) return;
+    submitLock.current = true;
     setBusy(true);
     try {
       const res = await api.reclassify(hazardId, change);
@@ -387,6 +404,7 @@ function ReclassifyForm({
     } catch (err) {
       setResult({ tone: "warn", text: err instanceof Error ? err.message : String(err) });
     } finally {
+      submitLock.current = false;
       setBusy(false);
     }
   };
@@ -469,9 +487,12 @@ function ReportForm({ hazardId }: { hazardId: string }) {
   const [reason, setReason] = useState<"spam" | "abuse" | "other">("spam");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ tone: "info" | "warn"; text: string } | null>(null);
+  const submitLock = useRef(false);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitLock.current) return;
+    submitLock.current = true;
     setBusy(true);
     try {
       await api.report(hazardId, reason);
@@ -479,6 +500,7 @@ function ReportForm({ hazardId }: { hazardId: string }) {
     } catch (err) {
       setResult({ tone: "warn", text: err instanceof Error ? err.message : String(err) });
     } finally {
+      submitLock.current = false;
       setBusy(false);
     }
   };
