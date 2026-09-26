@@ -51,6 +51,11 @@
   --float-shadow: 0 2px 4px rgb(0 0 0 / 0.3), 0 12px 32px -6px rgb(0 0 0 / 0.6);
   --tiles: brightness(0.82) contrast(1.08) saturate(0.8);
 }
+/* Header logo: blue in light mode, navy in dark (brandguide/README.md). */
+:root[data-theme="dark"] .logo-light,
+:root:not([data-theme="dark"]) .logo-dark {
+  display: none;
+}
 
 @theme inline {
   --color-page: var(--page);

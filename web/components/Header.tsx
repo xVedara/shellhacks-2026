@@ -117,7 +117,8 @@ export default function Header() {
     <header className="relative z-[1200] flex shrink-0 flex-col border-b border-line bg-sunken lg:w-60 lg:border-b-0 lg:border-r">
       <div className="flex items-center gap-2.5 px-4 py-2.5 lg:px-3 lg:pb-2 lg:pt-3">
         <Link href="/" className="flex shrink-0 items-center gap-2.5 rounded-md">
-          <Image src="/logo.png" width={28} height={28} alt="" priority className="rounded-md" />
+          <Image src="/logo-light.png" width={28} height={28} alt="" priority className="logo-light rounded-md" />
+          <Image src="/logo-dark.png" width={28} height={28} alt="" priority className="logo-dark rounded-md" />
           <span className="min-w-0 leading-tight">
             <span className="block text-[15px] font-semibold text-heading">StepSafe</span>
             <span className="hidden truncate text-[12px] text-ink-3 sm:block">Community hazard map</span>
