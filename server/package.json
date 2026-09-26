@@ -1,0 +1,27 @@
+{
+  "name": "stepsafe-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "seed:demo": "tsx ../scripts/seed-demo.ts"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.3.0",
+    "@google/genai": "^2.24.0",
+    "ajv": "^8.20.0",
+    "fastify": "^5.12.5",
+    "mongodb": "^7.6.0",
+    "tsx": "^4.23.15"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.3",
+    "mongodb-memory-server": "^11.3.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.2"
+  }
+}
