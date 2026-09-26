@@ -4,10 +4,11 @@
 // next/dynamic with ssr:false (see components/Map.tsx).
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { CircleMarker, MapContainer, Marker, Polyline, TileLayer, Tooltip, ZoomControl, useMap } from "react-leaflet";
 import type { HazardSummary } from "@/lib/api";
 import { hazardAccessibleName, markerSize, markerSvg } from "@/lib/marker";
+import { sameHazardMarker, type HazardMarkerProps } from "@/lib/pin-equal";
 
 export type MapProps = {
   hazards: HazardSummary[];
@@ -80,7 +81,8 @@ const OSM_STYLE: Record<OsmFeature["kind"], { color: string; fill: string }> = {
   tactile: { color: "#111", fill: "#f5c400" },
 };
 
-function OsmLayer() {
+// No props: a live hazard tick must not reconcile all 891 OSM features.
+const OsmLayer = memo(function OsmLayer() {
   const [features, setFeatures] = useState<OsmFeature[]>([]);
   useEffect(() => {
     let live = true;
@@ -113,21 +115,15 @@ function OsmLayer() {
       })}
     </>
   );
-}
+});
 
-function HazardMarker({
+const HazardMarker = memo(function HazardMarker({
   hazard: h,
   selected,
   highlighted,
   compact,
   onSelect,
-}: {
-  hazard: HazardSummary;
-  selected: boolean;
-  highlighted: boolean;
-  compact?: boolean;
-  onSelect?: (id: string) => void;
-}) {
+}: HazardMarkerProps) {
   const ref = useRef<L.Marker>(null);
   const name = hazardAccessibleName(h);
   const icon = useMemo(() => hazardIcon(h, selected, highlighted), [h, selected, highlighted]);
@@ -164,7 +160,7 @@ function HazardMarker({
       }}
     />
   );
-}
+}, sameHazardMarker);
 
 export default function LeafletMap({
   hazards,
