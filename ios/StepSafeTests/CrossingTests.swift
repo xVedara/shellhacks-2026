@@ -338,4 +338,81 @@ final class CrossingTests: XCTestCase {
         for t in stride(from: 15.0, through: 40, by: 0.25) { XCTAssertFalse(step(t)) }
         XCTAssertTrue(h.spoken)
     }
+    // MARK: What's ahead (device bug: the answer was followed by the head-height alert it had just described)
+
+    /// Mirrors AlertManager.whatsAhead + perform(.whatsAhead): cut off below priority 1, replace the notice queue,
+    /// answer at whatsAheadPriority and mark the named hazard announced. Returns the answer as it plays.
+    static func pressWhatsAhead(_ policy: inout AlertPolicy, _ queue: inout NoticeQueue<String>, latest: [HazardKind: Detection],
+                                playing: AlertPolicy.Playing?, now: Double) -> AlertPolicy.Playing? {
+        let p = playing.flatMap { AlertPolicy.whatsAheadCutsOff($0.priority) ? nil : $0 }
+        queue.replaceAll(with: "what's ahead", now: now)
+        guard queue.pop(playing: p?.priority, now: now) != nil else { return nil } // waits behind a priority-1 alert
+        let d = AlertPolicy.whatsAheadHazard(latest)
+        if let d { policy.markAnnounced(d, now: now) }
+        return AlertPolicy.Playing(priority: AlertPolicy.whatsAheadPriority(d), hazard: d, endsAt: now + 2.2, startedAt: now)
+    }
+
+    func testWhatsAheadSpeaksOnlyTheAnswerNoHeadHeightReplay() throws {
+        for ahead: Float in [3, 1.8] { // beyond and within repeatCloseDistance (the "once more when close" rule)
+            var policy = AlertPolicy()
+            var queue = NoticeQueue<String>()
+            let head = Detection(kind: .headHeight, point: SIMD3(0, 1.7, -ahead), ahead: ahead, lateral: 0, pointCount: 80)
+            let latest: [HazardKind: Detection] = [.headHeight: head]
+            XCTAssertEqual(AlertPolicy.whatsAheadPhrase(latest, atCurb: false), AlertPolicy.phrase(head))
+            let answer = try XCTUnwrap(Self.pressWhatsAhead(&policy, &queue, latest: latest, playing: nil, now: 0))
+            XCTAssertEqual(answer.priority, 2)
+            // No head-height alert, during the answer or after it, for the whole repeat window.
+            var t = 0.0
+            while t < Tuning.repeatWindow - 0.1 {
+                XCTAssertNil(policy.decide(latest, now: t, playing: t < answer.endsAt ? answer : nil), "ahead \(ahead), t \(t)")
+                t += 1.0 / 12
+            }
+            XCTAssertEqual(policy.decide(latest, now: Tuning.repeatWindow + 0.1, playing: nil)?.kind, .headHeight) // normal repeat
+            // Another hazard in view does not cut the answer off (it waits, as behind any priority-2 alert).
+            let ground = Detection(kind: .ground, point: SIMD3(0.5, 0.3, -2.5), ahead: 2.5, lateral: 0.5, pointCount: 90)
+            XCTAssertNil(policy.decide([.headHeight: head, .ground: ground], now: 1, playing: answer))
+        }
+    }
+
+    func testWhatsAheadClearsQueuedHeadsUpAndStatus() {
+        var policy = AlertPolicy()
+        var queue = NoticeQueue<String>()
+        queue.push("Construction ahead", server: true, now: 0) // a map heads-up
+        queue.push(Notices.pathGuardBack, server: false, now: 0) // a status notice
+        let ground = Detection(kind: .ground, point: SIMD3(0, 0.3, -3), ahead: 3, lateral: 0, pointCount: 90)
+        // Pressed while a priority-3 alert plays: cut off, queue cleared, the answer alone plays.
+        let playingGround = AlertPolicy.Playing(priority: 3, hazard: ground, endsAt: 2, startedAt: 0)
+        XCTAssertNotNil(Self.pressWhatsAhead(&policy, &queue, latest: [.ground: ground], playing: playingGround, now: 0.5))
+        XCTAssertNil(queue.pop(playing: nil, now: 3))
+        XCTAssertEqual(queue.count, 0)
+        for p in [2, 3, AlertPolicy.onRequestPriority, AlertPolicy.serverPhrasePriority] { XCTAssertTrue(AlertPolicy.whatsAheadCutsOff(p)) }
+        XCTAssertFalse(AlertPolicy.whatsAheadCutsOff(1))
+        XCTAssertFalse(AlertPolicy.whatsAheadCutsOff(nil))
+        XCTAssertEqual(AlertPolicy.whatsAheadPriority(nil), AlertPolicy.onRequestPriority) // "Nothing detected": any hazard cuts it
+    }
+
+    func testWhatsAheadNeverDelaysPriorityOne() throws {
+        func car(_ id: Int, ttc: Float, range: Float) -> Detection {
+            Detection(kind: .closing, point: SIMD3(0, 1, -range), ahead: range, lateral: 0, pointCount: 0,
+                      closing: .init(speed: range / ttc, ttc: ttc, label: "Car", trackId: id))
+        }
+        let head = Detection(kind: .headHeight, point: SIMD3(0, 1.7, -3), ahead: 3, lateral: 0, pointCount: 80)
+        // A closing object arriving during the answer plays at once (cuts it off).
+        var policy = AlertPolicy()
+        var queue = NoticeQueue<String>()
+        let answer = try XCTUnwrap(Self.pressWhatsAhead(&policy, &queue, latest: [.headHeight: head], playing: nil, now: 0))
+        XCTAssertEqual(policy.decide([.headHeight: head, .closing: car(7, ttc: 2.5, range: 6)], now: 0.3, playing: answer)?.closing?.trackId, 7)
+        // Pressed during a priority-1 alert: the answer waits; a pending closing phrase is kept and plays first.
+        var p1 = AlertPolicy()
+        var q1 = NoticeQueue<String>()
+        let a = car(1, ttc: 2.8, range: 7), b = car(2, ttc: 2.9, range: 7.5)
+        let playingA = AlertPolicy.Playing(priority: 1, hazard: a, endsAt: 1.7, startedAt: 0, ttcAtStart: 2.8)
+        p1.markAnnounced(a, now: 0)
+        XCTAssertNil(p1.decide([.closing: b], now: 0.2, playing: playingA)) // B queues (pending)
+        XCTAssertNotNil(p1.pending)
+        XCTAssertNil(Self.pressWhatsAhead(&p1, &q1, latest: [.closing: b, .headHeight: head], playing: playingA, now: 0.4))
+        XCTAssertNotNil(p1.pending) // the press never drops it
+        XCTAssertEqual(p1.decide([.headHeight: head], now: 1.8, playing: nil)?.closing?.trackId, 2) // B speaks when A ends
+        XCTAssertEqual(q1.count, 1) // the answer is still queued, after B
+    }
 }

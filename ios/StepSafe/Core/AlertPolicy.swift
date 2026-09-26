@@ -48,6 +48,8 @@ struct NoticeQueue<Item> {
     var count: Int { items.count }
     mutating func push(_ item: Item, server: Bool, now: Double) { items.append((item, server, now)) }
     mutating func removeAll() { items = [] }
+    /// "What's ahead" clears every queued notice and server phrase: it is the only thing left to say.
+    mutating func replaceAll(with item: Item, now: Double) { items = [(item, false, now)] }
 
     /// The notice to play now (removed from the queue), or nil. `playing` = priority playing, nil if idle.
     mutating func pop(playing: Int?, now: Double) -> Item? {
@@ -60,7 +62,8 @@ struct NoticeQueue<Item> {
 
 /// Which hazard to announce, and when (PLAN.md section 7 priority table). Pure, no audio, so it is unit-tested.
 /// - Lower number = higher priority. A higher priority cuts off a lower one.
-/// - Notices (acknowledgements, status, what's-ahead replies) never cut anything off; they wait.
+/// - Notices (acknowledgements, status) never cut anything off; they wait. A what's-ahead press cuts off
+///   everything below priority 1 and clears the notice queue (whatsAheadCutsOff, NoticeQueue.replaceAll).
 /// - Mute silences priority 2 and lower. Priority 1 always plays.
 /// - The same hazard (same kind within sameHazardRadius of the point where it was FIRST announced; closing
 ///   objects by track id) is not repeated for repeatWindow (closing: closingRepeatSeconds, one clip), except
@@ -160,6 +163,21 @@ struct AlertPolicy {
         guard let d = mostUrgent(latest.values) else { return advice ? listenBeforeCrossing : Notices.nothingAhead }
         return advice ? "\(phrase(d)). \(listenBeforeCrossing)" : phrase(d)
     }
+
+    /// "What's ahead" (Ara: it clears queued sounds and just tells what's ahead). The hazard its answer names:
+    /// the closing object if any, else the most urgent one (nil: nothing detected). AlertManager marks it
+    /// announced once the answer starts, so the same hazard does not replay right after (normal repeat rules).
+    static func whatsAheadHazard(_ latest: [HazardKind: Detection]) -> Detection? {
+        latest[.closing] ?? mostUrgent(latest.values)
+    }
+
+    /// A press cuts off whatever is playing, except a priority-1 alert (the answer then waits behind it).
+    static func whatsAheadCutsOff(_ playing: Int?) -> Bool { playing.map { $0 >= 2 } ?? false }
+
+    /// The answer plays like the alert for the hazard it names (at most priority 2): only a more urgent alert cuts
+    /// it off; other hazards wait, as behind any priority-2 alert. "Nothing detected" plays as onRequestPriority,
+    /// so any hazard alert cuts it off.
+    static func whatsAheadPriority(_ hazard: Detection?) -> Int { hazard.map { min(2, priority($0)) } ?? onRequestPriority }
 
     private static func radius(_ kind: HazardKind) -> Float {
         kind == .closing ? Tuning.closingSameRadiusM : Tuning.sameHazardRadius

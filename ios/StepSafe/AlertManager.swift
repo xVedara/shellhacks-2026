@@ -383,10 +383,10 @@ final class AlertManager {
         case let .say(phrase): speakNow(phrase)
         case .whatsAhead:
             let phrase = AlertPolicy.whatsAheadPhrase(latest, atCurb: atCurb)
-            if let d = AlertPolicy.mostUrgent(latest.values) {
-                if !play(tone: Self.tone(for: d.kind), at: d.point, phrase: phrase, priority: AlertPolicy.onRequestPriority) {
-                    speakNow(phrase)
-                }
+            let d = AlertPolicy.whatsAheadHazard(latest)
+            if play(tone: d.map { Self.tone(for: $0.kind) }, at: d?.point, phrase: phrase,
+                    priority: AlertPolicy.whatsAheadPriority(d), hazard: d) {
+                if let d { policy.markAnnounced(d, now: now) } // said: no replay right after (cut off: un-marked)
             } else {
                 speakNow(phrase)
             }
@@ -458,8 +458,14 @@ final class AlertManager {
 
     // MARK: Controls (AirPods and on-screen buttons)
 
+    /// Clears queued sounds and just tells what's ahead: cuts off anything playing below priority 1, drops queued
+    /// notices and server phrases (a pending closing phrase stays: AlertPolicy.pending), then answers. During a
+    /// priority-1 alert the answer waits for it.
     func whatsAhead() {
-        notice(isScanning ? .whatsAhead : .say(Notices.stopped))
+        guard isScanning else { return notice(.say(Notices.stopped)) }
+        if AlertPolicy.whatsAheadCutsOff(playingPriority) { cutOff() }
+        pending.replaceAll(with: .whatsAhead, now: now)
+        drainNotices()
     }
 
     var isMuted: Bool { policy.isMuted(now: now) }
