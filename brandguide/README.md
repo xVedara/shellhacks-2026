@@ -5,7 +5,7 @@
 | File | Use |
 | --- | --- |
 | `logo-blue-1024.png`, `logo-dark-1024.png` | Original artwork (rounded square on white) |
-| `appicon-blue-1024.png`, `appicon-dark-1024.png` | Full-bleed square for Xcode app icons (iOS applies its own mask). Blue is the default icon, dark is the dark-appearance icon |
+| `appicon-dark-1024.png`, `appicon-blue-1024.png` | Full-bleed square for Xcode app icons (iOS applies its own mask). Navy (`dark`) is the primary icon. Blue gradient is marketing-only / alternate appearance. |
 | `logo-{blue,dark}-rounded-{1024,512,180}.png` | Rounded with transparent corners, for the web (favicon, apple-touch-icon, headers) |
 
 Regenerate the derived files with `python3 make_icons.py` (needs Pillow).
@@ -14,7 +14,7 @@ Regenerate the derived files with `python3 make_icons.py` (needs Pillow).
 
 - Name: **StepSafe** (one word, capital S twice). Tagline: **Detect. Alert. Move Freely.**
 - Voice: calm, immediate, clear, concise. Alerts read like "Curb ahead. 6 feet.", never "WARNING!".
-- Full brand and product handoff: `/Users/ara/Downloads/shellhacks2026/Brand Guide/` (workspace, not in the repo).
+- Full brand and product handoff lives outside this repo (workspace docs), not in git.
 
 ## Colors (official)
 
