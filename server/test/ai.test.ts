@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readdir, rm, stat, utimes, writeFile } from 'node:fs/pr
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
-import { namingPrompt, parseNaming } from '../src/gemini.ts';
+import { namingPrompt, parseNaming, raceAbort } from '../src/gemini.ts';
 import { limitConcurrency, ollamaNamer, redactUrl, selectNamer, switchableNamer, type NamerChoice } from '../src/namer.ts';
 import { labelsFor, TAXONOMY, taxonomyEntry, TYPE_IDS } from '../src/taxonomy.ts';
 import { elevenLabsTts, normalizeTtsText, TtsBudgetError } from '../src/tts.ts';
@@ -137,6 +137,29 @@ describe('ollama namer', () => {
   });
 });
 
+describe('gemini timeout race', () => {
+  it('returns the work result, and a timeout does not leave a late rejection unhandled', async () => {
+    const ac = new AbortController();
+    await expect(raceAbort(Promise.resolve('ok'), ac.signal, new Error('gemini timeout'))).resolves.toBe('ok');
+
+    const errors: unknown[] = [];
+    const onUnhandled = (err: unknown) => { errors.push(err); };
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      const abort = new AbortController();
+      const work = new Promise<string>((_, reject) => {
+        setTimeout(() => reject(new Error('late abort')), 30);
+      });
+      setTimeout(() => abort.abort(), 5);
+      await expect(raceAbort(work, abort.signal, new Error('gemini timeout'))).rejects.toThrow('gemini timeout');
+      await new Promise((r) => setTimeout(r, 60));
+      expect(errors).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+  });
+});
+
 describe('naming normalization', () => {
   it('keeps only taxonomy ids; enums and severity validated; never returns label text', () => {
     expect(parseNaming({ type: ' Trash-Bin ', category: 'Temporary', heightBand: ' HEAD ', severity: 9, spokenLabel_en: 'all clear' })).toEqual({
@@ -252,6 +275,15 @@ describe('elevenlabs tts', () => {
     expect(f.calls).toHaveLength(2);
     await elevenLabsTts({ apiKey: 'KEY', voiceId: 'other', cacheDir: dir, fetchImpl: f })('silla', free);
     expect(f.calls).toHaveLength(3);
+  });
+
+  it('refunds the character reservation when upstream fails, and does not cache', async () => {
+    const seen: number[] = [];
+    const tts = elevenLabsTts({
+      apiKey: 'KEY', cacheDir: await cacheDir(), fetchImpl: fakeFetch(() => json({ detail: 'no' }, 500)),
+    });
+    await expect(tts('chair', (n) => (seen.push(n), true))).rejects.toThrow(/elevenlabs/);
+    expect(seen).toEqual([5, -5]);
   });
 
   it('a miss with no budget throws TtsBudgetError without calling upstream', async () => {

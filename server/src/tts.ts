@@ -7,7 +7,9 @@ export type TtsLang = (typeof TTS_LANGS)[number];
 
 /**
  * Returns MP3 bytes for already-normalized text. On a cache miss it first calls `charge(chars)`; false means
- * a budget ran out and it throws TtsBudgetError without calling ElevenLabs. Cache hits are free.
+ * a budget ran out and it throws TtsBudgetError without calling ElevenLabs. `charge(n)` with a negative n
+ * refunds a reservation when the upstream call fails before any audio is produced; that call must not count
+ * as another miss. Cache hits are free.
  * Throws any other error when the upstream call fails.
  */
 export type Tts = (text: string, charge: (chars: number) => boolean) => Promise<Buffer>;
@@ -73,6 +75,20 @@ async function evict(dir: string, maxBytes: number, maxFiles: number) {
     bytes -= f.size;
     count--;
   }
+  return { bytes, files: count };
+}
+
+/** Running total so later misses under both caps skip the directory stat. The first miss, and any miss over a cap, still stats. */
+function cacheUsage(dir: string, maxBytes: number, maxFiles: number) {
+  let usage: { bytes: number; files: number } | null = null;
+  return async (addedBytes: number) => {
+    if (!usage) usage = await evict(dir, maxBytes, maxFiles); // recount, including files already on disk
+    else {
+      usage.bytes += addedBytes;
+      usage.files += 1;
+      if (usage.bytes > maxBytes || usage.files > maxFiles) usage = await evict(dir, maxBytes, maxFiles);
+    }
+  };
 }
 
 /**
@@ -85,6 +101,7 @@ export function elevenLabsTts({
   maxCacheBytes = CACHE_MAX_BYTES, maxCacheFiles = CACHE_MAX_FILES,
 }: ElevenLabsOptions): Tts {
   const inflight = new Map<string, Promise<Buffer>>();
+  const noteStored = cacheUsage(cacheDir, maxCacheBytes, maxCacheFiles);
 
   async function load(key: string, text: string, charge: (chars: number) => boolean) {
     const file = join(cacheDir, `${key}.mp3`);
@@ -97,33 +114,43 @@ export function elevenLabsTts({
       // miss: generate below
     }
     if (!charge(text.length)) throw new TtsBudgetError('tts budget exhausted');
-    const res = await fetchImpl(
-      `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`,
-      {
-        method: 'POST',
-        headers: { 'xi-api-key': apiKey, 'content-type': 'application/json', accept: 'audio/mpeg' },
-        body: JSON.stringify({ text, model_id: model }),
-        signal: AbortSignal.timeout(timeoutMs),
-      },
-    );
-    // the error body is ElevenLabs' JSON ({detail: {status, message}}); it never contains the key
-    if (!res.ok) {
-      // capped read: an error body is only a hint; a huge one is dropped after recording the status
-      const detail = await readCapped(res, 4096).then((b) => b.toString('utf8').slice(0, 300), () => '(body too large)');
-      throw new Error(`elevenlabs HTTP ${res.status}: ${detail}`);
+    let audio: Buffer;
+    try {
+      const res = await fetchImpl(
+        `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`,
+        {
+          method: 'POST',
+          headers: { 'xi-api-key': apiKey, 'content-type': 'application/json', accept: 'audio/mpeg' },
+          body: JSON.stringify({ text, model_id: model }),
+          signal: AbortSignal.timeout(timeoutMs),
+        },
+      );
+      // the error body is ElevenLabs' JSON ({detail: {status, message}}); it never contains the key
+      if (!res.ok) {
+        // capped read: an error body is only a hint; a huge one is dropped after recording the status
+        const detail = await readCapped(res, 4096).then((b) => b.toString('utf8').slice(0, 300), () => '(body too large)');
+        throw new Error(`elevenlabs HTTP ${res.status}: ${detail}`);
+      }
+      const type = res.headers.get('content-type') ?? '';
+      if (!type.startsWith('audio/mpeg')) {
+        await res.body?.cancel().catch(() => {});
+        throw new Error(`elevenlabs returned ${type || 'no content-type'}, not audio/mpeg`);
+      }
+      audio = await readCapped(res, MAX_AUDIO_BYTES);
+      if (!audio.length) throw new Error('elevenlabs returned empty audio');
+    } catch (err) {
+      charge(-text.length); // nothing was generated; give the daily character reservation back
+      throw err;
     }
-    const type = res.headers.get('content-type') ?? '';
-    if (!type.startsWith('audio/mpeg')) {
-      await res.body?.cancel().catch(() => {});
-      throw new Error(`elevenlabs returned ${type || 'no content-type'}, not audio/mpeg`);
+    try {
+      await mkdir(cacheDir, { recursive: true });
+      const tmp = `${file}.${process.pid}.tmp`; // rename is atomic: a reader never sees half a file
+      await writeFile(tmp, audio);
+      await rename(tmp, file);
+      await noteStored(audio.length);
+    } catch {
+      // Audio was produced and is returned below. A later request regenerates it if the file did not land.
     }
-    const audio = await readCapped(res, MAX_AUDIO_BYTES);
-    if (!audio.length) throw new Error('elevenlabs returned empty audio');
-    await mkdir(cacheDir, { recursive: true });
-    const tmp = `${file}.${process.pid}.tmp`; // rename is atomic: a reader never sees half a file
-    await writeFile(tmp, audio);
-    await rename(tmp, file);
-    await evict(cacheDir, maxCacheBytes, maxCacheFiles).catch(() => {});
     return audio;
   }
 
