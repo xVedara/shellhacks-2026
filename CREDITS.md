@@ -8,7 +8,7 @@ Google Gemini names a hazard crop when `GEMINI_API_KEY` is set. The model id is 
 
 Qwen names a crop when no Gemini key is set and Ollama is running. The tag is `qwen3.8:27b-mlx` (Qwen3.8-27B). The weights are Apache-2.0, Copyright 2026 Alibaba Cloud: https://huggingface.co/Qwen/Qwen3.8-27B. The Ollama tag is https://ollama.com/library/qwen3.8:27b-mlx. The weights are not in git. Ollama itself is MIT, Copyright (c) Ollama, and the binary is not in git: https://github.com/ollama/ollama/blob/main/LICENSE.
 
-ElevenLabs speaks alerts and live hazard names with model `eleven_multilingual_v2` and the premade voice Sarah, id `EXAVITQu4vr4xnSDxMaL`. The phone bundles 71 phrases in English and Spanish. The clips were generated on the ElevenLabs Creator plan, redeemed through MLH (commercial use is allowed under that plan's terms). Terms: https://elevenlabs.io/terms-of-use.
+ElevenLabs speaks alerts and live hazard names with model `eleven_multilingual_v2` and the premade voice Sarah, id `EXAVITQu4vr4xnSDxMaL`. The phone bundles 71 phrases in English and Spanish. The clips were generated on Ara's ElevenLabs account (Creator plan, redeemed through MLH). Terms: https://elevenlabs.io/terms-of-use.
 
 Ultralytics YOLO11n detects vehicles on the phone. The weights are AGPL-3.0-only. The bundled model and the AGPL text in the app are described in [ios/CREDITS.md](ios/CREDITS.md). The model metadata says it was trained on COCO. COCO annotations are CC-BY-4.0. COCO images stay under Flickr's terms. Neither file is in this repo.
 
@@ -60,18 +60,18 @@ The web UI uses Inter through `next/font`. The license is OFL-1.1, Copyright 201
 
 `ios/CREDITS.md` records the YOLO export as coremltools 9.0 and PyTorch 2.7.0. Both are BSD-3-Clause. Neither is bundled, and nothing in the repo pins those versions. coremltools is Copyright 2020-2023 Apple Inc.
 
-`brandguide/make_icons.py` sizes the logos with Pillow, MIT-CMU. Copyright is in [LICENSES/pillow-MIT-CMU.txt](LICENSES/pillow-MIT-CMU.txt). Pillow is not bundled. `brandguide/logo-blue-1024.png` and `brandguide/logo-dark-1024.png` were made with ChatGPT image generation.
+`brandguide/make_icons.py` sizes the logos with Pillow, MIT-CMU. Copyright is in [LICENSES/pillow-MIT-CMU.txt](LICENSES/pillow-MIT-CMU.txt). Pillow is not bundled. `brandguide/logo-blue-1024.png` and `brandguide/logo-dark-1024.png` were made with GPT Image 2 (OpenAI).
 
 ## AI tools used to build it
 
 StepSafe was built at ShellHacks 2026 with AI coding tools. Ara Babigian and Dev Goswami can both explain how the code works.
 
-Claude Code (Anthropic) is recorded on 16 commits by Ara Babigian. About 15 other commits by Ara have no Claude-Session trailer, so the tool for those commits is not recorded.
+Ara Babigian used Claude Code (Anthropic).
 
-Commit messages name a review gate: Claude Opus (Anthropic) on 12 commits, and a reviewer recorded as sol (OpenAI (Codex CLI)) on 9 commits.
+Commit messages name two review gates: Claude Opus (Anthropic) and Codex (OpenAI).
 
-Logos were made with ChatGPT image generation.
+Logos were made with GPT Image 2 (OpenAI).
 
-Cursor cloud agents authored 17 commits and opened pull requests #1 through #11. A Cursor cloud agent coordinated later review, verification, and design mockups.
+Cursor cloud agents authored commits and opened pull requests. A Cursor cloud agent coordinated later review, verification, and design mockups.
 
 The running app also calls Gemini, Qwen through Ollama, ElevenLabs, and on-device YOLO11n, listed above. Those calls did not write the git history.
