@@ -38,8 +38,9 @@ enum MapTuning {
     static let passiveMonotonicSlackM = 0.05
     // Reports
     /// Only a still hazard is reported: its world point stays within stillRadiusM (horizontal) of where it
-    /// settled for stillSeconds of fresh frames. A walking person (1.2 m/s) or a rolling bike never qualifies.
-    static let stillRadiusM: Float = 0.3
+    /// settled for stillSeconds of fresh frames. A walking person (1.2 m/s) leaves 0.75 m in 0.63 s.
+    /// Same radius as a report identity: the nearest point of a real obstacle jumps over 0.3 m between frames.
+    static let stillRadiusM = Tuning.sameHazardRadius
     static let stillSeconds: Double = 1.0
     static let reportRetries = 2
     static let reportCooldownSeconds: Double = 60
@@ -171,26 +172,54 @@ struct ReportGate {
             && Geo.distance($0.fix, fix) <= MapTuning.knownPinRadiusM }
             .min { Geo.distance($0.fix, fix) < Geo.distance($1.fix, fix) }
     }
+
+    enum Next: Equatable { case known(NearHazard), post, wait }
+
+    /// HazardNamer's choice for a new confirmed hazard at `fix`: the map already has it (speak its name), POST it,
+    /// or wait because it has not stood still long enough (moving things are never POSTed).
+    static func next(_ d: Detection, fix: Geo.Fix, pins: [NearHazard], still: Set<HazardKind>) -> Next {
+        if let pin = knownPin(band: d.kind.band, at: fix, in: pins) { return .known(pin) }
+        return still.contains(d.kind) ? .post : .wait
+    }
+
+    /// The server answered. Not pinned (a person or dog, empty id) is not "reported": only the cooldown, so a real
+    /// hazard at that spot can still be reported later, and a person standing there is not re-sent every frame.
+    mutating func answered(_ d: Detection, pinned: Bool, now: Double) {
+        if pinned { succeeded(d) } else { failed(d, now: now) }
+    }
 }
 
 /// Moving things are not map pins (Ara 2026-09-26: "make sure people and vehicles that are moving do not get
 /// added to the database"). One anchor per kind: the point where the confirmed detection settled and the frame
 /// time it settled at. Moving past stillRadiusM re-anchors, and a kind that stops being confirmed drops its
-/// anchor, so a passer-by leaves no trail of half-still identities. Times are Detection.seenAt, so a point
-/// HazardTracker holds through a dropout does not count as still.
+/// anchor, so a passer-by leaves no trail of half-still identities. Times are Detection.seenAt: a point
+/// HazardTracker holds through a dropout (repeated seenAt) never counts, and the first fresh frame after one
+/// re-anchors, so a dropout cannot bridge the time from a moving point to a still one.
 struct StillnessGate {
-    private var anchors: [HazardKind: (point: SIMD3<Float>, since: Double)] = [:]
+    private struct Anchor { var point: SIMD3<Float>; var since: Double; var last: Double; var stale = false }
+    private var anchors: [HazardKind: Anchor] = [:]
 
     /// Feed every analysis output's confirmed map hazards; returns the kinds that have stayed put long enough.
     mutating func update(_ confirmed: [HazardKind: Detection]) -> Set<HazardKind> {
         anchors = anchors.filter { confirmed[$0.key] != nil }
         var still: Set<HazardKind> = []
         for (kind, d) in confirmed {
-            if let a = anchors[kind], simd_distance(SIMD2(a.point.x, a.point.z), SIMD2(d.point.x, d.point.z)) <= MapTuning.stillRadiusM {
-                if d.seenAt - a.since >= MapTuning.stillSeconds { still.insert(kind) }
-            } else {
-                anchors[kind] = (d.point, d.seenAt)
+            guard var a = anchors[kind] else {
+                anchors[kind] = Anchor(point: d.point, since: d.seenAt, last: d.seenAt)
+                continue
             }
+            if d.seenAt <= a.last { // held through a dropout
+                anchors[kind]?.stale = true
+                continue
+            }
+            let moved = simd_distance(SIMD2(a.point.x, a.point.z), SIMD2(d.point.x, d.point.z)) > MapTuning.stillRadiusM
+            if moved || a.stale {
+                anchors[kind] = Anchor(point: d.point, since: d.seenAt, last: d.seenAt)
+                continue
+            }
+            a.last = d.seenAt
+            anchors[kind] = a
+            if d.seenAt - a.since >= MapTuning.stillSeconds { still.insert(kind) }
         }
         return still
     }

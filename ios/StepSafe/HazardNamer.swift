@@ -131,7 +131,9 @@ final class HazardNamer: @unchecked Sendable { // main-confined state; tasks hop
         let still = stillness.update(confirmed)
         for d in confirmed.values where gate.isNew(d, now: now) {
             guard let fix = localizer.locate(d.point) else { continue } // no GPS yet: retry next output
-            if let pin = ReportGate.knownPin(band: d.kind.band, at: fix, in: pins) {
+            switch ReportGate.next(d, fix: fix, pins: pins, still: still) {
+            case .wait: continue // moving, or not still for long enough yet: no POST
+            case let .known(pin):
                 gate.mark(d)
                 gate.succeeded(d) // the map already has it
                 let name = lang == "es"
@@ -140,8 +142,8 @@ final class HazardNamer: @unchecked Sendable { // main-confined state; tasks hop
                 onResult?("Known pin \(name), not reported")
                 speak?(Spoken.named(name, d, lang: lang)) { }
                 continue
+            case .post: break
             }
-            guard still.contains(d.kind) else { continue } // moving, or not still for long enough yet: no POST
             gate.mark(d) // in flight until the POST succeeds or its retries fail
             let clearance = d.kind == .headHeight ? floorY.map { Double(d.point.y - $0) } : nil
             let req = Request(detection: d, fix: fix, heading: localizer.heading, clearanceM: clearance,
@@ -239,10 +241,11 @@ final class HazardNamer: @unchecked Sendable { // main-confined state; tasks hop
 
     private func reported(_ req: Request, _ r: APIClient.ReportResult, _ ep: Int, _ id: UUID) {
         tasks[id] = nil
-        onReported?(r.id)
-        onResult?("\(r.merged ? "Merged" : r.id.isEmpty ? "Not pinned" : "New"): \(r.label)") // empty id: person/dog
+        let pinned = !r.id.isEmpty // empty id: the server does not pin people or dogs
+        if pinned { onReported?(r.id) }
+        onResult?("\(r.merged ? "Merged" : pinned ? "New" : "Not pinned"): \(r.label)")
         guard epoch.withLock({ $0 }) == ep else { return }
-        gate.succeeded(req.detection)
+        gate.answered(req.detection, pinned: pinned, now: now)
         guard r.label != "unknown obstacle" else { return }
         // Speak only while path guard still sees it (distance and side from the latest detection).
         if let now = latest[req.detection.kind],

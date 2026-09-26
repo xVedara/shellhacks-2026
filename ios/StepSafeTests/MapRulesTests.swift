@@ -107,20 +107,20 @@ final class MapRulesTests: XCTestCase {
     }
 
     func testStillHazardReportsAfterAboutOneSecond() {
-        XCTAssertEqual(firstStill(3) { _ in SIMD3(0, 0.5, -2) }!, 1, accuracy: 0.09)
+        XCTAssertEqual(firstStill(3) { _ in SIMD3(0, 0.5, -2) } ?? -1, 1, accuracy: 0.09)
     }
 
     func testMovingThingNeverReports() {
         XCTAssertNil(firstStill(10) { t in SIMD3(Float(1.2 * t), 0.5, -2) }) // walking across the lane
         XCTAssertNil(firstStill(10) { t in SIMD3(0, 0.5, Float(-8 + 1.2 * t)) }) // walking toward the walker
-        XCTAssertNil(firstStill(10) { t in SIMD3(Float(0.4 * t), 0.5, -2) }) // shuffling, or a pushed cart
+        XCTAssertNil(firstStill(10) { t in SIMD3(Float(0.8 * t), 0.5, -2) }) // strolling, or a pushed cart
     }
 
     func testJitterUnderStillRadiusCountsAsStill() {
-        // Up to 0.29 m horizontally (height ignored) from where it settled: depth noise, nearest point shifting.
-        let jitter: [SIMD3<Float>] = [.zero, SIMD3(0.2, 0.3, -0.2), SIMD3(-0.25, 0, 0.1), SIMD3(0, -0.2, 0.29), SIMD3(0.1, 0, -0.1)]
+        // Up to 0.74 m horizontally (height ignored) from where it settled: the nearest point of a real obstacle jumps.
+        let jitter: [SIMD3<Float>] = [.zero, SIMD3(0.5, 0.3, -0.5), SIMD3(-0.7, 0, 0.2), SIMD3(0, -0.2, 0.74), SIMD3(0.3, 0, -0.3)]
         let t = firstStill(3) { t in SIMD3(0, 0.5, -2) + jitter[Int((t * 12).rounded()) % jitter.count] }
-        XCTAssertEqual(t!, 1, accuracy: 0.09)
+        XCTAssertEqual(t ?? -1, 1, accuracy: 0.09) // nil = never still
     }
 
     func testPointHeldAfterMovingNeverCountsAsStill() {
@@ -145,6 +145,47 @@ final class MapRulesTests: XCTestCase {
         XCTAssertTrue(g.update([.ground: d]).isEmpty)
         d.seenAt = 6
         XCTAssertEqual(g.update([.ground: d]), [.ground])
+    }
+
+    func testDropoutRestartsTheStillClock() {
+        // A dropout must not bridge time: without re-anchoring, the first fresh frame at 1.1 s would pass at once.
+        var g = StillnessGate()
+        var d = detection(.ground, SIMD3(0, 0.5, -2))
+        for t in [0, 0.1, 0.2, 0.3] {
+            d.seenAt = t
+            XCTAssertTrue(g.update([.ground: d]).isEmpty)
+        }
+        for _ in 0..<7 { XCTAssertTrue(g.update([.ground: d]).isEmpty) } // held: seenAt stays 0.3
+        d.point.x = 0.5
+        for t in [1.1, 1.5, 2.0] {
+            d.seenAt = t
+            XCTAssertTrue(g.update([.ground: d]).isEmpty, "t=\(t)")
+        }
+        d.seenAt = 2.1
+        XCTAssertEqual(g.update([.ground: d]), [.ground])
+    }
+
+    func testNamerPostsOnlyStillHazardsAndSpeaksKnownPins() {
+        let d = detection(.ground, .zero)
+        XCTAssertEqual(ReportGate.next(d, fix: home, pins: [], still: []), .wait) // moving: never POSTed
+        XCTAssertEqual(ReportGate.next(d, fix: home, pins: [], still: [.headHeight]), .wait)
+        XCTAssertEqual(ReportGate.next(d, fix: home, pins: [], still: [.ground]), .post)
+        let known = pin("g5", 5, 0)
+        XCTAssertEqual(ReportGate.next(d, fix: home, pins: [known], still: []), .known(known)) // naming speech unchanged
+    }
+
+    func testNotPinnedAnswerCoolsDownInsteadOfBlockingTheSpot() {
+        var g = ReportGate()
+        let person = detection(.ground, SIMD3(0, 0.5, -2))
+        g.mark(person)
+        g.answered(person, pinned: false, now: 10) // server skipped a person or dog
+        XCTAssertNotEqual(g.state(person), .reported)
+        let bin = detection(.ground, SIMD3(0.4, 0.5, -2)) // a real hazard where the person stood
+        XCTAssertFalse(g.isNew(bin, now: 11)) // not re-sent every frame while the person stands there
+        XCTAssertTrue(g.isNew(bin, now: 10 + MapTuning.reportCooldownSeconds))
+        g.mark(bin)
+        g.answered(bin, pinned: true, now: 80)
+        XCTAssertEqual(g.state(bin), .reported)
     }
 
     // MARK: Report once per identity, skip if known, retries
