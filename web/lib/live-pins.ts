@@ -1,6 +1,5 @@
 import type { HazardEvent, HazardSummary } from "./api";
 
-/** Apply one stream event to a pin map. Returns the id when it added a pin that was not there. */
 export function applyEvent(pins: Map<string, HazardSummary>, evt: HazardEvent): string | null {
   if (evt.op === "remove") {
     pins.delete(evt.id);
@@ -18,27 +17,29 @@ export function applyEvent(pins: Map<string, HazardSummary>, evt: HazardEvent): 
 
 export type SnapshotSettle = "ok" | "fail" | "stale";
 
-/** Pins for one live subscription, plus events that arrived during a /hazards/near fetch. */
 export function createLivePins() {
   let pins = new Map<string, HazardSummary>();
-  let buffer: HazardEvent[] | null = null;
+  let eventsForNewestFetch: HazardEvent[] | null = null;
+  let newestFetch = 0;
 
   return {
     get pins() {
       return pins;
     },
     note(evt: HazardEvent) {
-      buffer?.push(evt);
+      eventsForNewestFetch?.push(evt);
       return applyEvent(pins, evt);
     },
     async load(fetchList: () => Promise<HazardSummary[] | null>): Promise<SnapshotSettle> {
-      buffer = [];
+      const fetchId = ++newestFetch;
+      const eventsForThisFetch: HazardEvent[] = [];
+      eventsForNewestFetch = eventsForThisFetch;
       const list = await fetchList();
-      const pending = buffer ?? [];
-      buffer = null;
+      if (eventsForNewestFetch === eventsForThisFetch) eventsForNewestFetch = null;
+      if (fetchId !== newestFetch) return "stale";
       if (!list) return "fail";
       pins = new Map(list.map((h) => [h.id, h]));
-      for (const evt of pending) applyEvent(pins, evt);
+      for (const evt of eventsForThisFetch) applyEvent(pins, evt);
       return "ok";
     },
   };
