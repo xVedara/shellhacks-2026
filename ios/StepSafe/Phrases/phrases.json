@@ -351,6 +351,11 @@
    "id": "n-dropoff-ahead",
    "en": "Drop-off ahead.",
    "es": "Desnivel al frente."
+  },
+  {
+   "id": "n-hold-still",
+   "en": "Hold still to check traffic.",
+   "es": "Quédese quieto para revisar el tráfico."
   }
  ]
 }

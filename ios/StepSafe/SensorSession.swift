@@ -21,6 +21,8 @@ final class SensorSession: NSObject, ARSessionDelegate {
         var closingMs: Double = 0
         /// Walker's horizontal speed, m/s (drop-off time to contact).
         var walkerSpeed: Float = 0
+        /// Head held still (HeadMotion): vehicle warnings at a curb need it (HoldStillHint).
+        var headStill = true
     }
 
     enum Status { case on, back, paused, failed }
@@ -67,6 +69,7 @@ final class SensorSession: NSObject, ARSessionDelegate {
     private var tracker = HazardTracker()
     private var closingDetector = ClosingDetector()
     private var lastCurb = -Double.infinity
+    private var head = HeadMotion()
     private var analysisCount = 0
     /// Vehicle closing objects from YOLO (nil if the model failed to load). Fed from the delegate queue.
     private let vehicleBox = OSAllocatedUnfairLock<VehicleDetector?>(initialState: nil)
@@ -102,7 +105,9 @@ final class SensorSession: NSObject, ARSessionDelegate {
             // state must still say "on" (not "back") later, and a "paused" already said is not repeated.
             if !resumed { self.everActive = false; self.saidPaused = false }
         }
-        analysisQueue.async { self.tracker = HazardTracker(); self.closingDetector.reset(); self.lastCurb = -.infinity }
+        analysisQueue.async {
+            self.tracker = HazardTracker(); self.closingDetector.reset(); self.lastCurb = -.infinity; self.head = HeadMotion()
+        }
         vehicles?.reset()
         onReset?()
         session.run(config, options: [.resetTracking, .removeExistingAnchors])
@@ -246,10 +251,15 @@ final class SensorSession: NSObject, ARSessionDelegate {
                                                                               passing: c.passing))
             }
             let walkerSpeed = self.closingDetector.walkerSpeed
+            self.head.update(time: time, rotation: simd_float3x3(SIMD3(transform.columns.0.x, transform.columns.0.y, transform.columns.0.z),
+                                                                 SIMD3(transform.columns.1.x, transform.columns.1.y, transform.columns.1.z),
+                                                                 SIMD3(transform.columns.2.x, transform.columns.2.y, transform.columns.2.z)))
+            let headStill = self.head.still
             guard self.generation == gen else { return }
             self.onOutput?(Output(generation: gen, confirmed: confirmed, fps: fps, floorSource: floor.source,
                                   thumbnail: wantThumbnail ? Self.thumbnail(input, result.labels) : nil,
-                                  floorY: floor.y, atCurb: atCurb, closingMs: closingMs, walkerSpeed: walkerSpeed))
+                                  floorY: floor.y, atCurb: atCurb, closingMs: closingMs, walkerSpeed: walkerSpeed,
+                                  headStill: headStill))
         }
     }
 

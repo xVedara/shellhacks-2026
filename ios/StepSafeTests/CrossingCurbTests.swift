@@ -86,10 +86,25 @@ final class CrossingCurbTests: XCTestCase {
         return cs
     }
 
-    /// Standing, scanning the street +-60 deg at 0.33 Hz with head roll +-4 deg at 1 Hz (25 deg/s peak): 200 runs.
+    /// Standing, scanning the street with several head motions (audit-r6 mc section C heads): +-60 deg at 0.33 Hz
+    /// without roll, with roll +-2 @1 Hz, +-3 @0.8 Hz, +-4 @1 Hz, and a slow +-45 deg scan at 0.25 Hz with roll
+    /// following the yaw velocity (+-5 deg). 200 runs each: curb layout <= 2 runs with a false alert; random layouts
+    /// (roll +-4 @1 Hz only) <= 5.
     func testStandingScanAmongParkedCars() {
-        for (name, layout, limit) in [("curb layout", Self.curbLayout as (inout S.SplitMix) -> [B.Car], 2),
-                                      ("random layouts", Self.randomLayout, 5)] {
+        typealias Head = (Double, Double) -> simd_float4x4 // (t, phase)
+        let sweep60: (Double, Double, Double, Double) -> simd_float4x4 = { t, ph, amp, f in
+            B.head(SIMD3(0, 1.6, 0), yaw: Float(60 * sin(2 * .pi * 0.33 * t + ph)), pitch: -5, roll: Float(amp * sin(2 * .pi * f * t)))
+        }
+        let heads: [(String, Head)] = [
+            ("scan +-60@0.33, no roll", { t, ph in sweep60(t, ph, 0, 1) }),
+            ("scan +-60@0.33, roll +-2@1 Hz", { t, ph in sweep60(t, ph, 2, 1) }),
+            ("scan +-60@0.33, roll +-3@0.8 Hz", { t, ph in sweep60(t, ph, 3, 0.8) }),
+            ("scan +-60@0.33, roll +-4@1 Hz", { t, ph in sweep60(t, ph, 4, 1) }),
+            ("slow scan +-45@0.25, roll ~ yaw velocity +-5", { t, ph in
+                B.head(SIMD3(0, 1.6, 0), yaw: Float(45 * sin(2 * .pi * 0.25 * t + ph)), pitch: -5, roll: Float(5 * cos(2 * .pi * 0.25 * t + ph))) })]
+        var rows: [(String, (inout S.SplitMix) -> [B.Car], Int, Head)] = heads.map { ("curb layout, " + $0.0, Self.curbLayout, 2, $0.1) }
+        rows.append(("random layouts, " + heads[3].0, Self.randomLayout, 5, heads[3].1))
+        for (name, layout, limit, head) in rows {
             for (drop, jit) in [(0.0, 1.0), (0.2, 2.0)] {
                 var runsWithAlert = 0
                 for s in 0..<200 {
@@ -98,11 +113,9 @@ final class CrossingCurbTests: XCTestCase {
                     let ph = Double.random(in: 0..<(2 * .pi), using: &g)
                     var rng = S.SplitMix(state: UInt64(s) &* 7919 &+ 17)
                     if Self.alerts(secs: 8, drop: drop, jitterPx: jit, silhouette: true, rng: &rng, cars: { _ in cars.map { ($0, true) } },
-                                   cam: { t in B.head(SIMD3(0, 1.6, 0), yaw: Float(60 * sin(2 * .pi * 0.33 * t + ph)), pitch: -5,
-                                                      roll: Float(4 * sin(2 * .pi * 1.0 * t))) }) > 0 { runsWithAlert += 1 }
+                                   cam: { t in head(t, ph) }) > 0 { runsWithAlert += 1 }
                 }
-                print(String(format: "MONTECARLO standing scan +-60@0.33, roll +-4@1 Hz, %@, drop %.0f%%, %.0f px: %d/200 runs false-alert",
-                             name, drop * 100, jit, runsWithAlert))
+                print(String(format: "MONTECARLO standing %@, drop %.0f%%, %.0f px: %d/200 runs false-alert", name, drop * 100, jit, runsWithAlert))
                 XCTAssertLessThanOrEqual(runsWithAlert, limit, "\(name), drop \(drop)")
             }
         }
@@ -142,5 +155,41 @@ final class CrossingCurbTests: XCTestCase {
         }
         print("SCENARIOS two-car re-match: \(cases - failures.count)/\(cases) report nothing" + (failures.isEmpty ? "" : " :: " + failures.joined(separator: " | ")))
         XCTAssertTrue(failures.isEmpty)
+    }
+    /// Round 8 (sol CRITICAL): a track re-found by world bearing alone (no box overlap, even with the old box scaled
+    /// by the size change) after > refindGapSeconds unseen may be another car: it gets a FRESH track id (so ping,
+    /// announcement and pending state, all keyed by track id, start over) and no growth history; the old id retires.
+    /// Re-found WITH box overlap after the same gap, the id is kept.
+    func testBearingOnlyRefindGetsFreshId() {
+        func polar(_ bDeg: Float, _ d: Float) -> B.Car {
+            B.Car(center: SIMD3(sin(bDeg * .pi / 180) * d, 0, -cos(bDeg * .pi / 180) * d), heading: .pi / 2)
+        }
+        let cam = B.head(SIMD3(0, 1.6, 0), yaw: 0, pitch: -5)
+        for (name, reBearing, reDist, keep) in [("same car, same bearing, 20 -> 10.5 m (overlap only once scaled)", Float(0), Float(10.5), true),
+                                                ("car at +6 deg (no overlap)", 6, 20, false)] {
+            var tracker = BoxTracker()
+            var rng = S.SplitMix(state: 5)
+            var firstId: Int?
+            var t = 0.0
+            while t <= 1.0 + 1e-9 { // car A seen 1 s
+                let ids = tracker.update([Self.box(polar(0, 20), cam: cam, jitterPx: 0, silhouette: false, rng: &rng)!], time: t,
+                                         camera: B.info(cam)).map(\.id)
+                XCTAssertEqual(ids.count, 1)
+                if firstId == nil { firstId = ids.first } else { XCTAssertEqual(ids.first, firstId, name) }
+                t += 0.2
+            }
+            _ = tracker.update([], time: 1.2, camera: B.info(cam))
+            _ = tracker.update([], time: 1.4, camera: B.info(cam))
+            let back = tracker.update([Self.box(polar(reBearing, reDist), cam: cam, jitterPx: 0, silhouette: false, rng: &rng)!],
+                                      time: 1.6, camera: B.info(cam))
+            XCTAssertEqual(back.count, 1, name)
+            if keep {
+                XCTAssertEqual(back.first?.id, firstId, "\(name): overlap re-find keeps the id")
+            } else {
+                XCTAssertNotEqual(back.first?.id, firstId, "\(name): bearing-only re-find must get a fresh id")
+                XCTAssertLessThanOrEqual(back.first?.samples.count ?? 99, 1, "\(name): no growth history carried over")
+                XCTAssertFalse(tracker.tracks.contains { $0.id == firstId }, "\(name): old track retired")
+            }
+        }
     }
 }

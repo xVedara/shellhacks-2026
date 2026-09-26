@@ -108,13 +108,23 @@ final class CrossingScenarioBoxPolicyTests: XCTestCase {
 
     // MARK: Box sections 1-7
 
+    /// Standing, look and hold (round 8): box growth counts only while the head is still (yaw < 12 deg/s, roll <
+    /// 5 deg/s). Still or slow (10 deg/s) head: alert. Head turning 20 deg/s or sweeping: no YOLO alert at all.
+    /// Turning toward the car, then holding: alert with TTC >= 2 s.
     func testBox1_HeadOnCarWithHeadYaw() {
         var cases: [(String, S.Expect, Result)] = []
         let patterns: [(String, (Double) -> Float, S.Expect)] = [
             ("still", { _ in 0 }, .alert()), ("yaw 10 deg/s", { t in Float(-10 + 10 * t) }, .alert()),
-            ("yaw 20 deg/s", { t in Float(-20 + 20 * t) }, .alert()), ("sweep +-20 @0.5", { t in Float(20 * sin(.pi * t)) }, .alert()),
-            ("sweep +-45 @0.5", { t in Float(45 * sin(.pi * t)) }, .alert(minTTC: 2.0)),
-            ("sweep +-60 @0.33", { t in Float(60 * sin(2 * .pi * 0.33 * t)) }, .alert(minTTC: 2.0))]
+            ("yaw 20 deg/s", { t in Float(-20 + 20 * t) }, .none), ("sweep +-20 @0.5", { t in Float(20 * sin(.pi * t)) }, .none),
+            ("sweep +-45 @0.5", { t in Float(45 * sin(.pi * t)) }, .none),
+            ("sweep +-60 @0.33", { t in Float(60 * sin(2 * .pi * 0.33 * t)) }, .none),
+            ("turn from 60 over 0.5 s, then hold", { t in Float(60 * max(0, 1 - t / 0.5)) }, .alert(minTTC: 2.0)),
+            // Still windows of 3 frames (0.4 s) between quick glances (20 deg and back in 0.4 s): each window is too
+            // short, and windows never pool their samples.
+            ("0.4 s holds between quick glances", { t in
+                let u = t.truncatingRemainder(dividingBy: 1.0)
+                return u <= 0.6 ? 0 : Float(20 * (1 - abs(u - 0.8) / 0.2))
+            }, .none)]
         for (n, yaw, e) in patterns {
             cases.append(("car head-on 12 m/s, \(n)", e, Self.scenario(secs: 4, atCurb: false,
                 cars: { t in [Car(center: SIMD3(0.5, 0, -(50 - 12 * Float(t)) - 2.25), heading: .pi / 2)] },
@@ -123,14 +133,28 @@ final class CrossingScenarioBoxPolicyTests: XCTestCase {
         check("box 1", cases)
     }
 
+    /// Car from the left at 12 m/s, walker standing at the curb (look and hold, round 8). Looking left and holding:
+    /// alert. Turning to look left (0 -> -80 deg, down the road, over 0.5 s), holding 1 s, turning back: alert with TTC >= 1.5 s while
+    /// the head is still, for every turn start from 0.5 s to 1.8 s (a hold
+    /// must begin at TTC >= ~2.3 s: 0.6 s of still samples + 0.2 s rate smoothing + a 5 Hz frame). Continuous sweeps: no YOLO alert (the head never
+    /// holds long enough); the spoken "Hold still to check traffic." hint covers that case.
     func testBox2and6_CarFromLeftAtCurb() {
         var cases: [(String, S.Expect, Result)] = []
-        let patterns: [(String, (Double) -> Float, S.Expect)] = [
+        func lookHold(_ start: Double) -> (Double) -> Float {
+            { t in
+                let u = t < start + 1.5 ? min(max((t - start) / 0.5, 0), 1) : max(0, 1 - (t - start - 1.5) / 0.5)
+                return Float(-80 * u)
+            }
+        }
+        var patterns: [(String, (Double) -> Float, S.Expect)] = [
             ("still facing street", { _ in 0 }, .report), ("looking left -60", { _ in -60 }, .alert(minTTC: 2.0)),
-            ("looking left -45", { _ in -45 }, .report), ("sweep +-60 @0.33", { t in Float(60 * sin(2 * .pi * 0.33 * t)) }, .report),
-            ("sweep +-60 @0.5", { t in Float(60 * sin(2 * .pi * 0.5 * t)) }, .report),
-            ("sweep +-80 @0.25", { t in Float(80 * sin(2 * .pi * 0.25 * t)) }, .alert(minTTC: 1.5)),
-            ("sweep -80..0 @0.3", { t in Float(-40 + 40 * sin(2 * .pi * 0.3 * t)) }, .alert(minTTC: 2.0))]
+            ("looking left -45", { _ in -45 }, .report), ("sweep +-60 @0.33", { t in Float(60 * sin(2 * .pi * 0.33 * t)) }, .none),
+            ("sweep +-60 @0.5", { t in Float(60 * sin(2 * .pi * 0.5 * t)) }, .none),
+            ("sweep +-80 @0.25", { t in Float(80 * sin(2 * .pi * 0.25 * t)) }, .none),
+            ("sweep -80..0 @0.3", { t in Float(-40 + 40 * sin(2 * .pi * 0.3 * t)) }, .none)]
+        for start in [0.5, 1.0, 1.5, 1.8] {
+            patterns.append(("turn left at \(start) s, hold 1 s, turn back", lookHold(start), .alert(minTTC: 1.5)))
+        }
         for (n, yaw, e) in patterns {
             cases.append(("2 car from left, \(n)", e, Self.scenario(secs: 5.5, atCurb: true,
                 cars: { t in [Car(center: SIMD3(-60 + 12 * Float(t), 0, -3), heading: 0)] },
@@ -273,15 +297,15 @@ final class CrossingScenarioBoxPolicyTests: XCTestCase {
         XCTAssertEqual(alerted2, 0)
     }
 
-    /// A car head-on at 12 m/s from 50 m while the head rolls with the gait (+-2 / +-3 deg at 0.9 Hz), walking
-    /// 1.3 m/s or standing, head still or yawing +-15 deg: must alert with TTC >= 2.5 s (the roll gate must not
-    /// starve it).
+    /// A car head-on at 12 m/s from 50 m while the head rolls with the gait (+-2 / +-3 deg at 0.9 Hz), head still or
+    /// yawing +-15 deg. Walking 1.3 m/s: must alert with TTC >= 2.5 s (the roll gate must not starve it). Standing
+    /// with that much head motion (look and hold, round 8): no YOLO alert.
     func testBoxRoll_HeadOnCarUnderGaitRollAlerts() {
         var cases: [(String, S.Expect, Result)] = []
         for walk: Float in [0, 1.3] {
             for rollAmp: Float in [2, 3] {
                 for yawAmp: Float in [0, 15] {
-                    cases.append(("head-on car, walk \(walk), gait roll +-\(rollAmp) @0.9, yaw +-\(yawAmp)", .alert(minTTC: 2.5),
+                    cases.append(("head-on car, walk \(walk), gait roll +-\(rollAmp) @0.9, yaw +-\(yawAmp)", walk > 0 ? .alert(minTTC: 2.5) : .none,
                                   Self.scenario(secs: 4, atCurb: false, jitterPx: 1, seed: 11,
                                                 cars: { t in [Car(center: SIMD3(0.5, 0, -(50 - 12 * Float(t)) - 2.25), heading: .pi / 2)] },
                                                 cam: { t in Self.head(SIMD3(0, 1.6, -walk * Float(t)), yaw: yawAmp * Float(sin(2 * .pi * 0.4 * t)),
@@ -792,5 +816,76 @@ final class CrossingScenarioBoxPolicyTests: XCTestCase {
         _ = pol.decide([.closing: approaching], now: 0.8, playing: busy)
         XCTAssertEqual(pol.pending?.d.closing?.trackId, 3) // TTC 2.9 beats the passing car's 2.0 + penalty
         XCTAssertEqual(pol.decide([.closing: approaching], now: 1.7, playing: nil)?.closing?.trackId, 3)
+    }
+    // MARK: Round 8: demo step 3 end to end (audit-r7 demo3 rig)
+
+    /// Ray-cast depth (256x192, 12 Hz, curb step; depth along the optical axis, see S.render) -> ClosingDetector -> SensorSession's Detection ->
+    /// AlertPolicy in AlertManager order (ping, drop-off cue, decide) with the sim clip lengths. A cart (0.5 x 1.0 x
+    /// 0.8 m) pushed by a person comes head-on from 5 m at 1.0 / 1.2 / 1.5 m/s after 3 s; no drop-off or a curb edge at
+    /// 1.2 / 1.5 m; head fixed or yawing +-10 @0.3 / +-20 @0.25; clean or noisy depth; 4 phases: 216 runs. Every run:
+    /// the ping at true TTC >= 2 s and the closing words heard to the end at TTC >= 1 s.
+    func testDemo3EndToEnd() {
+        typealias Box = S.Box
+        func scene(_ t: Double, speed: Float) -> [Box] {
+            let z = -5 + Float(max(0, t - 3)) * speed
+            return [Box(lo: SIMD3(-0.25, 0, z - 0.8), hi: SIMD3(0.25, 1.0, z)), Box(lo: SIMD3(-0.2, 0, z - 1.1), hi: SIMD3(0.2, 1.75, z - 0.8))]
+        }
+        var fails: [String] = [], runs = 0
+        for dropM: Float in [0, 1.5, 1.2] {
+            for (amp, hz) in [(Float(0), 0.0), (10, 0.3), (20, 0.25)] {
+                for sp: Float in [1.2, 1.0, 1.5] {
+                    for (nz, dp) in [(Float(0), Float(0)), (0.01, 0.1)] {
+                        for ph in [0.0, 1.6, 3.1, 4.7] {
+                            runs += 1
+                            var rng = S.SplitMix(state: 7 + UInt64(ph * 10))
+                            var det = ClosingDetector(), policy = AlertPolicy()
+                            var playing: AlertPolicy.Playing?, pinged: Set<Int> = []
+                            var firstPing: Float?, heard: Double?, closingWords: (start: Double, end: Double)?
+                            let contactT = 3 + Double((5 - 0.1) / sp) // cart front 0.1 m ahead of the eye point
+                            var t = 0.0
+                            while t < contactT {
+                                if let cw = closingWords, t >= cw.end, heard == nil { heard = cw.end }
+                                if let p = playing, t >= p.endsAt { playing = nil }
+                                let cam = S.headCam(SIMD3(0, 1.6, 0.1), yaw: amp * Float(sin(2 * .pi * hz * t + ph)))
+                                let f = S.render(scene(t, speed: sp), cam, noise: nz, dropout: dp, groundY: 0, floorY: 0,
+                                                 edgeZ: dropM > 0 ? -dropM : nil, rng: &rng)
+                                var confirmed: [HazardKind: Detection] = [:]
+                                if dropM >= Tuning.dropoffNearM {
+                                    confirmed[.dropOff] = Detection(kind: .dropOff, point: SIMD3(0, 0, -dropM), ahead: dropM, lateral: 0, pointCount: 300)
+                                }
+                                if let c = det.update(f, time: t).min(by: { ($0.passing ? 1 : 0, $0.ttc) < ($1.passing ? 1 : 0, $1.ttc) }) {
+                                    confirmed[.closing] = Detection(kind: .closing, point: c.point, ahead: c.range, lateral: c.lateral, pointCount: 0,
+                                        closing: .init(speed: c.speed, ttc: c.ttc, label: c.label, trackId: c.trackId, missM: c.missM, passing: c.passing))
+                                }
+                                if let c = AlertPolicy.closingToPing(confirmed, pinged: pinged), let id = c.closing?.trackId {
+                                    pinged.insert(id)
+                                    if firstPing == nil { firstPing = Float(contactT - t) }
+                                }
+                                _ = policy.dropOffToCue(confirmed, playing: playing, now: t)
+                                if let d = policy.decide(confirmed, now: t, playing: playing, walkerSpeed: det.walkerSpeed) {
+                                    if let cw = closingWords, t < cw.end { closingWords = nil } // cut before the end
+                                    if let p = playing, let v = p.hazard { policy.unmark(v); policy.noteCutOff(victim: v, by: d, until: t + Self.duration(d)) }
+                                    playing = AlertPolicy.Playing(priority: AlertPolicy.priority(d), hazard: d, endsAt: t + Self.duration(d), startedAt: t,
+                                                                  ttcAtStart: AlertPolicy.ttc(d, walkerSpeed: det.walkerSpeed))
+                                    policy.markAnnounced(d, now: t)
+                                    if d.kind == .closing, heard == nil { closingWords = (t + 0.15, t + 1.6) }
+                                }
+                                t += 1.0 / 12
+                            }
+                            if let cw = closingWords, heard == nil, cw.end <= contactT { heard = cw.end }
+                            let ok = (firstPing ?? 0) >= 2.0 && heard.map { contactT - $0 >= 1.0 } == true
+                            if !ok {
+                                fails.append(String(format: "drop %.1f, head +-%.0f, cart %.1f, noise %.2f, ph %.1f: ping TTC %.2f, words done TTC %.2f",
+                                                    dropM, amp, sp, nz, ph, firstPing ?? -1, heard.map { contactT - $0 } ?? -1))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        print("SCENARIOS demo-3 end to end: \(runs - fails.count)/\(runs) (ping at TTC >= 2 s, closing words finished at TTC >= 1 s)"
+              + (fails.isEmpty ? "" : " :: " + fails.joined(separator: " | ")))
+        XCTAssertEqual(runs, 216)
+        XCTAssertTrue(fails.isEmpty)
     }
 }

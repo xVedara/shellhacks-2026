@@ -58,8 +58,11 @@ final class CrossingScenarioTests: XCTestCase {
         return camera(neck + SIMD3(sin(yr), 0, -cos(yr)) * 0.1, yaw: yaw, pitch: pitch)
     }
 
+    /// Depth is along the optical axis, as ARKit reports it: `dir`'s forward component is 1, so the hit parameter is
+    /// that depth (scaling it by cos(off-axis angle) again, as the audit-r7 demo3 rig did, tilts flat faces and fakes
+    /// sideways motion under head yaw). `edgeZ`: a curb edge; beyond it (z < edgeZ) the street is 0.15 m lower.
     static func render(_ boxes: [Box], _ t: simd_float4x4, noise: Float, dropout: Float, groundY: Float, floorY: Float,
-                       rng: inout SplitMix) -> DepthFrame {
+                       edgeZ: Float? = nil, rng: inout SplitMix) -> DepthFrame {
         let o = SIMD3(t.columns.3.x, t.columns.3.y, t.columns.3.z)
         let rot = simd_float3x3(SIMD3(t.columns.0.x, t.columns.0.y, t.columns.0.z),
                                 SIMD3(t.columns.1.x, t.columns.1.y, t.columns.1.z),
@@ -69,7 +72,10 @@ final class CrossingScenarioTests: XCTestCase {
             for u in 0..<W {
                 let dir = rot * SIMD3((Float(u) + 0.5 - 128) / 212, -(Float(v) + 0.5 - 96) / 212, -1)
                 var best: Float = .infinity
-                if dir.y < 0 { best = (groundY - o.y) / dir.y }
+                if dir.y < 0 {
+                    best = (groundY - o.y) / dir.y
+                    if let e = edgeZ, o.z + dir.z * best < e { best = (groundY - 0.15 - o.y) / dir.y }
+                }
                 for b in boxes { if let d = hitBox(b, o, dir), d < best { best = d } }
                 guard best < 8 else { continue }
                 if dropout > 0, Float.random(in: 0..<1, using: &rng) < dropout { continue }

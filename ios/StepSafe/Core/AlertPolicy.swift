@@ -12,8 +12,29 @@ enum Notices {
     /// Never "clear" or "safe": the app only reports what it did not detect.
     static let nothingAhead = "Nothing detected ahead"
     static let listenBeforeCrossing = "Nothing detected. Listen before crossing."
+    /// HoldStillHint: vehicle warnings at a curb need a still head (look and hold).
+    static let holdStill = "Hold still to check traffic."
     static let all = [pathGuardOn, pathGuardBack, pathGuardPaused, pathGuardFailed, muted, alertsOn, stopped,
-                      nothingAhead, listenBeforeCrossing]
+                      nothingAhead, listenBeforeCrossing, holdStill]
+}
+
+/// Standing at a curb, vehicle warnings from the camera need the head held still (BoxTracker, look and hold): while
+/// it keeps moving there is no vehicle speech at all. So, once per session, on the first curb stop where the head
+/// has moved for more than 2 s, one short notice: "Hold still to check traffic." Pure, unit-tested.
+struct HoldStillHint {
+    static let movingSeconds = 2.0
+    private var movingSince: Double?
+    private(set) var spoken = false
+
+    /// True exactly once per session (a new HoldStillHint per session): speak the notice now.
+    mutating func update(now: Double, atCurb: Bool, walkerSpeed: Float, headStill: Bool) -> Bool {
+        guard !spoken, atCurb, walkerSpeed < 0.3, !headStill else { movingSince = nil; return false }
+        let since = movingSince ?? now
+        movingSince = since
+        guard now - since > Self.movingSeconds else { return false }
+        spoken = true
+        return true
+    }
 }
 
 /// Queue of notices (status, acknowledgements, replies, server phrases). Pure, unit-tested.

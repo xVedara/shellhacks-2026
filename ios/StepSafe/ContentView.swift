@@ -51,6 +51,7 @@ final class AppModel: ObservableObject {
         if let t = out.thumbnail { thumbnail = t }
         alerts.atCurb = out.atCurb
         alerts.walkerSpeed = out.walkerSpeed
+        alerts.headStill = out.headStill
         alerts.update(out.confirmed)
         link.handle(out) // after the alert decision: nothing here can delay a warning
     }

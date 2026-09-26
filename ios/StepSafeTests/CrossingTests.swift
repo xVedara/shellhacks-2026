@@ -261,9 +261,10 @@ final class CrossingTests: XCTestCase {
     }
 
     func testHeadOnCarWithHeadYawTriggersEarly() throws {
-        // 12 m/s from 50 m straight down the road (-z), head yawing at 20 deg/s; YOLO at 5 Hz.
-        // The label flips car/truck (same group), and head rotation must not break the track.
-        for yawRate: Float in [0, 20] {
+        // 12 m/s from 50 m straight down the road (-z), standing, head yawing at 0 / 10 deg/s (under the 12 deg/s
+        // look-and-hold threshold); YOLO at 5 Hz. The label flips car/truck (same group), and head rotation must not
+        // break the track. At 20 deg/s the head is moving: standing, no growth samples, so no closing at all.
+        for yawRate: Float in [0, 10, 20] {
             var tracker = BoxTracker()
             var hit: (t: Double, ttc: Double)?
             for i in 0...25 {
@@ -278,6 +279,10 @@ final class CrossingTests: XCTestCase {
                         XCTAssertEqual(cl.speed, 12, accuracy: 2)
                     }
                 }
+            }
+            if yawRate > Float(HeadMotion.stillYawDegPerSec) {
+                XCTAssertNil(hit, "yaw \(yawRate) deg/s: head moving while standing must not grow a box")
+                continue
             }
             let h = try XCTUnwrap(hit, "yaw \(yawRate) deg/s")
             XCTAssertGreaterThanOrEqual(h.ttc, 2.5, "yaw \(yawRate) deg/s")
@@ -314,5 +319,23 @@ final class CrossingTests: XCTestCase {
                 XCTAssertTrue(cl == nil || cl!.speed < Double(Tuning.vehicleMinClosingSpeedMps))
             }
         }
+    }
+    func testHoldStillHintOncePerSessionAtCurbWithMovingHead() {
+        var h = HoldStillHint()
+        func step(_ t: Double, curb: Bool = true, speed: Float = 0, still: Bool = false) -> Bool {
+            h.update(now: t, atCurb: curb, walkerSpeed: speed, headStill: still)
+        }
+        // Head moving while walking, away from a curb, or held still: never.
+        for t in stride(from: 0.0, through: 5, by: 0.25) {
+            XCTAssertFalse(step(t, speed: 1.2))
+            XCTAssertFalse(step(t, curb: false))
+        }
+        // Standing at the curb: moving 1.5 s, still once (restarts the clock), then moving > 2 s: one notice.
+        XCTAssertFalse(step(10)); XCTAssertFalse(step(11.5)); XCTAssertFalse(step(11.75, still: true))
+        XCTAssertFalse(step(12)); XCTAssertFalse(step(14))
+        XCTAssertTrue(step(14.25))
+        // Never again this session, whatever happens.
+        for t in stride(from: 15.0, through: 40, by: 0.25) { XCTAssertFalse(step(t)) }
+        XCTAssertTrue(h.spoken)
     }
 }

@@ -123,6 +123,7 @@ final class AlertManager {
     func startScanning() {
         phrases.waitUntilReady() // every urgent clip decoded before scanning goes active (well under 1 s)
         pinged = []
+        holdStillHint = HoldStillHint()
         isScanning = true
         policy.clearHistory()
         latest = [:]
@@ -247,6 +248,10 @@ final class AlertManager {
 
     /// Walker speed from the last analysis output (drop-off time to contact).
     var walkerSpeed: Float = 0
+    /// Head held still at the last analysis output (HeadMotion).
+    var headStill = true
+    /// "Hold still to check traffic.", once per scanning session.
+    private var holdStillHint = HoldStillHint()
     /// Closing objects (track ids) that already got their immediate tone and haptic.
     private var pinged: Set<Int> = []
 
@@ -296,6 +301,9 @@ final class AlertManager {
         cueBlockedDropOff(confirmed)
         if let d = policy.decide(confirmed, now: now, playing: playing, walkerSpeed: walkerSpeed) {
             announce(d)
+        }
+        if holdStillHint.update(now: now, atCurb: atCurb, walkerSpeed: walkerSpeed, headStill: headStill) {
+            notice(.say(Notices.holdStill))
         }
         drainNotices()
     }

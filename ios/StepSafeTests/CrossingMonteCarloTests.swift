@@ -8,8 +8,9 @@ final class CrossingMonteCarloTests: XCTestCase {
     typealias S = CrossingScenarioTests
 
     /// First non-passing alert in a run: the TRUE time to contact then, or nil.
+    /// `atCurb`: passing alerts count too (SensorSession reports every closing object at a curb).
     static func firstAlertTTC(secs: Double, jitterPx: Double, rng: inout S.SplitMix, cars: (Double) -> [B.Car],
-                              cam: (Double) -> simd_float4x4, truth: (Double) -> Double) -> Double? {
+                              cam: (Double) -> simd_float4x4, truth: (Double) -> Double, atCurb: Bool = false) -> Double? {
         var tracker = BoxTracker()
         var lastCam: (t: Double, p: SIMD3<Float>)?
         var t = 0.0
@@ -23,7 +24,7 @@ final class CrossingMonteCarloTests: XCTestCase {
             _ = tracker.update(boxes, time: t, camera: B.info(cm))
             let look = -B.rot(cm).columns.2
             if tracker.assess(time: t, walker: SIMD2(p.x, p.z), walkerVelocity: vel, forward: simd_normalize(SIMD2(look.x, look.z)))
-                .contains(where: { !$0.passing }) { return truth(t) }
+                .contains(where: { !$0.passing || atCurb }) { return truth(t) }
             t += 0.2
         }
         return nil
@@ -63,13 +64,81 @@ final class CrossingMonteCarloTests: XCTestCase {
         }
     }
 
+    /// Standing head posture for look and hold: turned `turnFrom` deg away at t = 0, turning to face -z over 0.5 s,
+    /// then held with +-1 deg yaw and roll body sway (0.3 Hz) and 2 cm of position sway, random phase.
+    static func holdCam(_ t: Double, ph: Double, turnFrom: Float) -> simd_float4x4 {
+        let sway = Float(sin(2 * .pi * 0.3 * t + ph))
+        return B.head(SIMD3(0.02 * sway, 1.6, 0), yaw: turnFrom * Float(max(0, 1 - t / 0.5)) + sway,
+                      pitch: -10, roll: Float(sin(2 * .pi * 0.3 * t + ph + 1.3)))
+    }
+
+    /// Standing, look and hold (round 8): head-on car at `speed` (0.5 m lateral), true TTC 4.5 s at t = 0, walker
+    /// turning toward it from +-60 deg, then holding with +-1 deg sway.
+    static func holdRow(speed: Float, jitter: Double, runs: Int, seed: UInt64) -> Row {
+        var rng = S.SplitMix(state: seed)
+        var out: [Double] = []
+        for _ in 0..<runs {
+            let ph = Double.random(in: 0..<(2 * .pi), using: &rng)
+            let from: Float = Bool.random(using: &rng) ? 60 : -60
+            let d0 = speed * 4.5
+            out.append(firstAlertTTC(secs: 4.2, jitterPx: jitter, rng: &rng,
+                cars: { t in [B.Car(center: SIMD3(0.5, 0, -(d0 - speed * Float(t)) - 2.25), heading: .pi / 2)] },
+                cam: { t in holdCam(t, ph: ph, turnFrom: from) }, truth: { t in 4.5 - t }) ?? -1)
+        }
+        return Row(ttcs: out)
+    }
+
+    func testStandingLookAndHoldHeadOnCar() {
+        // Round 8: head-on 12 m/s, standing, turned toward the car and holding with +-1 deg sway: every run alerts
+        // with true TTC >= 2.0 s.
+        for jit in [1.0, 2.0] {
+            let r = Self.holdRow(speed: 12, jitter: jit, runs: 60, seed: 800 + UInt64(jit))
+            print(String(format: "MONTECARLO head-on 12 m/s, standing, turn then hold +-1 deg sway, %.0f px: >=2.0 s %.0f%%, median %.2f s",
+                         jit, r.pct { $0 >= 2.0 }, r.median))
+            XCTAssertEqual(r.pct { $0 >= 2.0 }, 100, "jitter \(jit)")
+        }
+    }
+
+    func testCarFromLeftLookLeftHoldAtCurb() {
+        // Round 8: car from the left at 12 m/s in the near lane (z -3), walker standing at the curb facing the street,
+        // turns to look down the road (-80 deg over 0.5 s, from a random time in 1.1-1.8 s), holds 1 s with +-1 deg sway, turns
+        // back. >= 90% of runs alert while the head is held, with true TTC >= 1.5 s (TTC = time until the car reaches x 0).
+        // The hold must begin at true TTC >= ~2.3 s (0.6 s of still samples + 0.2 s rate smoothing + a 5 Hz frame) and
+        // must still be on once the TTC drops under Tuning.ttcSeconds (3 s): a hold that ends earlier sees a car too far
+        // away to alert on, which is correct. Misses (~7%): 1 px jitter on only 4 still samples at ~26 m underestimates
+        // the closing speed (TTC estimate 3.0-3.2 s, just over the 3 s gate); without jitter every such hold alerts.
+        var rng = S.SplitMix(state: 850)
+        var ok = 0, ttcs: [Double] = []
+        let runs = 60
+        for _ in 0..<runs {
+            let ph = Double.random(in: 0..<(2 * .pi), using: &rng)
+            let start = Double.random(in: 1.1...1.8, using: &rng)
+            var alertAt = -1.0
+            let ttc = Self.firstAlertTTC(secs: 4.5, jitterPx: 1, rng: &rng,
+                cars: { t in [B.Car(center: SIMD3(-60 + 12 * Float(t), 0, -3), heading: 0)] },
+                cam: { t in
+                    let u = t < start + 1.5 ? min(max((t - start) / 0.5, 0), 1) : max(0, 1 - (t - start - 1.5) / 0.5)
+                    let sway = Float(sin(2 * .pi * 0.3 * t + ph))
+                    return B.head(SIMD3(0, 1.6, 0), yaw: Float(-80 * u) + sway, pitch: -5, roll: Float(sin(2 * .pi * 0.3 * t + ph + 1.3)))
+                }, truth: { t in alertAt = t; return 5 - t }, atCurb: true) ?? -1
+            ttcs.append(ttc)
+            if ttc >= 1.5, alertAt >= start + 0.5 - 1e-9, alertAt <= start + 1.5 + 1e-9 { ok += 1 }
+        }
+        let r = Row(ttcs: ttcs)
+        print(String(format: "MONTECARLO car from left, look left + hold 1 s at the curb: %d/%d alert while held with TTC >= 1.5 s, median %.2f s",
+                     ok, runs, r.median))
+        XCTAssertGreaterThanOrEqual(ok, runs * 9 / 10)
+    }
+
     func testFastCarWithJitterAlertsEarlyEnough() {
-        // Item 2: 20 m/s car, +-2 deg roll, 3 px jitter: median first alert TTC >= 2.0 s, <= 10% of runs under 1.0 s.
+        // 20 m/s car, 3 px jitter: median first alert TTC >= 2.0 s, <= 10% of runs under 1.0 s. Walking 1.3 m/s with
+        // +-2 deg gait roll; standing (look and hold, round 8): turned toward the car and holding with +-1 deg sway.
         for walk: Float in [0, 1.3] {
-            let r = Self.headOnRow(speed: 20, walk: walk, roll: 2, yaw: 0, sway: 0.02, jitter: 3, runs: 60, seed: UInt64(400 + walk * 10))
+            let r = walk > 0 ? Self.headOnRow(speed: 20, walk: walk, roll: 2, yaw: 0, sway: 0.02, jitter: 3, runs: 60, seed: UInt64(400 + walk * 10))
+                             : Self.holdRow(speed: 20, jitter: 3, runs: 60, seed: 400)
             let under1 = r.pct { $0 < 1.0 } // includes never (-1)
-            print(String(format: "MONTECARLO head-on 20 m/s, walk %.1f, roll +-2, 3 px: median %.2f s, under 1.0 s %.0f%%, >=2.0 s %.0f%%",
-                         walk, r.median, under1, r.pct { $0 >= 2.0 }))
+            print(String(format: "MONTECARLO head-on 20 m/s, %@, 3 px: median %.2f s, under 1.0 s %.0f%%, >=2.0 s %.0f%%",
+                         walk > 0 ? "walk 1.3, roll +-2" : "standing, turn then hold +-1 deg sway", r.median, under1, r.pct { $0 >= 2.0 }))
             XCTAssertGreaterThanOrEqual(r.median, 2.0, "walk \(walk)")
             XCTAssertLessThanOrEqual(under1, 10, "walk \(walk)")
         }
@@ -126,8 +195,9 @@ final class CrossingMonteCarloTests: XCTestCase {
     }
 
     /// Walker walking and scanning the street (+-60 deg at 0.33 / 0.5 Hz, roll +-3, 1.5 px jitter) while a car comes
-    /// head-on (0.5 m miss, meeting at t = 4.5 s) at 8 or 12 m/s (audit-r5 sw rig, phi 0): >= 25% of runs alert with
-    /// TTC >= 2 s.
+    /// head-on (0.5 m miss, meeting at t = 4.5 s) at 8 or 12 m/s (audit-r5 sw rig, phi 0). Round 8: walking, growth
+    /// samples are skipped while the head turns faster than 30 deg/s; this scan crosses the car at 108-188 deg/s, so
+    /// the YOLO path never alerts (round 7: 33-60% of runs alerted with TTC >= 2 s). The depth path is unaffected.
     func testScanningWalkerHeadOnCar() {
         for vw: Float in [1.0, 1.3] {
             for vc: Float in [8, 12] {
@@ -151,7 +221,7 @@ final class CrossingMonteCarloTests: XCTestCase {
                     let r = Row(ttcs: ttcs)
                     print(String(format: "MONTECARLO scanning walker %.1f m/s, car %.0f m/s head-on, sweep +-60 @%.2f: >=2.0 s %.0f%%, >=1.0 s %.0f%%, never %.0f%%",
                                  vw, vc, hz, r.pct { $0 >= 2.0 }, r.pct { $0 >= 1.0 }, r.pct { $0 < 0 }))
-                    XCTAssertGreaterThanOrEqual(r.pct { $0 >= 2.0 }, 25, "walk \(vw), car \(vc), \(hz) Hz")
+                    XCTAssertEqual(r.pct { $0 >= 0 }, 0, "walk \(vw), car \(vc), \(hz) Hz: box growth under a fast head turn")
                 }
             }
         }
