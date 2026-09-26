@@ -1,0 +1,35 @@
+# secrets
+.env
+.env.*
+!.env.example
+
+# data (recorded walks never go in the repo)
+field-data/
+*.depth
+*.conf
+
+# node
+node_modules/
+dist/
+
+# xcode
+DerivedData/
+build/
+*.xcuserstate
+xcuserdata/
+*.xcuserdatad/
+
+# python
+__pycache__/
+.venv/
+
+# os
+.DS_Store
+
+# plans and handoffs stay in the workspace, never in the repo
+PLAN.md
+HANDOFF.md
+*.plan.md
+
+# local agent worktrees
+.claude/
