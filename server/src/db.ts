@@ -100,8 +100,7 @@ export async function ensureIndexes(db: Db) {
   const reports = db.collection('reports');
   await Promise.all([
     hazards.createIndexes([
-      // status + band + expiry ride along with the geo key so /near and merge do not filter after a full radius scan
-      { key: { location: '2dsphere', status: 1, heightBand: 1, expiresAt: 1 } },
+      { key: { location: '2dsphere' } },
       { key: { expiresAt: 1 }, expireAfterSeconds: 0 },
       { key: { sample: 1 } },
       // rename pass: needsNaming, oldest attempt first. Partial so named pins are not in the index.
@@ -116,7 +115,6 @@ export async function ensureIndexes(db: Db) {
     ensureUniqueReports(reports),
   ]);
   await Promise.all([
-    dropIfExists(hazards, 'location_2dsphere'),
     dropIfExists(votes, 'hazardId_1'),
     dropIfExists(reclass, 'hazardId_1'),
   ]);

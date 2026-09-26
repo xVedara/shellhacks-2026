@@ -788,12 +788,12 @@ describe('client IP trust', () => {
 });
 
 describe('indexes', () => {
-  it('serves geo and rename from compound indexes and does not keep redundant hazardId indexes', async () => {
+  it('keeps the location 2dsphere index and drops redundant hazardId indexes', async () => {
     await ensureIndexes(db); // idempotent: also drops leftovers from an older ensureIndexes
     const names = async (c: string) => (await db.collection(c).indexes()).map((i) => i.name);
-    expect(await names('hazards')).toContain('location_2dsphere_status_1_heightBand_1_expiresAt_1');
+    expect(await names('hazards')).toContain('location_2dsphere');
+    expect(await names('hazards')).not.toContain('location_2dsphere_status_1_heightBand_1_expiresAt_1');
     expect(await names('hazards')).toContain('renameAttemptAt_1');
-    expect(await names('hazards')).not.toContain('location_2dsphere');
     expect(await names('votes')).toEqual(expect.arrayContaining(['_id_', 'hazardId_1_deviceId_1']));
     expect(await names('votes')).not.toContain('hazardId_1');
     expect(await names('reclassifications')).not.toContain('hazardId_1');

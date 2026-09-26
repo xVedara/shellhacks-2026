@@ -471,6 +471,7 @@ export function buildApp({
           {
             $geoNear: {
               near: { type: 'Point', coordinates: [ln, la] },
+              key: 'location',
               distanceField: 'distanceM',
               maxDistance: radius_m,
               spherical: true,
