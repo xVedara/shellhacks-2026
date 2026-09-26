@@ -36,3 +36,5 @@ HANDOFF.md
 
 # scripts/dev-up.sh PID file
 .dev-up.pids
+.cursor/
+.grok/
