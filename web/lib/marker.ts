@@ -33,9 +33,9 @@ export function markerSvg(h: Pick<HazardSummary, "category" | "heightBand">, siz
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${s}" height="${s}" viewBox="0 0 ${s} ${s}" aria-hidden="true" focusable="false" style="overflow:visible;filter:${shadow}">${shape}${text}${ring}</svg>`;
 }
 
-/** Includes the letter and "Sample" drawn on the pin so the accessible name matches the visible label. */
+/** Includes the letter and "Sample" drawn on the pin, in that order, so the accessible name contains the visible label. */
 export const hazardAccessibleName = (h: HazardSummary) => {
   const meta = CATEGORY_META[h.category];
-  const sample = h.sample ? "Sample: " : "";
-  return `${meta.letter}, ${sample}${h.label || h.type}, ${meta.label.toLowerCase()}, ${HEIGHT_META[h.heightBand].label.toLowerCase()}, confidence ${h.confidence.toFixed(1)}`;
+  const sample = h.sample ? " Sample:" : "";
+  return `${meta.letter}${sample} ${h.label || h.type}, ${meta.label.toLowerCase()}, ${HEIGHT_META[h.heightBand].label.toLowerCase()}, confidence ${h.confidence.toFixed(1)}`;
 };

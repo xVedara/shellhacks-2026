@@ -23,18 +23,18 @@ function pin(over: Partial<HazardSummary> = {}): HazardSummary {
 test("accessible name starts with the letter drawn on the pin", () => {
   assert.equal(
     hazardAccessibleName(pin()),
-    "M, trash bin, moving, ground level, confidence 2.0",
+    "M trash bin, moving, ground level, confidence 2.0",
   );
-  assert.match(hazardAccessibleName(pin({ category: "temporary", label: "scaffold" })), /^T, /);
-  assert.match(hazardAccessibleName(pin({ category: "permanent", label: "curb" })), /^P, /);
+  assert.match(hazardAccessibleName(pin({ category: "temporary", label: "scaffold" })), /^T /);
+  assert.match(hazardAccessibleName(pin({ category: "permanent", label: "curb" })), /^P /);
 });
 
-test("accessible name includes the visible Sample tag", () => {
+test("accessible name contains the visible Sample tag after the letter", () => {
   const name = hazardAccessibleName(pin({ sample: true, label: "e-scooter" }));
-  assert.equal(name.startsWith("M, Sample: e-scooter"), true);
-  assert.equal(name.includes("Sample"), true);
+  assert.equal(name.startsWith("M Sample: e-scooter"), true);
+  assert.equal(name.includes("M Sample"), true);
 });
 
 test("accessible name falls back to the type id when there is no label", () => {
-  assert.match(hazardAccessibleName(pin({ label: "", type: "trash-bin" })), /^M, trash-bin, /);
+  assert.match(hazardAccessibleName(pin({ label: "", type: "trash-bin" })), /^M trash-bin, /);
 });
