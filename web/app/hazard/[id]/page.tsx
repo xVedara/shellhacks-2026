@@ -6,14 +6,14 @@ import HazardDetail, { useHazardDetail } from "@/components/HazardDetail";
 import Map from "@/components/Map";
 import { Notice, PageBar, linkClass } from "@/components/ui";
 import { typeDisplayName } from "@/lib/api";
-import { useLiveHazards, useTaxonomy } from "@/lib/hooks";
+import { useHazardRevision, useTaxonomy } from "@/lib/hooks";
 
 export default function HazardPage() {
   const { id } = useParams<{ id: string }>();
   const hazardId = decodeURIComponent(id);
-  // Subscribed only so the detail re-fetches when this hazard changes on the server.
-  const { detailVersion } = useLiveHazards();
-  const { detail, error, loading } = useHazardDetail(hazardId, detailVersion(hazardId));
+  // This page only needs one record. The live map is what downloads /hazards/near.
+  const revision = useHazardRevision(hazardId);
+  const { detail, error, loading } = useHazardDetail(hazardId, String(revision));
   const { taxonomy } = useTaxonomy();
 
   return (

@@ -2,11 +2,58 @@
 
 import { useEffect, useState } from "react";
 import { API_URL, ApiError, GRAHAM_CENTER, api, getDeviceId, getTaxonomy, type HazardEvent, type HazardSummary, type HazardType } from "./api";
-import { createLivePins } from "./live-pins";
+import { createLivePins, hazardEventTargets, parseHazardEvent } from "./live-pins";
 
 export type Connection = "loading" | "live" | "reconnecting" | "down";
 
 const RETRY_MS = 5000;
+
+/**
+ * One /events socket. A second CLOSED error used to schedule another connect without
+ * clearing the first timer. Errors from a source we already replaced are ignored.
+ */
+function listenForHazards(handlers: {
+  onOpen: () => void;
+  onHazard: (evt: HazardEvent) => void;
+  onError?: () => void;
+}): () => void {
+  let source: EventSource | null = null;
+  let retry: ReturnType<typeof setTimeout> | undefined;
+  let stopped = false;
+
+  const connect = () => {
+    if (stopped) return;
+    clearTimeout(retry);
+    const prev = source;
+    const mine = new EventSource(`${API_URL}/events`);
+    source = mine;
+    prev?.close();
+    mine.onopen = () => {
+      if (!stopped && source === mine) handlers.onOpen();
+    };
+    mine.onerror = () => {
+      if (stopped || source !== mine) return;
+      handlers.onError?.();
+      if (mine.readyState === EventSource.CLOSED) {
+        clearTimeout(retry);
+        retry = setTimeout(connect, RETRY_MS);
+      }
+    };
+    mine.addEventListener("hazard", (e) => {
+      if (stopped || source !== mine) return;
+      const evt = parseHazardEvent((e as MessageEvent).data);
+      if (evt) handlers.onHazard(evt);
+    });
+  };
+
+  connect();
+  return () => {
+    stopped = true;
+    clearTimeout(retry);
+    source?.close();
+    source = null;
+  };
+}
 
 type LiveState = {
   hazards: Map<string, HazardSummary>;
@@ -28,9 +75,10 @@ export function useLiveHazards() {
 
   useEffect(() => {
     let cancelled = false;
-    let source: EventSource | null = null;
+    let socketOpen = false;
     let retry: ReturnType<typeof setTimeout> | undefined;
     let resyncTimer: ReturnType<typeof setTimeout> | undefined;
+    let stopStream: (() => void) | undefined;
     // Keep the first time a hazard was seen clearing; a replay after resync must not move it.
     const session = createLivePins((id) => setCleared((c) => (c.has(id) ? c : new Map(c).set(id, Date.now()))));
     const revisions = new Map<string, number>();
@@ -69,7 +117,7 @@ export function useLiveHazards() {
       clearTimeout(resyncTimer);
       const result = await load();
       if (cancelled || result === "stale") return;
-      if (source?.readyState !== EventSource.OPEN) return;
+      if (!socketOpen) return;
       if (result === "ok") setConnection("live");
       else {
         setConnection("reconnecting");
@@ -77,38 +125,30 @@ export function useLiveHazards() {
       }
     };
 
-    const connect = () => {
-      source = new EventSource(`${API_URL}/events`);
-      source.onopen = () => resync();
-      source.onerror = () => {
-        clearTimeout(resyncTimer);
-        setConnection("reconnecting");
-        if (source?.readyState === EventSource.CLOSED) {
-          source.close();
-          retry = setTimeout(connect, RETRY_MS);
-        }
-      };
-      source.addEventListener("hazard", (e) => {
-        let evt: HazardEvent;
-        try {
-          evt = JSON.parse((e as MessageEvent).data);
-        } catch {
-          return;
-        }
-        setLastEventAt(Date.now());
-        const added = session.note(evt);
-        if (evt.op === "upsert" && evt.hazard?.id) revisions.set(evt.hazard.id, (revisions.get(evt.hazard.id) ?? 0) + 1);
-        if (added) setRecentlyAdded(added);
-        publish();
-      });
-    };
-
     // First contact: nothing to show until /hazards/near answers, so this is the "down" state.
     const start = async () => {
       const result = await load();
       if (cancelled || result === "stale") return;
-      if (result === "ok") connect();
-      else {
+      if (result === "ok") {
+        stopStream = listenForHazards({
+          onOpen: () => {
+            socketOpen = true;
+            resync();
+          },
+          onError: () => {
+            socketOpen = false;
+            clearTimeout(resyncTimer);
+            setConnection("reconnecting");
+          },
+          onHazard: (evt) => {
+            setLastEventAt(Date.now());
+            const added = session.note(evt);
+            if (evt.op === "upsert") revisions.set(evt.hazard.id, (revisions.get(evt.hazard.id) ?? 0) + 1);
+            if (added) setRecentlyAdded(added);
+            publish();
+          },
+        });
+      } else {
         setConnection("down");
         retry = setTimeout(start, RETRY_MS);
       }
@@ -117,9 +157,10 @@ export function useLiveHazards() {
 
     return () => {
       cancelled = true;
+      socketOpen = false;
       clearTimeout(retry);
       clearTimeout(resyncTimer);
-      source?.close();
+      stopStream?.();
     };
   }, []);
 
@@ -127,6 +168,32 @@ export function useLiveHazards() {
   const detailVersion = (id: string | null) => (id ? `${live.epoch}:${live.revisions.get(id) ?? 0}` : undefined);
 
   return { hazards: live.hazards, connection, loaded, error, recentlyAdded, detailVersion, cleared, lastEventAt };
+}
+
+/**
+ * Follow /events for one hazard. Does not download /hazards/near.
+ * Bumps on a matching upsert or remove, and on every socket open (including the first),
+ * so a record fetched before the socket subscribed is refreshed.
+ */
+export function useHazardRevision(id: string): number {
+  const [revision, setRevision] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    const bump = () => {
+      if (!cancelled) setRevision((n) => n + 1);
+    };
+    const stop = listenForHazards({
+      onOpen: bump,
+      onHazard: (evt) => {
+        if (hazardEventTargets(evt, id)) bump();
+      },
+    });
+    return () => {
+      cancelled = true;
+      stop();
+    };
+  }, [id]);
+  return revision;
 }
 
 /** Current time, re-read every `ms` so relative labels and "last hour" counts stay honest. */
@@ -148,23 +215,29 @@ export function useIdentity() {
   useEffect(() => {
     const id = getDeviceId();
     let retry: ReturnType<typeof setTimeout> | undefined;
-    const refresh = () =>
+    let latest = 0;
+    const refresh = () => {
+      const mine = ++latest;
+      clearTimeout(retry);
       api.user(id).then(
         (u) => {
+          if (mine !== latest) return;
           setUser(u);
           setStatus("ok");
           setDeviceId(id);
         },
         () => {
+          if (mine !== latest) return;
           setStatus("unavailable");
           setDeviceId(id);
-          clearTimeout(retry);
           retry = setTimeout(refresh, 10_000);
         },
       );
+    };
     refresh();
     window.addEventListener("stepsafe:voted", refresh);
     return () => {
+      latest += 1;
       clearTimeout(retry);
       window.removeEventListener("stepsafe:voted", refresh);
     };

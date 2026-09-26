@@ -1,5 +1,24 @@
 import type { HazardEvent, HazardSummary } from "./api";
 
+/** Drop a payload that is not an upsert or remove. A bad frame must not throw the listener. */
+export function parseHazardEvent(data: string): HazardEvent | null {
+  let body: unknown;
+  try {
+    body = JSON.parse(data);
+  } catch {
+    return null;
+  }
+  if (!body || typeof body !== "object") return null;
+  const evt = body as { op?: unknown; id?: unknown; hazard?: { id?: unknown } };
+  if (evt.op === "remove") return typeof evt.id === "string" ? { op: "remove", id: evt.id } : null;
+  if (evt.op === "upsert" && evt.hazard && typeof evt.hazard.id === "string") return body as HazardEvent;
+  return null;
+}
+
+export function hazardEventTargets(evt: HazardEvent, id: string): boolean {
+  return evt.op === "remove" ? evt.id === id : evt.hazard.id === id;
+}
+
 export function applyEvent(pins: Map<string, HazardSummary>, evt: HazardEvent): string | null {
   if (evt.op === "remove") {
     pins.delete(evt.id);

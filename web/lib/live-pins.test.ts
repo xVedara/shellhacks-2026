@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { HazardSummary } from "./api";
-import { createLivePins } from "./live-pins.ts";
+import { createLivePins, hazardEventTargets, parseHazardEvent } from "./live-pins.ts";
 
 function hazard(id: string, type: string): HazardSummary {
   return {
@@ -26,6 +26,18 @@ function deferred<T>() {
   });
   return { promise, resolve };
 }
+
+test("parseHazardEvent keeps a real upsert or remove and drops junk", () => {
+  const upsert = parseHazardEvent(JSON.stringify({ op: "upsert", hazard: hazard("a", "bin") }));
+  assert.equal(upsert?.op, "upsert");
+  assert.equal(parseHazardEvent(JSON.stringify({ op: "remove", id: "a" }))?.op, "remove");
+  assert.equal(parseHazardEvent("not-json"), null);
+  assert.equal(parseHazardEvent("null"), null);
+  assert.equal(parseHazardEvent(JSON.stringify({ op: "upsert" })), null);
+  assert.equal(parseHazardEvent(JSON.stringify({ op: "remove" })), null);
+  assert.equal(hazardEventTargets({ op: "remove", id: "a" }, "a"), true);
+  assert.equal(hazardEventTargets({ op: "upsert", hazard: hazard("b", "bin") }, "a"), false);
+});
 
 test("a slower earlier snapshot does not undo a newer snapshot or live events", async () => {
   const session = createLivePins();
