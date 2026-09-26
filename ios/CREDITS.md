@@ -1,14 +1,35 @@
 # Credits
 
+iOS detail for the list in the repo root [CREDITS.md](../CREDITS.md).
+
 ## YOLO11n (Ultralytics)
 
-Crossing assist recognizes cars, trucks, buses, motorcycles, bicycles and people beyond LiDAR range with
-**YOLO11n** by Ultralytics (https://github.com/ultralytics/ultralytics), pretrained on COCO.
+Crossing assist recognizes cars, trucks, buses, motorcycles, bicycles, and people beyond LiDAR range with YOLO11n by Ultralytics (https://github.com/ultralytics/ultralytics), pretrained on COCO.
 
-- File: `StepSafe/Models/yolo11n.mlpackage` (5.2 MB), exported once with
-  `pip install ultralytics` then `yolo export model=yolo11n.pt format=coreml nms=True`
-  (ultralytics 8.4.163, coremltools 9.0, torch 2.7.0; torch 2.14 fails in coremltools 9.0).
-- License: **AGPL-3.0** (https://www.gnu.org/licenses/agpl-3.0.html) (Ultralytics offers an Enterprise license for closed-source use). Shipping the app
-  with this model means the app's source must be available under AGPL-3.0-compatible terms, or an
-  Ultralytics Enterprise license is needed. The repo is licensed AGPL-3.0 (see `LICENSE`), so this is covered.
-- Credit on Devpost as required by PLAN.md section 7.
+The file is `StepSafe/Models/yolo11n.mlpackage`. It was exported once with `pip install ultralytics` then `yolo export model=yolo11n.pt format=coreml nms=True` (ultralytics 8.4.163, coremltools 9.0, torch 2.7.0).
+
+The license is AGPL-3.0-only (https://ultralytics.com/license and https://www.gnu.org/licenses/agpl-3.0.html). The model metadata names the same license. Ultralytics also offers an Enterprise license for closed-source use. This repo is AGPL-3.0-only. The text is `LICENSE` at the repo root, and the app target copies that file into the bundle (`ios/project.yml`). There is no in-app credits screen.
+
+`docs/PLAN.md` section 7 asks for this credit on the Devpost write-up.
+
+## COCO
+
+The model metadata says the weights were trained on COCO. COCO image files and annotation files are not in this app.
+
+COCO annotations and the COCO website are CC-BY-4.0 (https://cocodataset.org/dataset/termsofuse.htm and https://creativecommons.org/licenses/by/4.0/). COCO does not own the images. Image use stays under the Flickr Terms of Use. The COCO terms page does not say that a trained model must repeat the annotation credit.
+
+## ElevenLabs
+
+The app bundles 71 phrases in English and Spanish (142 mp3 files) under `StepSafe/Phrases/`. The voice id is `EXAVITQu4vr4xnSDxMaL`. `server/.env.example` names that voice Sarah (Mature, Reassuring, Confident). The model is `eleven_multilingual_v2`. `scripts/gen-phrases.mts` generated the files. The phone plays them on device. Live hazard names go to the team's `GET /tts`, and the server fills that route from ElevenLabs.
+
+Terms: https://elevenlabs.io/terms-of-use. A free account is non-commercial. A paid subscription may be used commercially. This repo does not record which plan generated the files. `docs/PLAN.md` section 11 says an ElevenLabs Creator tier was redeemed. Whether these clips were made on that plan is not recorded here.
+
+## coremltools and PyTorch
+
+The export note above records coremltools 9.0 and PyTorch 2.7.0. Neither tool is bundled. Nothing in the repo pins those versions.
+
+coremltools is BSD-3-Clause, Copyright 2020-2023 Apple Inc.: https://github.com/apple/coremltools/blob/main/LICENSE.txt
+
+PyTorch is BSD-3-Clause: https://github.com/pytorch/pytorch/blob/main/LICENSE
+
+The BSD notice applies to copies of those tools. The `.mlpackage` is export output, not a copy of either tool.

@@ -5,7 +5,7 @@
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { CircleMarker, MapContainer, Marker, Polyline, TileLayer, Tooltip, ZoomControl, useMap } from "react-leaflet";
+import { AttributionControl, CircleMarker, MapContainer, Marker, Polyline, TileLayer, Tooltip, ZoomControl, useMap } from "react-leaflet";
 import type { HazardSummary } from "@/lib/api";
 import { hazardAccessibleName, markerSize, markerSvg } from "@/lib/marker";
 import { sameHazardMarker, type HazardMarkerProps } from "@/lib/pin-equal";
@@ -181,6 +181,7 @@ export default function LeafletMap({
         preferCanvas
         className="h-full w-full"
         zoomControl={false}
+        attributionControl={false}
         dragging={!compact}
         scrollWheelZoom={!compact}
         doubleClickZoom={!compact}
@@ -191,6 +192,7 @@ export default function LeafletMap({
           url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
           maxZoom={19}
         />
+        <AttributionControl position="bottomright" />
         {!compact && <ZoomControl position="bottomright" />}
         {compact ? <Recenter center={center} zoom={zoom} /> : <PanToSelected hazards={hazards} selectedId={selectedId} />}
         {showOsm && <OsmLayer />}

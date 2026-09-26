@@ -27,7 +27,7 @@ checklist and first-time device test below before the actual demo.
 - **Server + web, working on their own:** hazard reports, merging, naming (local
   Qwen via Ollama or Gemini), ElevenLabs voice, the live map, and the verify queue
   with a type picker (`server/README.md`, `web/README.md`).
-- **Bundled voice:** 70 phrases x EN/ES in the ElevenLabs voice "Sarah", played
+- **Bundled voice:** 71 phrases x EN/ES in the ElevenLabs voice "Sarah", played
   on-device with no network for every fixed alert.
 
 ## Phone-test checklist (before the demo)
