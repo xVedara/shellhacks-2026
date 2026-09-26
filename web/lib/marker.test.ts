@@ -31,8 +31,7 @@ test("accessible name starts with the letter drawn on the pin", () => {
 
 test("accessible name contains the visible Sample tag after the letter", () => {
   const name = hazardAccessibleName(pin({ sample: true, label: "e-scooter" }));
-  assert.equal(name.startsWith("M Sample: e-scooter"), true);
-  assert.equal(name.includes("M Sample"), true);
+  assert.match(name, /^M Sample: e-scooter, /);
 });
 
 test("accessible name falls back to the type id when there is no label", () => {
