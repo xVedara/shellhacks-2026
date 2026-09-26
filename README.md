@@ -71,6 +71,10 @@ Settings so a phone on the same Wi-Fi can reach the server. See
 and `server/README.md` for env vars (`MONGODB_URI`, `GEMINI_API_KEY`,
 `ELEVENLABS_API_KEY`, ...).
 
+## License
+
+StepSafe is licensed under the [GNU AGPL-3.0](LICENSE). The iOS app bundles the Ultralytics YOLO11n model, which is AGPL-3.0, so the whole repo uses the same license.
+
 ## Credits
 
 - Map data: © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors, [ODbL 1.0](https://opendatacommons.org/licenses/odbl/).
