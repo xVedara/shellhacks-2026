@@ -1,0 +1,356 @@
+{
+ "voice": "EXAVITQu4vr4xnSDxMaL",
+ "model": "eleven_multilingual_v2",
+ "phrases": [
+  {
+   "id": "pg-dropoff-1-left",
+   "en": "Drop-off, 1 meter, left",
+   "es": "Desnivel, 1 metro, izquierda"
+  },
+  {
+   "id": "pg-dropoff-1-right",
+   "en": "Drop-off, 1 meter, right",
+   "es": "Desnivel, 1 metro, derecha"
+  },
+  {
+   "id": "pg-dropoff-1-ahead",
+   "en": "Drop-off, 1 meter, ahead",
+   "es": "Desnivel, 1 metro, al frente"
+  },
+  {
+   "id": "pg-dropoff-2-left",
+   "en": "Drop-off, 2 meters, left",
+   "es": "Desnivel, 2 metros, izquierda"
+  },
+  {
+   "id": "pg-dropoff-2-right",
+   "en": "Drop-off, 2 meters, right",
+   "es": "Desnivel, 2 metros, derecha"
+  },
+  {
+   "id": "pg-dropoff-2-ahead",
+   "en": "Drop-off, 2 meters, ahead",
+   "es": "Desnivel, 2 metros, al frente"
+  },
+  {
+   "id": "pg-dropoff-3-left",
+   "en": "Drop-off, 3 meters, left",
+   "es": "Desnivel, 3 metros, izquierda"
+  },
+  {
+   "id": "pg-dropoff-3-right",
+   "en": "Drop-off, 3 meters, right",
+   "es": "Desnivel, 3 metros, derecha"
+  },
+  {
+   "id": "pg-dropoff-3-ahead",
+   "en": "Drop-off, 3 meters, ahead",
+   "es": "Desnivel, 3 metros, al frente"
+  },
+  {
+   "id": "pg-dropoff-4-left",
+   "en": "Drop-off, 4 meters, left",
+   "es": "Desnivel, 4 metros, izquierda"
+  },
+  {
+   "id": "pg-dropoff-4-right",
+   "en": "Drop-off, 4 meters, right",
+   "es": "Desnivel, 4 metros, derecha"
+  },
+  {
+   "id": "pg-dropoff-4-ahead",
+   "en": "Drop-off, 4 meters, ahead",
+   "es": "Desnivel, 4 metros, al frente"
+  },
+  {
+   "id": "pg-dropoff-5-left",
+   "en": "Drop-off, 5 meters, left",
+   "es": "Desnivel, 5 metros, izquierda"
+  },
+  {
+   "id": "pg-dropoff-5-right",
+   "en": "Drop-off, 5 meters, right",
+   "es": "Desnivel, 5 metros, derecha"
+  },
+  {
+   "id": "pg-dropoff-5-ahead",
+   "en": "Drop-off, 5 meters, ahead",
+   "es": "Desnivel, 5 metros, al frente"
+  },
+  {
+   "id": "pg-head-1-left",
+   "en": "Head height, 1 meter, left",
+   "es": "A la altura de la cabeza, 1 metro, izquierda"
+  },
+  {
+   "id": "pg-head-1-right",
+   "en": "Head height, 1 meter, right",
+   "es": "A la altura de la cabeza, 1 metro, derecha"
+  },
+  {
+   "id": "pg-head-1-ahead",
+   "en": "Head height, 1 meter, ahead",
+   "es": "A la altura de la cabeza, 1 metro, al frente"
+  },
+  {
+   "id": "pg-head-2-left",
+   "en": "Head height, 2 meters, left",
+   "es": "A la altura de la cabeza, 2 metros, izquierda"
+  },
+  {
+   "id": "pg-head-2-right",
+   "en": "Head height, 2 meters, right",
+   "es": "A la altura de la cabeza, 2 metros, derecha"
+  },
+  {
+   "id": "pg-head-2-ahead",
+   "en": "Head height, 2 meters, ahead",
+   "es": "A la altura de la cabeza, 2 metros, al frente"
+  },
+  {
+   "id": "pg-head-3-left",
+   "en": "Head height, 3 meters, left",
+   "es": "A la altura de la cabeza, 3 metros, izquierda"
+  },
+  {
+   "id": "pg-head-3-right",
+   "en": "Head height, 3 meters, right",
+   "es": "A la altura de la cabeza, 3 metros, derecha"
+  },
+  {
+   "id": "pg-head-3-ahead",
+   "en": "Head height, 3 meters, ahead",
+   "es": "A la altura de la cabeza, 3 metros, al frente"
+  },
+  {
+   "id": "pg-head-4-left",
+   "en": "Head height, 4 meters, left",
+   "es": "A la altura de la cabeza, 4 metros, izquierda"
+  },
+  {
+   "id": "pg-head-4-right",
+   "en": "Head height, 4 meters, right",
+   "es": "A la altura de la cabeza, 4 metros, derecha"
+  },
+  {
+   "id": "pg-head-4-ahead",
+   "en": "Head height, 4 meters, ahead",
+   "es": "A la altura de la cabeza, 4 metros, al frente"
+  },
+  {
+   "id": "pg-head-5-left",
+   "en": "Head height, 5 meters, left",
+   "es": "A la altura de la cabeza, 5 metros, izquierda"
+  },
+  {
+   "id": "pg-head-5-right",
+   "en": "Head height, 5 meters, right",
+   "es": "A la altura de la cabeza, 5 metros, derecha"
+  },
+  {
+   "id": "pg-head-5-ahead",
+   "en": "Head height, 5 meters, ahead",
+   "es": "A la altura de la cabeza, 5 metros, al frente"
+  },
+  {
+   "id": "pg-obstacle-1-left",
+   "en": "Obstacle, 1 meter, left",
+   "es": "Obstáculo, 1 metro, izquierda"
+  },
+  {
+   "id": "pg-obstacle-1-right",
+   "en": "Obstacle, 1 meter, right",
+   "es": "Obstáculo, 1 metro, derecha"
+  },
+  {
+   "id": "pg-obstacle-1-ahead",
+   "en": "Obstacle, 1 meter, ahead",
+   "es": "Obstáculo, 1 metro, al frente"
+  },
+  {
+   "id": "pg-obstacle-2-left",
+   "en": "Obstacle, 2 meters, left",
+   "es": "Obstáculo, 2 metros, izquierda"
+  },
+  {
+   "id": "pg-obstacle-2-right",
+   "en": "Obstacle, 2 meters, right",
+   "es": "Obstáculo, 2 metros, derecha"
+  },
+  {
+   "id": "pg-obstacle-2-ahead",
+   "en": "Obstacle, 2 meters, ahead",
+   "es": "Obstáculo, 2 metros, al frente"
+  },
+  {
+   "id": "pg-obstacle-3-left",
+   "en": "Obstacle, 3 meters, left",
+   "es": "Obstáculo, 3 metros, izquierda"
+  },
+  {
+   "id": "pg-obstacle-3-right",
+   "en": "Obstacle, 3 meters, right",
+   "es": "Obstáculo, 3 metros, derecha"
+  },
+  {
+   "id": "pg-obstacle-3-ahead",
+   "en": "Obstacle, 3 meters, ahead",
+   "es": "Obstáculo, 3 metros, al frente"
+  },
+  {
+   "id": "pg-obstacle-4-left",
+   "en": "Obstacle, 4 meters, left",
+   "es": "Obstáculo, 4 metros, izquierda"
+  },
+  {
+   "id": "pg-obstacle-4-right",
+   "en": "Obstacle, 4 meters, right",
+   "es": "Obstáculo, 4 metros, derecha"
+  },
+  {
+   "id": "pg-obstacle-4-ahead",
+   "en": "Obstacle, 4 meters, ahead",
+   "es": "Obstáculo, 4 metros, al frente"
+  },
+  {
+   "id": "pg-obstacle-5-left",
+   "en": "Obstacle, 5 meters, left",
+   "es": "Obstáculo, 5 metros, izquierda"
+  },
+  {
+   "id": "pg-obstacle-5-right",
+   "en": "Obstacle, 5 meters, right",
+   "es": "Obstáculo, 5 metros, derecha"
+  },
+  {
+   "id": "pg-obstacle-5-ahead",
+   "en": "Obstacle, 5 meters, ahead",
+   "es": "Obstáculo, 5 metros, al frente"
+  },
+  {
+   "id": "cl-object-left",
+   "en": "Object approaching, left",
+   "es": "Objeto acercándose, izquierda"
+  },
+  {
+   "id": "cl-object-right",
+   "en": "Object approaching, right",
+   "es": "Objeto acercándose, derecha"
+  },
+  {
+   "id": "cl-object-ahead",
+   "en": "Object approaching, ahead",
+   "es": "Objeto acercándose, al frente"
+  },
+  {
+   "id": "cl-car-left",
+   "en": "Car approaching, left",
+   "es": "Carro acercándose, izquierda"
+  },
+  {
+   "id": "cl-car-right",
+   "en": "Car approaching, right",
+   "es": "Carro acercándose, derecha"
+  },
+  {
+   "id": "cl-car-ahead",
+   "en": "Car approaching, ahead",
+   "es": "Carro acercándose, al frente"
+  },
+  {
+   "id": "cl-motorcycle-left",
+   "en": "Motorcycle approaching, left",
+   "es": "Moto acercándose, izquierda"
+  },
+  {
+   "id": "cl-motorcycle-right",
+   "en": "Motorcycle approaching, right",
+   "es": "Moto acercándose, derecha"
+  },
+  {
+   "id": "cl-motorcycle-ahead",
+   "en": "Motorcycle approaching, ahead",
+   "es": "Moto acercándose, al frente"
+  },
+  {
+   "id": "cl-bicycle-left",
+   "en": "Bicycle approaching, left",
+   "es": "Bicicleta acercándose, izquierda"
+  },
+  {
+   "id": "cl-bicycle-right",
+   "en": "Bicycle approaching, right",
+   "es": "Bicicleta acercándose, derecha"
+  },
+  {
+   "id": "cl-bicycle-ahead",
+   "en": "Bicycle approaching, ahead",
+   "es": "Bicicleta acercándose, al frente"
+  },
+  {
+   "id": "cl-person-left",
+   "en": "Person approaching, left",
+   "es": "Persona acercándose, izquierda"
+  },
+  {
+   "id": "cl-person-right",
+   "en": "Person approaching, right",
+   "es": "Persona acercándose, derecha"
+  },
+  {
+   "id": "cl-person-ahead",
+   "en": "Person approaching, ahead",
+   "es": "Persona acercándose, al frente"
+  },
+  {
+   "id": "n-path-guard-on",
+   "en": "Path guard on",
+   "es": "Guía de camino activada"
+  },
+  {
+   "id": "n-path-guard-back",
+   "en": "Path guard back",
+   "es": "Guía de camino reanudada"
+  },
+  {
+   "id": "n-path-guard-paused",
+   "en": "Path guard paused",
+   "es": "Guía de camino en pausa"
+  },
+  {
+   "id": "n-path-guard-failed",
+   "en": "Path guard failed, restart",
+   "es": "Guía de camino falló, reinicie"
+  },
+  {
+   "id": "n-muted",
+   "en": "Muted for 5 minutes",
+   "es": "Silenciado por 5 minutos"
+  },
+  {
+   "id": "n-alerts-on",
+   "en": "Alerts on",
+   "es": "Alertas activadas"
+  },
+  {
+   "id": "n-stopped",
+   "en": "StepSafe is stopped",
+   "es": "StepSafe está detenido"
+  },
+  {
+   "id": "n-nothing-ahead",
+   "en": "Nothing detected ahead",
+   "es": "Nada detectado al frente"
+  },
+  {
+   "id": "n-listen-before-crossing",
+   "en": "Nothing detected. Listen before crossing.",
+   "es": "Nada detectado. Escuche antes de cruzar."
+  },
+  {
+   "id": "n-dropoff-ahead",
+   "en": "Drop-off ahead.",
+   "es": "Desnivel al frente."
+  }
+ ]
+}

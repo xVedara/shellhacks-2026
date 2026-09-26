@@ -7,6 +7,8 @@ import simd
 
 enum HazardKind: CaseIterable {
     case dropOff, headHeight, ground
+    /// Crossing assist: a car or any object closing fast (ClosingDetector / VehicleDetector), never PathGuard.
+    case closing
 }
 
 /// One depth frame, already copied out of ARKit.
@@ -37,9 +39,34 @@ struct Detection {
     /// Metres to the right of the walking line (negative = left).
     var lateral: Float
     var pointCount: Int
+    /// Set for .closing only; then `ahead` is the object's horizontal distance (range), not the along-lane part.
+    var closing: Closing? = nil
+
+    struct Closing: Equatable {
+        var speed: Float
+        var ttc: Float
+        /// "Car", "Person", ... or nil for an unrecognized object.
+        var label: String?
+        /// Detector track id: the alert identity.
+        var trackId: Int = 0
+        /// Predicted miss distance, metres.
+        var missM: Float = 0
+        /// A vehicle predicted to pass beside, kept only because the walker is at a curb: sorts after drop-offs.
+        var passing = false
+        /// Set by AlertPolicy when a drop-off is urgent too: the phrase is "<closing>. Drop-off ahead." and the
+        /// drop-off (at this point) counts as announced with it.
+        var dropOffPoint: SIMD3<Float>? = nil
+        var dropOffAhead: Float = 0
+    }
 }
 
-enum FloorSource { case planeUnder, planeNearest, estimate }
+enum FloorSource {
+    case planeUnder, planeNearest, estimate
+
+    /// Only a plane under the walker is trusted for the drop-pixel rule and the 0.1 m ground band. The nearest
+    /// plane may be the street below a curb or a sidewalk above it, so it gets the estimated-floor rules.
+    var usesEstimateRules: Bool { self != .planeUnder }
+}
 
 /// A horizontal ARKit plane in world terms: centre x,z, extent rotated by `yaw` about +y
 /// (local x axis = (cos yaw, 0, -sin yaw)), `width` along local x, `depth` along local z.
@@ -50,11 +77,11 @@ struct FloorPlane {
     var yaw: Float = 0
     var width: Float = 0, depth: Float = 0
 
-    func contains(x: Float, z: Float) -> Bool {
+    func contains(x: Float, z: Float, margin: Float = Tuning.floorPlaneMarginM) -> Bool {
         let dx = x - centerX, dz = z - centerZ
         let lx = dx * cos(yaw) - dz * sin(yaw)
         let lz = dx * sin(yaw) + dz * cos(yaw)
-        return abs(lx) <= width / 2 + Tuning.floorPlaneMarginM && abs(lz) <= depth / 2 + Tuning.floorPlaneMarginM
+        return abs(lx) <= width / 2 + margin && abs(lz) <= depth / 2 + margin
     }
 }
 
@@ -183,12 +210,15 @@ enum PathGuard {
 
     /// Step 2 (pathguard.py pick_floor): among ARKit floor-classified planes at least
     /// floorMinBelowCameraM below the camera,
-    ///   1. the highest one whose extent (plus floorPlaneMarginM) contains the camera's x,z: the one under the walker;
+    ///   1. the highest one whose extent contains the camera's x,z: the one under the walker. Exact extents first;
+    ///      only if none contains it, extents plus floorPlaneMarginM (so a sidewalk 0.29 m behind a walker who
+    ///      stepped down onto the street never wins over the street plane they stand on);
     ///   2. else the one nearest camera y - cameraHeightM;
     ///   3. else camera y - cameraHeightM (an estimate).
     static func floor(planes: [FloorPlane], camera: SIMD3<Float>) -> (y: Float, source: FloorSource) {
         let below = planes.filter { $0.isFloor && $0.y < camera.y - Tuning.floorMinBelowCameraM }
-        if let under = below.filter({ $0.contains(x: camera.x, z: camera.z) }).map(\.y).max() {
+        let exact = below.filter { $0.contains(x: camera.x, z: camera.z, margin: 0) }.map(\.y).max()
+        if let under = exact ?? below.filter({ $0.contains(x: camera.x, z: camera.z) }).map(\.y).max() {
             return (under, .planeUnder)
         }
         let guess = camera.y - Tuning.cameraHeightM

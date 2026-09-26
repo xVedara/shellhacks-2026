@@ -20,8 +20,23 @@
 	<string>1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>192.168.81.233</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+			</dict>
+		</dict>
+	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>StepSafe uses the camera and LiDAR to find obstacles, head-height hazards and drop-offs in your path.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>StepSafe talks to the StepSafe hazard server on this network to share and receive hazard pins.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>StepSafe uses your location to place hazards on the community map and warn you about hazards ahead.</string>
 	<key>NSMotionUsageDescription</key>

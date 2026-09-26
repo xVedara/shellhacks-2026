@@ -23,22 +23,34 @@ final class AlertManager {
     private let environment = AVAudioEnvironmentNode()
     private let tonePlayer = AVAudioPlayerNode()
     private let silencePlayer = AVAudioPlayerNode()
+    /// Server-voiced phrases (TTSPlayer clips), not spatialized.
+    private let clipPlayer = AVAudioPlayerNode()
+    /// Format TTSPlayer converts clips to.
+    static let clipFormat = AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 1)!
     private let format = AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 1)! // mono, so it spatializes
     private var tones: [Tone: AVAudioPCMBuffer] = [:]
     private lazy var silence = Self.silentBuffer(format)
     private let speech = AVSpeechSynthesizer()
+    /// Bundled StepSafe-voice clips for the fixed phrases; speech when a clip is missing.
+    private let phrases = PhrasePlayer()
     private var haptics: CHHapticEngine?
 
     /// Something to say that must not cut off a priority 1 or 2 alert; it waits for it instead.
-    private enum Notice { case say(String), whatsAhead }
+    private enum Notice {
+        case say(String), whatsAhead
+        /// A spoken label or heads-up: server clip, or speech when nil. Plays as serverPhrasePriority.
+        case server(String, clip: AVAudioPCMBuffer?)
+
+        var isServer: Bool { if case .server = self { return true } else { return false } }
+    }
 
     // Main-thread state
     private var policy = AlertPolicy()
     private var latest: [HazardKind: Detection] = [:]
     /// What is playing: its priority, and the hazard if it is an alert (un-marked if cut off).
-    private var current: (priority: Int, hazard: Detection?)?
+    private var current: (priority: Int, hazard: Detection?, startedAt: Double, ttc: Float)?
     private var busyUntil: Double = 0
-    private var pending: [Notice] = []
+    private var pending = NoticeQueue<Notice>()
     private var lastPress: Double = -.infinity
     private var lastRouteChange: Double = -.infinity
     private var lastAudioRetry: Double = -.infinity
@@ -47,6 +59,8 @@ final class AlertManager {
     /// Engine running and not interrupted: only then does an alert count as announced.
     private var audioReady = false { didSet { if audioReady != oldValue { onAudioState?(audioReady) } } }
     private(set) var isScanning = false
+    /// Path guard saw a curb (drop-off) ahead recently; set with every analysis output (what's-ahead advice).
+    var atCurb = false
     var onMuteChange: ((Bool) -> Void)?
     /// false = "Audio failed" (shown on screen) while scanning.
     var onAudioState: ((Bool) -> Void)?
@@ -56,15 +70,23 @@ final class AlertManager {
         engine.attach(environment)
         engine.attach(tonePlayer)
         engine.attach(silencePlayer)
+        engine.attach(clipPlayer)
         engine.connect(tonePlayer, to: environment, format: format)
         engine.connect(environment, to: engine.mainMixerNode, format: nil)
         engine.connect(silencePlayer, to: engine.mainMixerNode, format: format)
+        engine.connect(clipPlayer, to: engine.mainMixerNode, format: Self.clipFormat)
         tonePlayer.renderingAlgorithm = .HRTFHQ
         environment.distanceAttenuationParameters.referenceDistance = 1
         environment.distanceAttenuationParameters.rolloffFactor = 0.3 // 5 m away must still be clearly audible
 
         haptics = try? CHHapticEngine()
+        // Haptics only: the engine does not depend on the audio session, so P1 haptics survive audio interruptions.
+        haptics?.playsHapticsOnly = true
         haptics?.resetHandler = { [weak self] in try? self?.haptics?.start() }
+        haptics?.stoppedHandler = { [weak self] reason in
+            self?.audioLog.info("haptic engine stopped (\(reason.rawValue)), restarting")
+            try? self?.haptics?.start()
+        }
         try? haptics?.start()
 
         let center = NotificationCenter.default
@@ -99,10 +121,12 @@ final class AlertManager {
     /// Activates the session and plays looped silence so the app is the Now Playing app and receives
     /// AirPods presses. Deliberately NOT .mixWithOthers: a mixable session never becomes Now Playing.
     func startScanning() {
+        phrases.waitUntilReady() // every urgent clip decoded before scanning goes active (well under 1 s)
+        pinged = []
         isScanning = true
         policy.clearHistory()
         latest = [:]
-        pending = []
+        pending.removeAll()
         lastAudioRetry = now
         audioReady = startAudio()
         tick = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in self?.onTick() }
@@ -113,7 +137,7 @@ final class AlertManager {
         if !audioReady && now - lastAudioRetry >= 1 { recoverAudio() }
         if policy.muteExpired(now: now) {
             onMuteChange?(false)
-            notice(.say("Alerts on"))
+            notice(.say(Notices.alertsOn))
         }
         drainNotices()
     }
@@ -125,12 +149,13 @@ final class AlertManager {
         tick = nil
         audioReady = false
         latest = [:]
-        pending = []
+        pending.removeAll()
         current = nil
         audioQueue.sync {
             speech.stopSpeaking(at: .immediate)
             silencePlayer.stop()
             tonePlayer.stop()
+            clipPlayer.stop()
             engine.stop()
             MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
             do {
@@ -143,6 +168,7 @@ final class AlertManager {
 
     /// AR tracking reset: forget which hazards were announced.
     func clearHistory() {
+        pinged = []
         policy.clearHistory()
         latest = [:]
     }
@@ -172,15 +198,15 @@ final class AlertManager {
         }
     }
 
-    /// After an interruption or route change: restart, then replay the most urgent current hazard.
+    /// After an interruption or route change: restart, then let the policy decide. The alert that was cut off
+    /// was un-marked (cutOff), so it is due again; hazards never announced while audio was down are due too;
+    /// everything already announced keeps its repeat rules.
     private func recoverAudio() {
         guard isScanning else { return }
         lastAudioRetry = now
         audioReady = startAudio()
-        guard audioReady, let d = AlertPolicy.mostUrgent(latest.values) else { return }
-        let p = AlertPolicy.priority(d)
-        if policy.isMuted(now: now) && p > 1 { return }
-        announce(d, priority: p)
+        guard audioReady, let d = policy.next(latest, now: now, playing: playing, walkerSpeed: walkerSpeed) else { return }
+        announce(d)
     }
 
     /// Whatever was playing got cut off (interruption, route change): un-mark it so it can replay.
@@ -211,20 +237,50 @@ final class AlertManager {
         return current?.priority
     }
 
+    /// What is playing, for the hazard cut-off rules (AlertPolicy.mayStart).
+    private var playing: AlertPolicy.Playing? {
+        guard let p = playingPriority else { return nil }
+        return AlertPolicy.Playing(priority: p, hazard: current?.hazard, endsAt: max(busyUntil, now + 0.3),
+                                   startedAt: current?.startedAt ?? now, ttcAtStart: current?.ttc ?? .infinity)
+    }
+
+    /// Walker speed from the last analysis output (drop-off time to contact).
+    var walkerSpeed: Float = 0
+    /// Closing objects (track ids) that already got their immediate tone and haptic.
+    private var pinged: Set<Int> = []
+
+    /// A NEW closing object gets the spatial crossing tone and the haptic at once, even while another clip plays
+    /// (the tone mixes over speech; nothing is cut off). Its spoken alert follows the policy.
+    private func pingNewClosing(_ confirmed: [HazardKind: Detection]) {
+        guard let c = AlertPolicy.closingToPing(confirmed, pinged: pinged), let id = c.closing?.trackId else { return }
+        pinged.insert(id)
+        playHaptic()
+        guard audioReady, let buffer = tones[.crossing] else { return }
+        let point = c.point
+        audioQueue.async { [self] in
+            tonePlayer.position = AVAudio3DPoint(x: point.x, y: point.y, z: point.z)
+            tonePlayer.scheduleBuffer(buffer, at: nil, options: .interrupts)
+            tonePlayer.play()
+        }
+    }
+
     /// Feed the confirmed hazards after every analysis frame.
     func update(_ confirmed: [HazardKind: Detection]) {
         latest = confirmed
-        if let d = policy.next(confirmed, now: now, playing: playingPriority) {
-            announce(d, priority: AlertPolicy.priority(d))
+        pingNewClosing(confirmed)
+        if let d = policy.next(confirmed, now: now, playing: playing, walkerSpeed: walkerSpeed) {
+            announce(d)
         }
         drainNotices()
     }
 
-    private func announce(_ d: Detection, priority: Int) {
-        if play(tone: Self.tone(for: d.kind), at: d.point, phrase: AlertPolicy.phrase(d), priority: priority, hazard: d) {
+    /// Haptic for every priority 1 (never-muted) alert.
+    private func announce(_ d: Detection) {
+        let urgent = AlertPolicy.neverMuted(d)
+        if play(tone: Self.tone(for: d.kind), at: d.point, phrase: AlertPolicy.phrase(d), priority: AlertPolicy.priority(d), hazard: d) {
             policy.markAnnounced(d, now: now)
-            if priority == 1 { playHaptic() }
-        } else if priority == 1, now - lastHapticOnly >= 2 {
+            if urgent { playHaptic() }
+        } else if urgent, now - lastHapticOnly >= 2 {
             // Audio down: not marked, so it replays after recovery; the haptic still warns meanwhile.
             lastHapticOnly = now
             playHaptic()
@@ -235,20 +291,35 @@ final class AlertManager {
     @discardableResult
     private func play(tone: Tone?, at point: SIMD3<Float>?, phrase: String, priority: Int, hazard: Detection? = nil) -> Bool {
         guard audioReady else { return false }
-        if playingPriority != nil { cutOff() }
+        var victim: Detection?
+        if playingPriority != nil {
+            victim = current?.hazard
+            cutOff()
+        }
         var delay: Double = 0
         let buffer = tone.flatMap { tones[$0] }
         if let buffer { delay = Double(buffer.frameLength) / format.sampleRate }
-        busyUntil = now + delay + 0.3 // covers the gap before the synthesizer reports speaking
-        current = (priority, hazard)
+        // Same phrase, same priority and cut-off rules: the bundled clip (after the tone) or speech.
+        let clip = phrases.buffer(for: phrase, leadIn: delay)
+        busyUntil = now + (clip.map { Double($0.frameLength) / $0.format.sampleRate + 0.1 }
+            ?? delay + 0.3) // speech: covers the gap before the synthesizer reports speaking
+        // One-way pre-emption: what this cuts off may not cut it back while it plays.
+        if let victim, let hazard { policy.noteCutOff(victim: victim, by: hazard, until: busyUntil) }
+        current = (priority, hazard, now, hazard.map { AlertPolicy.ttc($0, walkerSpeed: walkerSpeed) } ?? .infinity)
         audioQueue.async { [self] in
             speech.stopSpeaking(at: .immediate)
             tonePlayer.stop()
+            clipPlayer.stop()
             if let buffer, let point {
                 tonePlayer.position = AVAudio3DPoint(x: point.x, y: point.y, z: point.z)
                 tonePlayer.scheduleBuffer(buffer, at: nil, options: .interrupts)
             }
             tonePlayer.play()
+            if let clip {
+                clipPlayer.scheduleBuffer(clip, at: nil, options: .interrupts)
+                clipPlayer.play()
+                return
+            }
             let utterance = AVSpeechUtterance(string: phrase)
             utterance.preUtteranceDelay = delay
             utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 1.1
@@ -257,33 +328,56 @@ final class AlertManager {
         return true
     }
 
-    /// Notices play now unless a priority 1 or 2 alert is playing; then they wait for it.
+    /// Notices go through NoticeQueue: they never cut off an alert or each other (a status notice may cut
+    /// off a server phrase), status first, stale server phrases dropped. Hazard alerts still cut them off.
+    /// Stopped: nothing drains the queue and nothing urgent can play, so they play at once.
     private func notice(_ n: Notice) {
-        if AlertPolicy.mayStart(AlertPolicy.onRequestPriority, over: playingPriority) {
-            perform(n)
-        } else {
-            pending.append(n)
-        }
+        guard isScanning else { return perform(n) }
+        pending.push(n, server: n.isServer, now: now)
+        drainNotices()
     }
 
     private func drainNotices() {
-        guard !pending.isEmpty, AlertPolicy.mayStart(AlertPolicy.onRequestPriority, over: playingPriority) else { return }
-        perform(pending.removeFirst())
+        if let n = pending.pop(playing: playingPriority, now: now) { perform(n) }
     }
 
     private func perform(_ n: Notice) {
         switch n {
         case let .say(phrase): speakNow(phrase)
         case .whatsAhead:
+            let phrase = AlertPolicy.whatsAheadPhrase(latest, atCurb: atCurb)
             if let d = AlertPolicy.mostUrgent(latest.values) {
-                if !play(tone: Self.tone(for: d.kind), at: d.point, phrase: AlertPolicy.phrase(d),
-                         priority: AlertPolicy.onRequestPriority) {
-                    speakNow(AlertPolicy.phrase(d))
+                if !play(tone: Self.tone(for: d.kind), at: d.point, phrase: phrase, priority: AlertPolicy.onRequestPriority) {
+                    speakNow(phrase)
                 }
             } else {
-                speakNow("Path clear")
+                speakNow(phrase)
+            }
+        case let .server(text, clip):
+            let priority = AlertPolicy.serverPhrasePriority // any hazard alert may cut it off
+            guard !policy.isMuted(now: now) else { return } // mute silences priority 2 and lower
+            guard let clip, audioReady else {
+                play(tone: nil, at: nil, phrase: text, priority: priority) // speech fallback; nothing if audio is down
+                return
+            }
+            if playingPriority != nil { cutOff() }
+            busyUntil = now + Double(clip.frameLength) / clip.format.sampleRate + 0.1
+            current = (priority, nil, now, .infinity)
+            audioQueue.async { [self] in
+                speech.stopSpeaking(at: .immediate)
+                tonePlayer.stop()
+                clipPlayer.stop()
+                clipPlayer.scheduleBuffer(clip, at: nil, options: .interrupts)
+                clipPlayer.play()
             }
         }
+    }
+
+    /// A server label or map heads-up (PLAN priority 3/4), only while scanning. Queued like any notice
+    /// (never cuts anything off) and plays as serverPhrasePriority, so any hazard alert cuts it off. Muted = dropped.
+    func sayServer(_ text: String, clip: AVAudioPCMBuffer?) {
+        guard isScanning, !policy.isMuted(now: now) else { return }
+        notice(.server(text, clip: clip))
     }
 
     /// Falls back to speech alone when the engine is down or not scanning (audio session inactive).
@@ -297,10 +391,10 @@ final class AlertManager {
 
     func pathGuardStatus(_ status: SensorSession.Status) {
         switch status {
-        case .on: notice(.say("Path guard on"))
-        case .back: notice(.say("Path guard back"))
-        case .paused: notice(.say("Path guard paused"))
-        case .failed: notice(.say("Path guard failed, restart"))
+        case .on: notice(.say(Notices.pathGuardOn))
+        case .back: notice(.say(Notices.pathGuardBack))
+        case .paused: notice(.say(Notices.pathGuardPaused))
+        case .failed: notice(.say(Notices.pathGuardFailed))
         }
     }
 
@@ -309,11 +403,13 @@ final class AlertManager {
         case .dropOff: return .dropOff
         case .headHeight: return .headHeight
         case .ground: return .ground
+        case .closing: return .crossing // spatialized at the object
         }
     }
 
     private func playHaptic() {
         guard let haptics else { return }
+        try? haptics.start() // no-op if running; restarts it if the system stopped it
         let events = (0..<3).map { i in
             CHHapticEvent(eventType: .hapticTransient, parameters: [
                 CHHapticEventParameter(parameterID: .hapticIntensity, value: 1),
@@ -326,17 +422,17 @@ final class AlertManager {
     // MARK: Controls (AirPods and on-screen buttons)
 
     func whatsAhead() {
-        notice(isScanning ? .whatsAhead : .say("StepSafe is stopped"))
+        notice(isScanning ? .whatsAhead : .say(Notices.stopped))
     }
 
     var isMuted: Bool { policy.isMuted(now: now) }
 
-    /// Mute silences priority 2 and lower for Tuning.muteDuration; priority 1 still plays.
+    /// Mute silences priority 2 and lower for Tuning.muteDuration; priority 1 and closing objects still play.
     func toggleMute() {
         let mute = !isMuted
         policy.setMuted(mute, now: now)
         onMuteChange?(mute)
-        notice(.say(mute ? "Muted for 5 minutes" : "Alerts on"))
+        notice(.say(mute ? Notices.muted : Notices.alertsOn))
     }
 
     /// Play/pause press: first = what's ahead; a second within 2 s = mute toggle.
@@ -392,7 +488,7 @@ final class AlertManager {
             case .dropOff: return (1320, 1320, 3, 0.08, 0.06, 0.9)
             case .headHeight: return (880, 880, 2, 0.15, 0.08, 0.8)
             case .ground: return (440, 440, 1, 0.25, 0, 0.6)
-            case .crossing: return (700, 1600, 1, 0.35, 0, 0.9)
+            case .crossing: return (700, 1600, 1, 0.15, 0, 0.9) // short: speech starts 150 ms after
             }
         }()
         let sr = format.sampleRate

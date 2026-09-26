@@ -6,7 +6,7 @@ struct StepSafeApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView(model: model)
+            RootView(model: model)
                 .preferredColorScheme(.dark)
         }
     }

@@ -43,6 +43,9 @@ enum Tuning {
     /// Cleared once unseen for this long.
     static let clearSeconds: Double = 1.0
 
+    /// Tracking must stay lost this long before "Path guard paused" (and forgetting announcements on return).
+    static let trackingPauseSeconds: Double = 0.5
+
     // MARK: Analysis rate
     static let analysisHz: Double = 12
 
@@ -58,7 +61,66 @@ enum Tuning {
     /// Lateral offset beyond which a hazard is spoken as "left"/"right" instead of "ahead".
     static let sideDeadband: Float = 0.15
 
+    // MARK: Crossing assist (ClosingDetector; names for the replay)
+    /// Trigger when time to contact is below this...
+    static let ttcSeconds: Float = 3.0
+    /// ...or a closing object is nearer than this.
+    static let closeRangeM: Float = 4.0
+    /// Slower than this after subtracting the walker's own motion is not closing (drift, noise, walking to a wall).
+    static let minClosingSpeedMps: Float = 0.8
+    static let closingHalfFieldDeg: Float = 60
+    static let closingMinHeightM: Float = 0.3
+    static let closingMaxHeightM: Float = 2.2
+    static let closingMaxRangeM: Float = 5.5
+    /// A moving object needs at least this many near-surface points.
+    static let closingMinPoints = 40
+    /// Track velocity (least squares) over this window (spans a head sweep's out-of-view gap).
+    static let closingWindowSeconds: Double = 2.0
+    /// Sanity cap on a bin's closing rate (m/s). Occlusion jumps are rejected by the track's velocity, not here.
+    static let closingMaxSpeedMps: Float = 20
+    /// Uncertainty margin on the miss distance before an object counts as passing beside.
+    static let closingMissMarginM: Float = 0.25
+    /// Consecutive track frames the miss must stay >= closingMissM + margin before suppressing.
+    static let closingPassFrames = 4
+    /// A depth track survives this long unseen (head sweeps, blank frames).
+    static let closingTrackGapSeconds: Double = 1.2
+    /// The same closing object (track id) is re-announced after this long while it keeps coming (one clip).
+    static let closingRepeatSeconds: Double = 2.5
+    /// A playing priority-1 clip plays at least this long before another priority 1 may cut it off.
+    static let p1MinPlaySeconds: Double = 0.8
+    /// A newcomer must be this much more urgent (TTC) than the playing priority-1 hazard to cut it off.
+    static let p1PreemptMarginSeconds: Double = 0.3
+    /// A priority 1 that would have less than this left to react after the playing clip may cut it off
+    /// (with p1MinPlaySeconds and p1PreemptMarginSeconds).
+    static let p1LeadSeconds: Double = 0.6
+    /// Closing object and drop-off both under this TTC: one combined phrase.
+    static let combinedTTCSeconds: Float = 2.0
+    /// Walker speed floor for a drop-off's time to contact (distance / speed).
+    static let minWalkerSpeedMps: Float = 0.5
+    /// Report only objects whose predicted miss distance at closest approach is below this (they will
+    /// plausibly reach the walker); things passing beside raise nothing.
+    static let closingMissM: Float = 1.0
+    /// "At a curb": a drop-off confirmed within this distance ahead...
+    static let curbContextM: Float = 3.0
+    /// ...in the last this many seconds (the walker looks left and right before crossing).
+    static let curbHoldSeconds: Double = 10
+    /// A closing object within this of where it was first announced is the same one (it moves).
+    static let closingSameRadiusM: Float = 2.0
+    /// Within this angle of the walking direction the side is spoken as "ahead".
+    static let closingAheadDeg: Float = 8
+    // Vehicles (YOLO11n boxes, beyond LiDAR range)
+    static let vehicleHz: Double = 5
+    static let vehicleMinConfidence: Float = 0.4
+    /// Vehicles need a clearer closing speed: their distance comes from box size, which is noisy.
+    static let vehicleMinClosingSpeedMps: Float = 1.5
+
+    // MARK: Community map
+    /// Passive walker downvotes (MapRules PassiveVoter). Off: a false downvote erases a real hazard.
+    static let passiveDownvotesEnabled = false
+
     // MARK: Controls
     static let doublePressWindow: Double = 2
     static let muteDuration: Double = 5 * 60
+    /// A queued server phrase (label, heads-up) older than this is dropped: its distance is stale.
+    static let serverPhraseMaxWaitSeconds: Double = 3
 }

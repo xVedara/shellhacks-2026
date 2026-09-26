@@ -8,7 +8,8 @@
     "dev": "tsx watch src/index.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "seed:demo": "tsx ../scripts/seed-demo.ts"
+    "seed:demo": "tsx ../scripts/seed-demo.ts",
+    "gen:phrases": "tsx ../scripts/gen-phrases.mts"
   },
   "dependencies": {
     "@fastify/cors": "^11.3.0",

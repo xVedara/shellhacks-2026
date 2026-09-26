@@ -79,4 +79,13 @@ final class AlertPolicyTests: XCTestCase {
         p.unmark(d)
         XCTAssertNotNil(p.next([.ground: d], now: 1, playing: nil))
     }
+
+    func testServerPhraseIsCutOffByEveryHazardAlert() {
+        // A spoken label or heads-up playing must never delay a warning, including a new ground obstacle (3).
+        for p in 1...3 { XCTAssertTrue(AlertPolicy.mayStart(p, over: AlertPolicy.serverPhrasePriority), "\(p)") }
+        let ground = Detection(kind: .ground, point: SIMD3(0, 0.5, -2), ahead: 2, lateral: 0, pointCount: 100)
+        let policy = AlertPolicy()
+        XCTAssertNotNil(policy.next([.ground: ground], now: 0, playing: AlertPolicy.serverPhrasePriority))
+        XCTAssertNil(policy.next([.ground: ground], now: 0, playing: 3)) // a real priority 3 still is not cut by 3
+    }
 }

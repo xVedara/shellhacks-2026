@@ -14,10 +14,17 @@ final class AppModel: ObservableObject {
 
     let sensors = SensorSession()
     let alerts = AlertManager()
+    /// Server side (naming, heads-up, Scout). Never on the path-guard -> alert path.
+    lazy var link = ServerLink(alerts: alerts)
 
     init() {
         let alerts = alerts
-        sensors.onPose = { alerts.setListenerPose($0) } // environment node only, safe off main
+        let link = link
+        sensors.onPose = { t in
+            alerts.setListenerPose(t) // environment node only, safe off main
+            link.localizer.setCamera(t)
+        }
+        sensors.onFrame = { link.namer.capture($0) } // crops only when a report is pending
         sensors.onOutput = { [weak self] out in
             DispatchQueue.main.async { self?.handle(out) }
         }
@@ -30,7 +37,7 @@ final class AppModel: ObservableObject {
         }
         // Start, AR reset, tracking back to normal: forget announced hazards (confirm filters reset in SensorSession).
         sensors.onReset = {
-            DispatchQueue.main.async { alerts.clearHistory() }
+            DispatchQueue.main.async { alerts.clearHistory(); link.reset() }
         }
         alerts.onMuteChange = { [weak self] in self?.muted = $0 }
         alerts.onAudioState = { [weak self] ok in self?.audioFailed = !ok && (self?.running ?? false) }
@@ -42,7 +49,10 @@ final class AppModel: ObservableObject {
         fps = out.fps
         floorSource = out.floorSource
         if let t = out.thumbnail { thumbnail = t }
+        alerts.atCurb = out.atCurb
+        alerts.walkerSpeed = out.walkerSpeed
         alerts.update(out.confirmed)
+        link.handle(out) // after the alert decision: nothing here can delay a warning
     }
 
     func toggleRunning() {
@@ -56,9 +66,11 @@ final class AppModel: ObservableObject {
         if running {
             alerts.startScanning()
             sensors.start()
+            link.startWalking()
         } else {
             sensors.stop()
             alerts.stopScanning()
+            link.stopWalking()
         }
     }
 }
@@ -105,7 +117,7 @@ struct ContentView: View {
     private var floorText: String {
         switch model.floorSource {
         case .planeUnder: return "Floor: ARKit plane under you"
-        case .planeNearest: return "Floor: nearest ARKit plane"
+        case .planeNearest: return String(format: "Floor: nearest ARKit plane, drop rule off, ground from %.1f m", Tuning.estimatedFloorGroundMinM)
         case .estimate: return String(format: "Floor: estimated (camera height %.2f m), drop rule off", Tuning.cameraHeightM)
         }
     }
@@ -150,13 +162,14 @@ struct ContentView: View {
             }
             let hazards = model.confirmed.values.sorted { AlertPolicy.priority($0) < AlertPolicy.priority($1) }
             if hazards.isEmpty {
-                Label("Path clear", systemImage: "checkmark.circle").foregroundStyle(.white)
+                Label(Notices.nothingAhead, systemImage: "checkmark.circle").foregroundStyle(.white)
             }
             ForEach(hazards, id: \.kind) { d in
                 Label(AlertPolicy.phrase(d), systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(Color.hazard)
                     .accessibilityLabel("Hazard: \(AlertPolicy.phrase(d))")
             }
+            ServerStatusView(link: model.link)
         }
         .padding(12)
         .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))

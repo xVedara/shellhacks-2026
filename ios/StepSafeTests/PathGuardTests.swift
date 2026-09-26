@@ -143,6 +143,25 @@ final class PathGuardTests: XCTestCase {
         XCTAssertTrue(PathGuard.analyze(frame).detections.isEmpty)
     }
 
+    func testSteppedDownJustPastCurbEdgePicksStreet() {
+        // Street runs up to the curb at z = 1; the walker stands on it 0.29 m past the sidewalk's edge.
+        // With the margin the sidewalk (higher) would also contain the walker; the exact pass must win.
+        let street = FloorPlane(y: 0, isFloor: true, centerX: 0, centerZ: -2.5, width: 6, depth: 7)
+        let justPast = SIMD3<Float>(0, 1.6, 1 - 0.29)
+        let f = PathGuard.floor(planes: [sidewalk, street], camera: justPast)
+        XCTAssertEqual(f.y, 0)
+        XCTAssertEqual(f.source, .planeUnder)
+        // No plane contains the walker exactly: the margin still counts (sidewalk just ahead of its edge).
+        XCTAssertEqual(PathGuard.floor(planes: [sidewalk], camera: justPast).y, 0.15)
+        XCTAssertEqual(PathGuard.floor(planes: [sidewalk], camera: justPast).source, .planeUnder)
+    }
+
+    func testOnlyPlaneUnderUsesTrustedFloorRules() {
+        XCTAssertFalse(FloorSource.planeUnder.usesEstimateRules)
+        XCTAssertTrue(FloorSource.planeNearest.usesEstimateRules)
+        XCTAssertTrue(FloorSource.estimate.usesEstimateRules)
+    }
+
     func testFloorPlaneRules() {
         let table = FloorPlane(y: 0.9, isFloor: false, centerX: 0, centerZ: 0, width: 2, depth: 2)
         let upper = FloorPlane(y: 1.3, isFloor: true, centerX: 0, centerZ: 0, width: 9, depth: 9) // < 0.5 m below
