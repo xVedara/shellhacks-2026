@@ -33,3 +33,6 @@ HANDOFF.md
 
 # local agent worktrees
 .claude/
+
+# scripts/dev-up.sh PID file
+.dev-up.pids
