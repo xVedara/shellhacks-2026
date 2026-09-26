@@ -141,7 +141,10 @@ function HazardMarker({
     const el = marker.getElement();
     el?.setAttribute("title", name);
     el?.setAttribute("aria-label", name);
-  }, [name, icon]);
+    // Compact maps are not buttons (Leaflet only sets role=button when keyboard is on).
+    // A role is what makes aria-label reach screen readers on a plain div.
+    if (compact) el?.setAttribute("role", "img");
+  }, [name, icon, compact]);
 
   return (
     <Marker
