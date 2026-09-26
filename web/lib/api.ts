@@ -246,6 +246,8 @@ export function rememberVote(id: string) {
 export const toFeet = (m: number) => m * 3.28084;
 export const formatLength = (m: number) => `${toFeet(m).toFixed(1)} ft`;
 
+const relativeTimeFormat = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+
 export function relativeTime(iso: string, now = Date.now()): string {
   const diff = new Date(iso).getTime() - now;
   if (Number.isNaN(diff)) return "unknown";
@@ -255,8 +257,7 @@ export function relativeTime(iso: string, now = Date.now()): string {
     ["hour", 3_600_000],
     ["minute", 60_000],
   ];
-  const rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
-  for (const [unit, ms] of units) if (abs >= ms) return rtf.format(Math.round(diff / ms), unit);
+  for (const [unit, ms] of units) if (abs >= ms) return relativeTimeFormat.format(Math.round(diff / ms), unit);
   return diff < 0 ? "just now" : "in under a minute";
 }
 

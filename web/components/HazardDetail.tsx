@@ -13,6 +13,7 @@ import {
   type HazardDetail as Detail,
   type HazardType,
 } from "@/lib/api";
+import { useNow } from "@/lib/hooks";
 import { Notice, PinTile, SampleBadge } from "./ui";
 
 const dateTime = (iso: string) => {
@@ -20,10 +21,10 @@ const dateTime = (iso: string) => {
   return Number.isNaN(d.getTime()) ? "unknown" : d.toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 };
 
-function When({ iso }: { iso: string }) {
+function When({ iso, now }: { iso: string; now: number }) {
   return (
     <time dateTime={iso} title={dateTime(iso)}>
-      {relativeTime(iso)}
+      {relativeTime(iso, now)}
     </time>
   );
 }
@@ -40,7 +41,11 @@ export function useHazardDetail(id: string | null, version?: string) {
     api
       .hazard(id)
       .then((detail) => live && setState({ id, detail, error: null }))
-      .catch((e: Error) => live && setState({ id, detail: null, error: e.message }));
+      .catch((e: Error) => {
+        if (!live) return;
+        // A failed refresh should not blank a hazard we already showed.
+        setState((prev) => ({ id, detail: prev.id === id ? prev.detail : null, error: e.message }));
+      });
     return () => {
       live = false;
     };
@@ -103,6 +108,7 @@ export function Crop({
 }
 
 export default function HazardDetail({ hazard, taxonomy }: { hazard: Detail; taxonomy?: readonly HazardType[] | null }) {
+  const now = useNow(15_000);
   const m = hazard.measurements;
   return (
     <div className="space-y-4 text-ink">
@@ -134,13 +140,13 @@ export default function HazardDetail({ hazard, taxonomy }: { hazard: Detail; tax
         <div className="px-3 py-2">
           <dt className="label">Last seen</dt>
           <dd className="mt-0.5 font-medium text-ink">
-            <When iso={hazard.lastSeen} />
+            <When iso={hazard.lastSeen} now={now} />
           </dd>
         </div>
         <div className="px-3 py-2">
           <dt className="label">Expires</dt>
           <dd className="mt-0.5 font-medium text-ink">
-            <When iso={hazard.expiresAt} /> <span className="font-normal text-ink-3">({CATEGORY_META[hazard.category].lifespan} without an upvote)</span>
+            <When iso={hazard.expiresAt} now={now} /> <span className="font-normal text-ink-3">({CATEGORY_META[hazard.category].lifespan} without an upvote)</span>
           </dd>
         </div>
         <div className="px-3 py-2">
@@ -197,7 +203,7 @@ export default function HazardDetail({ hazard, taxonomy }: { hazard: Detail; tax
                 {[...hazard.votes].reverse().map((v, i) => (
                   <tr key={i} className="border-t border-line">
                     <td className="px-3 py-1.5 text-ink-2">
-                      <When iso={v.at} />
+                      <When iso={v.at} now={now} />
                     </td>
                     <td className="px-3 py-1.5 font-medium">{v.vote === "up" ? "▲ Still there" : "▼ Gone"}</td>
                     <td className="px-3 py-1.5 capitalize">{v.source}</td>
