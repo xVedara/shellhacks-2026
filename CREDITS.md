@@ -4,11 +4,11 @@ Open-source libraries and pretrained models are credited here because ShellHacks
 
 ## Runtime services and models
 
-Google Gemini names a hazard crop when `GEMINI_API_KEY` is set. The model id is `gemini-flash-lite-latest`. The server calls it through `@google/genai` (Apache-2.0). Gemini API terms are at https://ai.google.dev/gemini-api/terms. Those terms do not ask for a "Powered by Gemini" line. On an unpaid key, Google may use prompts and responses, including images, to improve its products. This repo does not record whether the key is unpaid.
+Google Gemini names a hazard crop when `GEMINI_API_KEY` is set. The model id is `gemini-flash-lite-latest`. The server calls it through `@google/genai` (Apache-2.0). Gemini API terms are at https://ai.google.dev/gemini-api/terms. Those terms do not ask for a "Powered by Gemini" line. The team uses free Gemini API keys from Google AI Studio, so Google may use prompts and responses (including crop images) to improve its products per the Gemini API terms.
 
 Qwen names a crop when no Gemini key is set and Ollama is running. The tag is `qwen3.8:27b-mlx` (Qwen3.8-27B). The weights are Apache-2.0, Copyright 2026 Alibaba Cloud: https://huggingface.co/Qwen/Qwen3.8-27B. The Ollama tag is https://ollama.com/library/qwen3.8:27b-mlx. The weights are not in git. Ollama itself is MIT, Copyright (c) Ollama, and the binary is not in git: https://github.com/ollama/ollama/blob/main/LICENSE.
 
-ElevenLabs speaks alerts and live hazard names with model `eleven_multilingual_v2` and the premade voice Sarah, id `EXAVITQu4vr4xnSDxMaL`. The phone bundles 71 phrases in English and Spanish. Terms: https://elevenlabs.io/terms-of-use. A free account is non-commercial. A paid subscription may be used commercially. `docs/PLAN.md` section 11 says a Creator tier was redeemed. The repo does not record which plan generated the clips.
+ElevenLabs speaks alerts and live hazard names with model `eleven_multilingual_v2` and the premade voice Sarah, id `EXAVITQu4vr4xnSDxMaL`. The phone bundles 71 phrases in English and Spanish. The clips were generated on the ElevenLabs Creator plan (commercial use is allowed under that plan's terms). Terms: https://elevenlabs.io/terms-of-use.
 
 Ultralytics YOLO11n detects vehicles on the phone. The weights are AGPL-3.0-only. The bundled model and the AGPL text in the app are described in [ios/CREDITS.md](ios/CREDITS.md). The model metadata says it was trained on COCO. COCO annotations are CC-BY-4.0. COCO images stay under Flickr's terms. Neither file is in this repo.
 
@@ -60,7 +60,7 @@ The web UI uses Inter through `next/font`. The license is OFL-1.1, Copyright 201
 
 `ios/CREDITS.md` records the YOLO export as coremltools 9.0 and PyTorch 2.7.0. Both are BSD-3-Clause. Neither is bundled, and nothing in the repo pins those versions. coremltools is Copyright 2020-2023 Apple Inc.
 
-`brandguide/make_icons.py` sizes the logos with Pillow, MIT-CMU. Copyright is in [LICENSES/pillow-MIT-CMU.txt](LICENSES/pillow-MIT-CMU.txt). Pillow is not bundled. The repo does not name who drew `brandguide/logo-blue-1024.png` and `brandguide/logo-dark-1024.png`, or which tool made them.
+`brandguide/make_icons.py` sizes the logos with Pillow, MIT-CMU. Copyright is in [LICENSES/pillow-MIT-CMU.txt](LICENSES/pillow-MIT-CMU.txt). Pillow is not bundled. `brandguide/logo-blue-1024.png` and `brandguide/logo-dark-1024.png` were made with ChatGPT image generation.
 
 ## AI tools used to build it
 
@@ -68,7 +68,9 @@ StepSafe was built at ShellHacks 2026 with AI coding tools. Ara Babigian and Dev
 
 Claude Code (Anthropic) is recorded on 15 commits by Ara Babigian. About 15 other commits by Ara have no Claude-Session trailer, so the tool for those commits is not recorded.
 
-Commit messages name a review gate: Claude Opus (Anthropic) on 12 commits, and a reviewer recorded as sol on 9 commits. sol's vendor is not recorded.
+Commit messages name a review gate: Claude Opus (Anthropic) on 12 commits, and a reviewer recorded as sol (ChatGPT / OpenAI) on 9 commits.
+
+Logos were made with ChatGPT image generation.
 
 Cursor cloud agents authored 17 commits and opened pull requests #1 through #11. Those agents ran Grok 4.7, except closed unmerged pull request #1, whose recorded model name is only "default". A Cursor cloud agent running Claude Opus 5.5 coordinated later review, verification, and design mockups.
 

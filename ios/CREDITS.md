@@ -22,7 +22,7 @@ COCO annotations and the COCO website are CC-BY-4.0 (https://cocodataset.org/dat
 
 The app bundles 71 phrases in English and Spanish (142 mp3 files) under `StepSafe/Phrases/`. The voice id is `EXAVITQu4vr4xnSDxMaL`. `server/.env.example` names that voice Sarah (Mature, Reassuring, Confident). The model is `eleven_multilingual_v2`. `scripts/gen-phrases.mts` generated the files. The phone plays them on device. Live hazard names go to the team's `GET /tts`, and the server fills that route from ElevenLabs.
 
-Terms: https://elevenlabs.io/terms-of-use. A free account is non-commercial. A paid subscription may be used commercially. This repo does not record which plan generated the files. `docs/PLAN.md` section 11 says an ElevenLabs Creator tier was redeemed. Whether these clips were made on that plan is not recorded here.
+The clips were generated on the ElevenLabs Creator plan (commercial use is allowed under that plan's terms). Terms: https://elevenlabs.io/terms-of-use.
 
 ## coremltools and PyTorch
 
