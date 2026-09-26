@@ -50,7 +50,8 @@ enum Tuning {
     static let analysisHz: Double = 12
 
     // MARK: Alerts
-    /// A drop-off this close is priority 1 (tone + haptic, never muted); farther is priority 2.
+    /// A drop-off this close is priority 1 (tone + haptic, never muted); farther is priority 2 (muted by mute, never
+    /// cuts head-height words). Time to contact (distance / walker speed) only orders priority-1 alerts.
     static let dropUrgentDistance: Float = 2.0
     /// The same hazard is not repeated within this window...
     static let repeatWindow: Double = 30
@@ -95,15 +96,13 @@ enum Tuning {
     /// p1MinPlaySeconds and with p1PreemptMarginSeconds. A drop-off never cuts closing words (it queues).
     /// 0.6 s is tuned on the policy sims (curb walk, demo-3 sweep).
     static let p1LeadSeconds: Double = 0.6
-    /// A drop-off is priority 1 within dropUrgentDistance or under this time to contact at the walker's speed.
-    static let dropUrgentTTC: Float = 3.0
     /// Drop-off tone length before its words (AlertManager's drop-off tone: 3 x 0.14 s).
     static let dropOffToneSeconds: Double = 0.42
     /// Words count as heard after this long audible.
     static let heardWordsSeconds: Double = 0.6
     /// A drop-off starting within this of the end of closing words is said as their follow-on ("Drop-off ahead.").
     static let followOnSeconds: Double = 0.35
-    /// A deferred closing phrase is still worth saying this long after its object was last confirmed.
+    /// A deferred closing phrase unspoken this long after the first idle moment is dropped.
     static let pendingClosingSeconds: Double = 2.0
     /// Closing object and drop-off both under this TTC: one combined phrase.
     static let combinedTTCSeconds: Float = 3.5

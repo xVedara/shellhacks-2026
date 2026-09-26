@@ -49,8 +49,9 @@ struct BoxTracker {
     static let minIoU: CGFloat = 0.3
     /// Growth window: long enough to span two head sweeps (a car in view once a second).
     static let window: Double = 2.0
-    /// Tracks survive head sweeps: up to this long unseen, re-matched by world bearing.
-    static let dropAfter: Double = 1.2
+    /// Tracks survive head sweeps: up to this long unseen (a +-60 deg sweep at 0.33 Hz is out of view ~1.5 s),
+    /// re-matched by world bearing.
+    static let dropAfter: Double = 2.0
 
     private(set) var tracks: [Track] = []
     private var nextId = 1
@@ -69,7 +70,7 @@ struct BoxTracker {
     /// Walking: the growth slope less this many standard errors must still leave an own approach >= 1.5 m/s.
     static let pessimisticSE = 2.5
     /// Growth samples are skipped (and confirmations reset) while the head rolls faster than this (deg/s).
-    static let maxRollRateDegPerSec = 15.0 // the per-frame un-roll does most of the work; gait roll stays under this
+    static let maxRollRateDegPerSec = 25.0 // the per-frame un-roll does the work; gait roll (+-3 deg at 0.9 Hz = 17 deg/s peak) stays under this
 
     /// Camera roll relative to gravity, degrees in (-90, 90]: the angle between the portrait image's vertical
     /// axis (sensor x) and world up projected into the image plane.
@@ -282,11 +283,22 @@ struct BoxTracker {
     /// it goes by (keep those only at a curb). Ids are offset by 1_000_000 (depth ids stay below).
     mutating func assess(time: Double, walker: SIMD2<Float>, walkerVelocity: SIMD2<Float>, forward: SIMD2<Float>) -> [ClosingObject] {
         var out: [ClosingObject] = []
+        let walking = simd_length(walkerVelocity) > 0.3
         for i in tracks.indices where tracks[i].lastSeen == time && tracks[i].group == "vehicle" {
-            let tr = tracks[i]
+            var tr = tracks[i]
             let flat = SIMD2(tr.direction.x, tr.direction.z)
             guard simd_length(flat) > 1e-3 else { continue }
             let ego = Double(simd_dot(walkerVelocity, simd_normalize(flat)))
+            // After a roll step (> rollStepDeg from the last anchor), box heights changed with the roll: ONLY the
+            // samples after the step count, for the closing rate, its significance and the pessimistic slope, and
+            // they must be 5 over >= 0.8 s.
+            if rollStepAt > (tr.samples.first?.t ?? rollStepAt) {
+                tr.samples = tr.samples.filter { $0.t >= rollStepAt }
+                guard tr.samples.count >= 5, let a = tr.samples.first?.t, let b = tr.samples.last?.t, b - a >= 0.8 else {
+                    tracks[i].hits = 0
+                    continue
+                }
+            }
             guard let c = Self.closing(tr, egoTowardMps: ego),
                   Float(c.speed) >= Tuning.vehicleMinClosingSpeedMps, Float(c.ttc) < Tuning.ttcSeconds else {
                 tracks[i].hits = 0
@@ -294,22 +306,15 @@ struct BoxTracker {
             }
             tracks[i].hits += 1
             let span = (tr.samples.last?.t ?? 0) - (tr.samples.first?.t ?? 0)
-            // Confirmed by >= 5 samples over >= 0.8 s, two consecutive triggering frames, or (a car seen once per
-            // head sweep) >= 3 samples over >= 1.5 s whose angular height grew every time.
-            // After a roll step (> 5 deg from the last anchor), box heights changed with the roll: require fresh
-            // growth, 5 samples over >= 0.8 s, all taken after the step.
-            let afterStep = tr.samples.filter { $0.t >= rollStepAt }
-            if rollStepAt > (tr.samples.first?.t ?? rollStepAt) {
-                guard afterStep.count >= 5, let a = afterStep.first?.t, let b = afterStep.last?.t, b - a >= 0.8 else { continue }
-            }
             guard Self.growthT(tr.samples) >= Self.minGrowthT else { continue } // growth not clearly above the noise
             let grewEveryTime = zip(tr.samples, tr.samples.dropFirst()).allSatisfy { $1.ang > $0.ang }
-            let walking = simd_length(walkerVelocity) > 0.3
-            // Walking: the walker's own approach makes every parked car grow, so the quick confirmations (two hits,
-            // or a few sweep samples) are off; the growth needs a longer look.
-            if walking && (tr.samples.count < Self.walkingMinSamples || span < Self.walkingMinSpan) { continue }
-            guard (tr.samples.count >= 5 && span >= 0.8) || tracks[i].hits >= 2
-                    || (tr.samples.count >= 3 && span >= 1.5 && grewEveryTime) else { continue }
+            // Confirmation: >= 5 samples over >= 0.8 s, two consecutive triggering frames, or (a car seen once per
+            // head sweep) >= 3 samples over >= 1.5 s whose angular height grew every time. Walking, the walker's own
+            // approach makes every parked car grow: the two-hit path is off and 5 samples need >= 1 s; the sweep
+            // path stays (the world-track and pessimistic-slope checks below still apply).
+            let sweepPath = tr.samples.count >= 3 && span >= 1.5 && grewEveryTime
+            let longLook = tr.samples.count >= (walking ? Self.walkingMinSamples : 5) && span >= (walking ? Self.walkingMinSpan : 0.8)
+            guard longLook || sweepPath || (!walking && tracks[i].hits >= 2) else { continue }
             // Position: the last unclipped estimate, else (still entering from the side) direction x distance.
             let pos = tr.positions.last?.pos ?? walker + simd_normalize(flat) * Float(c.distance)
             let p = pos - walker
@@ -319,13 +324,12 @@ struct BoxTracker {
                 // While the walker moves, box growth mixes the walker's own approach with perspective (a parked
                 // car's side comes into view): the world track must agree that the object itself approaches.
                 let dist = simd_length(p)
-                if simd_length(walkerVelocity) > 0.3, dist > 0.1,
-                   simd_dot(v, -p / dist) < Tuning.vehicleMinClosingSpeedMps { continue }
-            } else if simd_length(walkerVelocity) > 0.3 {
+                if walking, dist > 0.1, simd_dot(v, -p / dist) < Tuning.vehicleMinClosingSpeedMps { continue }
+            } else if walking {
                 continue // walking: no world track yet to confirm the growth
             }
-            if simd_length(walkerVelocity) > 0.3, let (slope, se) = Self.growthSlope(tr.samples), let ang = tr.samples.last?.ang {
-                // Walking: even the pessimistic growth (slope - 2 SE) must leave an approach of the object's own.
+            if walking, let (slope, se) = Self.growthSlope(tr.samples), let ang = tr.samples.last?.ang {
+                // Walking: even the pessimistic growth (slope - 2.5 SE) must leave an approach of the object's own.
                 let z = tr.heightM / (2 * tan(ang / 2))
                 if z * (slope - Self.pessimisticSE * se) - ego < Double(Tuning.vehicleMinClosingSpeedMps) { continue }
             }

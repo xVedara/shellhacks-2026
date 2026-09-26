@@ -249,6 +249,20 @@ final class AlertManager {
     /// Closing objects (track ids) that already got their immediate tone and haptic.
     private var pinged: Set<Int> = []
 
+    /// A due priority-1 drop-off waiting behind closing words: its tone at the drop-off and the haptic now, mixed
+    /// over the words (AlertPolicy.dropOffToCue); its words follow.
+    private func cueBlockedDropOff(_ confirmed: [HazardKind: Detection]) {
+        guard let d = policy.dropOffToCue(confirmed, playing: playing, now: now) else { return }
+        playHaptic()
+        guard audioReady, let buffer = tones[.dropOff] else { return }
+        let point = d.point
+        audioQueue.async { [self] in
+            tonePlayer.position = AVAudio3DPoint(x: point.x, y: point.y, z: point.z)
+            tonePlayer.scheduleBuffer(buffer, at: nil, options: .interrupts)
+            tonePlayer.play()
+        }
+    }
+
     /// A NEW closing object gets the spatial crossing tone and the haptic at once, even while another clip plays
     /// (the tone mixes over speech; nothing is cut off). Its spoken alert follows the policy.
     private func pingNewClosing(_ confirmed: [HazardKind: Detection]) {
@@ -268,6 +282,7 @@ final class AlertManager {
     func update(_ confirmed: [HazardKind: Detection]) {
         latest = confirmed
         pingNewClosing(confirmed)
+        cueBlockedDropOff(confirmed)
         if let d = policy.decide(confirmed, now: now, playing: playing, walkerSpeed: walkerSpeed) {
             announce(d)
         }
@@ -276,9 +291,9 @@ final class AlertManager {
 
     /// Haptic for every priority 1 (never-muted) alert.
     private func announce(_ d: Detection) {
-        let urgent = AlertPolicy.neverMuted(d, walkerSpeed: walkerSpeed)
+        let urgent = AlertPolicy.neverMuted(d)
         if play(tone: d.followOn ? nil : Self.tone(for: d.kind), at: d.point, phrase: AlertPolicy.phrase(d),
-                priority: AlertPolicy.priority(d, walkerSpeed: walkerSpeed), hazard: d) {
+                priority: AlertPolicy.priority(d), hazard: d) {
             policy.markAnnounced(d, now: now)
             if urgent { playHaptic() }
         } else if urgent, now - lastHapticOnly >= 2 {

@@ -87,19 +87,22 @@ struct AlertPolicy {
     private var blocked: [(victim: Detection, cutter: Detection, until: Double)] = []
     /// Closing objects (track ids) whose alert has been spoken at least once.
     private var spokenClosing: Set<Int> = []
-    /// The one deferred closing phrase (decide), with when its object was last confirmed.
-    private(set) var pending: (d: Detection, lastSeen: Double)?
+    /// The one deferred closing phrase (decide): when its object was last confirmed, and the first idle moment
+    /// (nothing playing) since it was queued.
+    private(set) var pending: (d: Detection, lastSeen: Double, idleSince: Double?)?
+    /// Drop-offs (points) that already got their immediate tone + haptic while blocked behind closing words.
+    private var cuedDropOffs: [(point: SIMD3<Float>, time: Double)] = []
     /// What was playing at the last decide() that could not start anything (for follow-on drop-offs).
     private var lastPlaying: Playing?
 
     private var history: [Announced] = []
     private(set) var mutedUntil: Double?
 
-    static func priority(_ d: Detection, walkerSpeed: Float = 0) -> Int {
+    static func priority(_ d: Detection) -> Int {
         // Future crossing-assist detections (approaching cars, fast-closing objects) MUST return 1: never muted.
         switch d.kind {
-        case .dropOff: // within 2 m, or under dropUrgentTTC at the walker's speed
-            return d.ahead <= Tuning.dropUrgentDistance || d.ahead / max(walkerSpeed, Tuning.minWalkerSpeedMps) < Tuning.dropUrgentTTC ? 1 : 2
+        case .dropOff: // priority 1 only within 2 m (never muted); time to contact only orders priority-1 alerts
+            return d.ahead <= Tuning.dropUrgentDistance ? 1 : 2
         case .headHeight: return 2
         case .ground: return 3
         case .closing: return 1 // detectors report only objects that will plausibly reach the walker
@@ -107,7 +110,7 @@ struct AlertPolicy {
     }
 
     /// Ara's hard rule: priority 1 (every closing object included) ignores mute.
-    static func neverMuted(_ d: Detection, walkerSpeed: Float = 0) -> Bool { priority(d, walkerSpeed: walkerSpeed) == 1 }
+    static func neverMuted(_ d: Detection) -> Bool { priority(d) == 1 }
 
     /// Time to contact, seconds: measured for closing objects (a vehicle only passing by, kept at a curb, sorts
     /// after everything); distance / walker speed (floor Tuning.minWalkerSpeedMps) for everything else.
@@ -173,7 +176,7 @@ struct AlertPolicy {
     /// (it would otherwise be too late). The same object never cuts itself off.
     static func mayStart(_ d: Detection, over playing: Playing?, now: Double, walkerSpeed: Float) -> Bool {
         guard let playing else { return true }
-        let p = priority(d, walkerSpeed: walkerSpeed)
+        let p = priority(d)
         if p < playing.priority { return true }
         guard p == 1, playing.priority == 1, let current = playing.hazard, !sameObject(d, current) else { return false }
         // Priority 1 over priority 1. A drop-off (or any non-closing hazard) never cuts off closing words: it
@@ -214,6 +217,18 @@ struct AlertPolicy {
         return c
     }
 
+    /// A due priority-1 drop-off blocked behind closing words (a drop-off never cuts them off) gets its tone and
+    /// haptic AT ONCE, mixed over the words, once per drop-off; its words follow ("Drop-off ahead."). AlertManager
+    /// plays what this returns on the tone player; the policy sims log it.
+    mutating func dropOffToCue(_ confirmed: [HazardKind: Detection], playing: Playing?, now: Double) -> Detection? {
+        cuedDropOffs.removeAll { now - $0.time > Tuning.repeatWindow }
+        guard let d = confirmed[.dropOff], Self.priority(d) == 1, isDue(d, now: now),
+              let current = playing?.hazard, current.kind == .closing,
+              !cuedDropOffs.contains(where: { simd_distance($0.point, d.point) <= Tuning.sameHazardRadius }) else { return nil }
+        cuedDropOffs.append((d.point, now))
+        return d
+    }
+
     /// `cutter` cut off `victim`, and plays until `until`.
     mutating func noteCutOff(victim: Detection, by cutter: Detection, until: Double) {
         blocked.removeAll { $0.until < until - 60 }
@@ -238,8 +253,7 @@ struct AlertPolicy {
 
     /// Most urgent first: priority, then time to contact (drop-off: distance / walker speed).
     static func mostUrgent<S: Sequence>(_ hazards: S, walkerSpeed: Float = 0) -> Detection? where S.Element == Detection {
-        hazards.min { (priority($0, walkerSpeed: walkerSpeed), ttc($0, walkerSpeed: walkerSpeed))
-            < (priority($1, walkerSpeed: walkerSpeed), ttc($1, walkerSpeed: walkerSpeed)) }
+        hazards.min { (priority($0), ttc($0, walkerSpeed: walkerSpeed)) < (priority($1), ttc($1, walkerSpeed: walkerSpeed)) }
     }
 
     func isMuted(now: Double) -> Bool { mutedUntil.map { now < $0 } ?? false }
@@ -255,13 +269,13 @@ struct AlertPolicy {
         return true
     }
 
-    mutating func clearHistory() { history = []; spokenClosing = []; pending = nil; blocked = [] }
+    mutating func clearHistory() { history = []; spokenClosing = []; pending = nil; blocked = []; cuedDropOffs = [] }
 
     /// The hazard to announce now, or nil.
     func next(_ confirmed: [HazardKind: Detection], now: Double, playing: Playing?, walkerSpeed: Float = 0) -> Detection? {
         let muted = isMuted(now: now)
         let due = confirmed.values.filter { d in
-            (!muted || Self.neverMuted(d, walkerSpeed: walkerSpeed)) && isDue(d, now: now)
+            (!muted || Self.neverMuted(d)) && isDue(d, now: now)
         }
         guard let first = Self.mostUrgent(due, walkerSpeed: walkerSpeed) else { return nil }
         // Combine only when the closing object is itself due; otherwise a due drop-off plays alone.
@@ -275,14 +289,23 @@ struct AlertPolicy {
     /// confirmed, even if it left the camera view, so it is said when the voice frees; only a more urgent closing
     /// object replaces it. AlertManager and the policy sims call this.
     mutating func decide(_ confirmed: [HazardKind: Detection], now: Double, playing: Playing?, walkerSpeed: Float = 0) -> Detection? {
-        if let p = pending, now - p.lastSeen > Tuning.pendingClosingSeconds || !isDue(p.d, now: now) { pending = nil }
-        if let c = confirmed[.closing], isDue(c, now: now), !(c.closing?.passing ?? false) {
+        // Expiry: kept through whatever is playing; dropped only if still unspoken pendingClosingSeconds after the
+        // first idle opportunity, or once its time to contact has passed, or when it is no longer due.
+        if let p = pending, !isDue(p.d, now: now) || p.d.closing.map({ $0.ttc - Float(now - p.lastSeen) <= 0 }) == true
+            || p.idleSince.map({ now - $0 > Tuning.pendingClosingSeconds }) == true {
+            pending = nil
+        }
+        // Passing curb vehicles queue too (they sort after other hazards by their TTC penalty).
+        if let c = confirmed[.closing], isDue(c, now: now) {
             if let p = pending, !Self.sameObject(p.d, c), aged(p, now: now).closing!.ttc <= (c.closing?.ttc ?? .infinity) {
                 // keep the more urgent pending phrase
+            } else if let p = pending, Self.sameObject(p.d, c) {
+                pending = (c, now, p.idleSince)
             } else {
-                pending = (c, now)
+                pending = (c, now, nil)
             }
         }
+        if playing == nil, pending != nil, pending?.idleSince == nil { pending?.idleSince = now }
         var candidates = confirmed
         if let p = pending, confirmed[.closing].map({ !Self.sameObject($0, p.d) }) ?? true {
             candidates[.closing] = aged(p, now: now) // out of view, or more urgent than what is in view
@@ -303,7 +326,7 @@ struct AlertPolicy {
     }
 
     /// The pending closing object as of now: its time to contact and range shrink with the time since it was seen.
-    private func aged(_ p: (d: Detection, lastSeen: Double), now: Double) -> Detection {
+    private func aged(_ p: (d: Detection, lastSeen: Double, idleSince: Double?), now: Double) -> Detection {
         var d = p.d
         let dt = Float(now - p.lastSeen)
         if let c = d.closing {
