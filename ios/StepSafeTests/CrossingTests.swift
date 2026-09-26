@@ -217,7 +217,7 @@ final class CrossingTests: XCTestCase {
         XCTAssertEqual(AlertPolicy.phrase(closing(range: 3, lateral: 0.3)), "Object approaching, ahead")
         let drop = Detection(kind: .dropOff, point: SIMD3(0, 0, -1.2), ahead: 1.2, lateral: 0, pointCount: 300)
         let advice = AlertPolicy.whatsAheadPhrase([.dropOff: drop], atCurb: true)
-        XCTAssertEqual(advice, "Drop-off, 1 meter, ahead. Nothing detected. Listen before crossing.")
+        XCTAssertEqual(advice, "Drop-off, 3 feet, ahead. Nothing detected. Listen before crossing.")
         XCTAssertEqual(AlertPolicy.whatsAheadPhrase([:], atCurb: true), Notices.listenBeforeCrossing)
         XCTAssertEqual(AlertPolicy.whatsAheadPhrase([:], atCurb: false), "Nothing detected ahead")
         XCTAssertEqual(AlertPolicy.whatsAheadPhrase([.dropOff: drop, .closing: closing(range: 8, lateral: 3, label: "Car")],

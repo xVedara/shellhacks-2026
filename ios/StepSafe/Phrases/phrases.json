@@ -4,228 +4,228 @@
  "phrases": [
   {
    "id": "pg-dropoff-1-left",
-   "en": "Drop-off, 1 meter, left",
-   "es": "Desnivel, 1 metro, izquierda"
+   "en": "Drop-off, 3 feet, left",
+   "es": "Desnivel, 3 pies, izquierda"
   },
   {
    "id": "pg-dropoff-1-right",
-   "en": "Drop-off, 1 meter, right",
-   "es": "Desnivel, 1 metro, derecha"
+   "en": "Drop-off, 3 feet, right",
+   "es": "Desnivel, 3 pies, derecha"
   },
   {
    "id": "pg-dropoff-1-ahead",
-   "en": "Drop-off, 1 meter, ahead",
-   "es": "Desnivel, 1 metro, al frente"
+   "en": "Drop-off, 3 feet, ahead",
+   "es": "Desnivel, 3 pies, al frente"
   },
   {
    "id": "pg-dropoff-2-left",
-   "en": "Drop-off, 2 meters, left",
-   "es": "Desnivel, 2 metros, izquierda"
+   "en": "Drop-off, 6 feet, left",
+   "es": "Desnivel, 6 pies, izquierda"
   },
   {
    "id": "pg-dropoff-2-right",
-   "en": "Drop-off, 2 meters, right",
-   "es": "Desnivel, 2 metros, derecha"
+   "en": "Drop-off, 6 feet, right",
+   "es": "Desnivel, 6 pies, derecha"
   },
   {
    "id": "pg-dropoff-2-ahead",
-   "en": "Drop-off, 2 meters, ahead",
-   "es": "Desnivel, 2 metros, al frente"
+   "en": "Drop-off, 6 feet, ahead",
+   "es": "Desnivel, 6 pies, al frente"
   },
   {
    "id": "pg-dropoff-3-left",
-   "en": "Drop-off, 3 meters, left",
-   "es": "Desnivel, 3 metros, izquierda"
+   "en": "Drop-off, 9 feet, left",
+   "es": "Desnivel, 9 pies, izquierda"
   },
   {
    "id": "pg-dropoff-3-right",
-   "en": "Drop-off, 3 meters, right",
-   "es": "Desnivel, 3 metros, derecha"
+   "en": "Drop-off, 9 feet, right",
+   "es": "Desnivel, 9 pies, derecha"
   },
   {
    "id": "pg-dropoff-3-ahead",
-   "en": "Drop-off, 3 meters, ahead",
-   "es": "Desnivel, 3 metros, al frente"
+   "en": "Drop-off, 9 feet, ahead",
+   "es": "Desnivel, 9 pies, al frente"
   },
   {
    "id": "pg-dropoff-4-left",
-   "en": "Drop-off, 4 meters, left",
-   "es": "Desnivel, 4 metros, izquierda"
+   "en": "Drop-off, 13 feet, left",
+   "es": "Desnivel, 13 pies, izquierda"
   },
   {
    "id": "pg-dropoff-4-right",
-   "en": "Drop-off, 4 meters, right",
-   "es": "Desnivel, 4 metros, derecha"
+   "en": "Drop-off, 13 feet, right",
+   "es": "Desnivel, 13 pies, derecha"
   },
   {
    "id": "pg-dropoff-4-ahead",
-   "en": "Drop-off, 4 meters, ahead",
-   "es": "Desnivel, 4 metros, al frente"
+   "en": "Drop-off, 13 feet, ahead",
+   "es": "Desnivel, 13 pies, al frente"
   },
   {
    "id": "pg-dropoff-5-left",
-   "en": "Drop-off, 5 meters, left",
-   "es": "Desnivel, 5 metros, izquierda"
+   "en": "Drop-off, 16 feet, left",
+   "es": "Desnivel, 16 pies, izquierda"
   },
   {
    "id": "pg-dropoff-5-right",
-   "en": "Drop-off, 5 meters, right",
-   "es": "Desnivel, 5 metros, derecha"
+   "en": "Drop-off, 16 feet, right",
+   "es": "Desnivel, 16 pies, derecha"
   },
   {
    "id": "pg-dropoff-5-ahead",
-   "en": "Drop-off, 5 meters, ahead",
-   "es": "Desnivel, 5 metros, al frente"
+   "en": "Drop-off, 16 feet, ahead",
+   "es": "Desnivel, 16 pies, al frente"
   },
   {
    "id": "pg-head-1-left",
-   "en": "Head height, 1 meter, left",
-   "es": "A la altura de la cabeza, 1 metro, izquierda"
+   "en": "Head height, 3 feet, left",
+   "es": "A la altura de la cabeza, 3 pies, izquierda"
   },
   {
    "id": "pg-head-1-right",
-   "en": "Head height, 1 meter, right",
-   "es": "A la altura de la cabeza, 1 metro, derecha"
+   "en": "Head height, 3 feet, right",
+   "es": "A la altura de la cabeza, 3 pies, derecha"
   },
   {
    "id": "pg-head-1-ahead",
-   "en": "Head height, 1 meter, ahead",
-   "es": "A la altura de la cabeza, 1 metro, al frente"
+   "en": "Head height, 3 feet, ahead",
+   "es": "A la altura de la cabeza, 3 pies, al frente"
   },
   {
    "id": "pg-head-2-left",
-   "en": "Head height, 2 meters, left",
-   "es": "A la altura de la cabeza, 2 metros, izquierda"
+   "en": "Head height, 6 feet, left",
+   "es": "A la altura de la cabeza, 6 pies, izquierda"
   },
   {
    "id": "pg-head-2-right",
-   "en": "Head height, 2 meters, right",
-   "es": "A la altura de la cabeza, 2 metros, derecha"
+   "en": "Head height, 6 feet, right",
+   "es": "A la altura de la cabeza, 6 pies, derecha"
   },
   {
    "id": "pg-head-2-ahead",
-   "en": "Head height, 2 meters, ahead",
-   "es": "A la altura de la cabeza, 2 metros, al frente"
+   "en": "Head height, 6 feet, ahead",
+   "es": "A la altura de la cabeza, 6 pies, al frente"
   },
   {
    "id": "pg-head-3-left",
-   "en": "Head height, 3 meters, left",
-   "es": "A la altura de la cabeza, 3 metros, izquierda"
+   "en": "Head height, 9 feet, left",
+   "es": "A la altura de la cabeza, 9 pies, izquierda"
   },
   {
    "id": "pg-head-3-right",
-   "en": "Head height, 3 meters, right",
-   "es": "A la altura de la cabeza, 3 metros, derecha"
+   "en": "Head height, 9 feet, right",
+   "es": "A la altura de la cabeza, 9 pies, derecha"
   },
   {
    "id": "pg-head-3-ahead",
-   "en": "Head height, 3 meters, ahead",
-   "es": "A la altura de la cabeza, 3 metros, al frente"
+   "en": "Head height, 9 feet, ahead",
+   "es": "A la altura de la cabeza, 9 pies, al frente"
   },
   {
    "id": "pg-head-4-left",
-   "en": "Head height, 4 meters, left",
-   "es": "A la altura de la cabeza, 4 metros, izquierda"
+   "en": "Head height, 13 feet, left",
+   "es": "A la altura de la cabeza, 13 pies, izquierda"
   },
   {
    "id": "pg-head-4-right",
-   "en": "Head height, 4 meters, right",
-   "es": "A la altura de la cabeza, 4 metros, derecha"
+   "en": "Head height, 13 feet, right",
+   "es": "A la altura de la cabeza, 13 pies, derecha"
   },
   {
    "id": "pg-head-4-ahead",
-   "en": "Head height, 4 meters, ahead",
-   "es": "A la altura de la cabeza, 4 metros, al frente"
+   "en": "Head height, 13 feet, ahead",
+   "es": "A la altura de la cabeza, 13 pies, al frente"
   },
   {
    "id": "pg-head-5-left",
-   "en": "Head height, 5 meters, left",
-   "es": "A la altura de la cabeza, 5 metros, izquierda"
+   "en": "Head height, 16 feet, left",
+   "es": "A la altura de la cabeza, 16 pies, izquierda"
   },
   {
    "id": "pg-head-5-right",
-   "en": "Head height, 5 meters, right",
-   "es": "A la altura de la cabeza, 5 metros, derecha"
+   "en": "Head height, 16 feet, right",
+   "es": "A la altura de la cabeza, 16 pies, derecha"
   },
   {
    "id": "pg-head-5-ahead",
-   "en": "Head height, 5 meters, ahead",
-   "es": "A la altura de la cabeza, 5 metros, al frente"
+   "en": "Head height, 16 feet, ahead",
+   "es": "A la altura de la cabeza, 16 pies, al frente"
   },
   {
    "id": "pg-obstacle-1-left",
-   "en": "Obstacle, 1 meter, left",
-   "es": "Obstáculo, 1 metro, izquierda"
+   "en": "Obstacle, 3 feet, left",
+   "es": "Obstáculo, 3 pies, izquierda"
   },
   {
    "id": "pg-obstacle-1-right",
-   "en": "Obstacle, 1 meter, right",
-   "es": "Obstáculo, 1 metro, derecha"
+   "en": "Obstacle, 3 feet, right",
+   "es": "Obstáculo, 3 pies, derecha"
   },
   {
    "id": "pg-obstacle-1-ahead",
-   "en": "Obstacle, 1 meter, ahead",
-   "es": "Obstáculo, 1 metro, al frente"
+   "en": "Obstacle, 3 feet, ahead",
+   "es": "Obstáculo, 3 pies, al frente"
   },
   {
    "id": "pg-obstacle-2-left",
-   "en": "Obstacle, 2 meters, left",
-   "es": "Obstáculo, 2 metros, izquierda"
+   "en": "Obstacle, 6 feet, left",
+   "es": "Obstáculo, 6 pies, izquierda"
   },
   {
    "id": "pg-obstacle-2-right",
-   "en": "Obstacle, 2 meters, right",
-   "es": "Obstáculo, 2 metros, derecha"
+   "en": "Obstacle, 6 feet, right",
+   "es": "Obstáculo, 6 pies, derecha"
   },
   {
    "id": "pg-obstacle-2-ahead",
-   "en": "Obstacle, 2 meters, ahead",
-   "es": "Obstáculo, 2 metros, al frente"
+   "en": "Obstacle, 6 feet, ahead",
+   "es": "Obstáculo, 6 pies, al frente"
   },
   {
    "id": "pg-obstacle-3-left",
-   "en": "Obstacle, 3 meters, left",
-   "es": "Obstáculo, 3 metros, izquierda"
+   "en": "Obstacle, 9 feet, left",
+   "es": "Obstáculo, 9 pies, izquierda"
   },
   {
    "id": "pg-obstacle-3-right",
-   "en": "Obstacle, 3 meters, right",
-   "es": "Obstáculo, 3 metros, derecha"
+   "en": "Obstacle, 9 feet, right",
+   "es": "Obstáculo, 9 pies, derecha"
   },
   {
    "id": "pg-obstacle-3-ahead",
-   "en": "Obstacle, 3 meters, ahead",
-   "es": "Obstáculo, 3 metros, al frente"
+   "en": "Obstacle, 9 feet, ahead",
+   "es": "Obstáculo, 9 pies, al frente"
   },
   {
    "id": "pg-obstacle-4-left",
-   "en": "Obstacle, 4 meters, left",
-   "es": "Obstáculo, 4 metros, izquierda"
+   "en": "Obstacle, 13 feet, left",
+   "es": "Obstáculo, 13 pies, izquierda"
   },
   {
    "id": "pg-obstacle-4-right",
-   "en": "Obstacle, 4 meters, right",
-   "es": "Obstáculo, 4 metros, derecha"
+   "en": "Obstacle, 13 feet, right",
+   "es": "Obstáculo, 13 pies, derecha"
   },
   {
    "id": "pg-obstacle-4-ahead",
-   "en": "Obstacle, 4 meters, ahead",
-   "es": "Obstáculo, 4 metros, al frente"
+   "en": "Obstacle, 13 feet, ahead",
+   "es": "Obstáculo, 13 pies, al frente"
   },
   {
    "id": "pg-obstacle-5-left",
-   "en": "Obstacle, 5 meters, left",
-   "es": "Obstáculo, 5 metros, izquierda"
+   "en": "Obstacle, 16 feet, left",
+   "es": "Obstáculo, 16 pies, izquierda"
   },
   {
    "id": "pg-obstacle-5-right",
-   "en": "Obstacle, 5 meters, right",
-   "es": "Obstáculo, 5 metros, derecha"
+   "en": "Obstacle, 16 feet, right",
+   "es": "Obstáculo, 16 pies, derecha"
   },
   {
    "id": "pg-obstacle-5-ahead",
-   "en": "Obstacle, 5 meters, ahead",
-   "es": "Obstáculo, 5 metros, al frente"
+   "en": "Obstacle, 16 feet, ahead",
+   "es": "Obstáculo, 16 pies, al frente"
   },
   {
    "id": "cl-object-left",

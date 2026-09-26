@@ -55,15 +55,35 @@ final class PhraseBookTests: XCTestCase {
         XCTAssertEqual(Set(b.entries.map(\.id)).count, b.entries.count, "ids are unique")
     }
 
+    /// Each path guard clip says what AlertPolicy says for its id's kind, metre bucket and side, and the Spanish
+    /// clip is the same alert word for word (a drifted English text would silently fall back to device speech).
+    func testPathGuardEntriesMatchAlertPolicy() throws {
+        let kinds: [String: HazardKind] = ["dropoff": .dropOff, "head": .headHeight, "obstacle": .ground]
+        let laterals: [String: Float] = ["left": -0.3, "ahead": 0, "right": 0.3]
+        let nombres = ["dropoff": "Desnivel", "head": "A la altura de la cabeza", "obstacle": "Obstáculo"]
+        let lados = ["left": "izquierda", "ahead": "al frente", "right": "derecha"]
+        let entries = try book().entries.filter { $0.id.hasPrefix("pg-") }
+        XCTAssertEqual(entries.count, 45)
+        for e in entries {
+            let parts = e.id.split(separator: "-").map(String.init) // pg, kind, metre bucket, side
+            guard parts.count == 4, let kind = kinds[parts[1]], let metres = Float(parts[2]), let lateral = laterals[parts[3]]
+            else { XCTFail("unexpected id \(e.id)"); continue }
+            let d = Detection(kind: kind, point: .zero, ahead: metres, lateral: lateral, pointCount: 100)
+            XCTAssertEqual(e.en, AlertPolicy.phrase(d), e.id)
+            let feet = AlertPolicy.phrase(d).components(separatedBy: ", ")[1].replacingOccurrences(of: "feet", with: "pies")
+            XCTAssertEqual(e.es, "\(nombres[parts[1]]!), \(feet), \(lados[parts[3]]!)", e.id)
+        }
+    }
+
     func testFallbackToSpeechWhenAClipIsMissingOrTextIsNotFixed() throws {
         let b = try book()
-        let text = "Drop-off, 1 meter, ahead. Nothing detected. Listen before crossing."
+        let text = "Drop-off, 3 feet, ahead. Nothing detected. Listen before crossing."
         XCTAssertEqual(b.clipNames(for: text, lang: "es", exists: { _ in true }),
                        ["pg-dropoff-1-ahead.es", "n-listen-before-crossing.es"]) // a phrase may contain ". "
         XCTAssertNil(b.clipNames(for: text, lang: "en", exists: { $0 != "n-listen-before-crossing.en" })) // one missing
-        XCTAssertNil(b.clipNames(for: "Trash bin, 2 meters, left", lang: "en", exists: { _ in true })) // server label
-        XCTAssertEqual(b.ids(for: "Desnivel, 2 metros, izquierda"), ["pg-dropoff-2-left"]) // Spanish text maps too
-        XCTAssertNil(b.ids(for: "Drop-off, 1 meter, ahead. Trash bin")) // a partly fixed text is spoken whole
+        XCTAssertNil(b.clipNames(for: "Trash bin, 6 feet, left", lang: "en", exists: { _ in true })) // server label
+        XCTAssertEqual(b.ids(for: "Desnivel, 6 pies, izquierda"), ["pg-dropoff-2-left"]) // Spanish text maps too
+        XCTAssertNil(b.ids(for: "Drop-off, 3 feet, ahead. Trash bin")) // a partly fixed text is spoken whole
         // Wording rules: never "clear"/"safe" (or Spanish equivalents), formal usted, Miami "carro".
         for e in b.entries {
             for text in [e.en, e.es] {

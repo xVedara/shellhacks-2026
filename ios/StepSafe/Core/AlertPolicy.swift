@@ -199,8 +199,10 @@ struct AlertPolicy {
             return d.closing?.dropOffPoint == nil ? base : "\(base). \(dropOffAhead)"
         }
         let metres = max(1, Int(d.ahead.rounded()))
+        // Ids (pg-<kind>-<metres>-<side>) keep this metre bucket; the spoken number is it in feet, floored (3, 6, 9, 13, 16).
+        let feet = Int(Double(metres) * 3.28084)
         let side = d.lateral < -Tuning.sideDeadband ? "left" : d.lateral > Tuning.sideDeadband ? "right" : "ahead"
-        return "\(name), \(metres) \(metres == 1 ? "meter" : "meters"), \(side)"
+        return "\(name), \(feet) feet, \(side)"
     }
 
     /// Whether something of priority `incoming` may start now, cutting off `playing` (nil = idle). For notices

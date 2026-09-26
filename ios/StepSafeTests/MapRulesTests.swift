@@ -117,7 +117,7 @@ final class MapRulesTests: XCTestCase {
         XCTAssertEqual(HazardKind.headHeight.band, "head")
         XCTAssertEqual(HazardKind.dropOff.band, "dropoff")
         // The skipped report speaks the known pin's name with path guard's distance and side.
-        XCTAssertEqual(Spoken.named(pins[0].spokenName, detection(.ground, .zero, ahead: 3, lateral: 0.4)), "Trash bin, 3 meters, right")
+        XCTAssertEqual(Spoken.named(pins[0].spokenName, detection(.ground, .zero, ahead: 3, lateral: 0.4)), "Trash bin, 9 feet, right")
     }
 
     // MARK: Passive downvote (off by default; tests force it on)
@@ -302,8 +302,8 @@ final class MapRulesTests: XCTestCase {
     // MARK: Spoken label, TTS fallback
 
     func testSpokenLabelKeepsAlertPolicyDistanceAndSide() {
-        XCTAssertEqual(Spoken.named("trash bin", detection(.ground, .zero, ahead: 2.2, lateral: -0.5)), "Trash bin, 2 meters, left")
-        XCTAssertEqual(Spoken.named("low branch", detection(.headHeight, .zero, ahead: 0.8)), "Low branch, 1 meter, ahead")
+        XCTAssertEqual(Spoken.named("trash bin", detection(.ground, .zero, ahead: 2.2, lateral: -0.5)), "Trash bin, 6 feet, left")
+        XCTAssertEqual(Spoken.named("low branch", detection(.headHeight, .zero, ahead: 0.8)), "Low branch, 3 feet, ahead")
     }
 
     func testTTSFallbackSelection() {

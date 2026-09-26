@@ -6,6 +6,12 @@ final class AlertPolicyTests: XCTestCase {
         Detection(kind: kind, point: SIMD3(x, 0, -ahead), ahead: ahead, lateral: x, pointCount: 100)
     }
 
+    func testSpokenDistanceIsTheMetreBucketInFlooredFeet() {
+        for (metres, feet) in zip(1...5, [3, 6, 9, 13, 16]) {
+            XCTAssertEqual(AlertPolicy.phrase(det(.dropOff, ahead: Float(metres))), "Drop-off, \(feet) feet, ahead")
+        }
+    }
+
     func testMuteNeverSilencesPriorityOne() {
         var p = AlertPolicy()
         p.setMuted(true, now: 0)

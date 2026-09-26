@@ -279,7 +279,7 @@ struct PassiveVoter {
 enum Spoken {
     static func capitalized(_ s: String) -> String { s.prefix(1).uppercased() + s.dropFirst() }
 
-    /// "Trash bin, 2 meters, left": the label in place of AlertPolicy's name; distance and side stay AlertPolicy's.
+    /// "Trash bin, 6 feet, left": the label in place of AlertPolicy's name; distance and side stay AlertPolicy's.
     static func named(_ label: String, _ d: Detection) -> String {
         let phrase = AlertPolicy.phrase(d)
         let rest = phrase.firstIndex(of: ",").map { phrase[$0...] } ?? ""
