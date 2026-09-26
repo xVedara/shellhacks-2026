@@ -10,7 +10,10 @@ enum MapTuning {
     static let knownPinRadiusM = 10.0
     static let pollSeconds: Double = 10
     static let pollRadiusM = 60.0
-    static let headsUpRadiusM = 30.0
+    /// Map pins are all fixed objects (the "moving" category means movable, like a bin or parked car). Live cars
+    /// come from crossing assist, not heads-up, so this range never delays a closing-vehicle alert. 12 m = 39 ft:
+    /// a few steps' warning without naming things 100 ft away (Ara, device test 2026-09-26).
+    static let headsUpRadiusM = 12.0
     /// A pin is "ahead" when its bearing is within this of the walking direction.
     static let headsUpConeDeg = 40.0
     /// Within this of straight ahead the side is spoken as "ahead".

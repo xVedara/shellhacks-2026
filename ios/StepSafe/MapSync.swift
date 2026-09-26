@@ -20,7 +20,7 @@ final class MapSync: @unchecked Sendable { // main-confined; tasks hop back to m
     /// Last live path-guard output (uptime) and whether its floor was the plane under the walker.
     private var lastLiveOutput: Double?
     private var floorUnder = false
-    /// Pins ahead within 30 m (debug panel), refreshed every tick.
+    /// Pins ahead within MapTuning.headsUpRadiusM (debug panel), refreshed every tick.
     var onAhead: (([HeadsUpState.Due]) -> Void)?
     /// Speak a heads-up as priority 4.
     var speak: ((String) -> Void)?
