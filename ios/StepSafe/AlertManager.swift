@@ -236,9 +236,7 @@ final class AlertManager {
 
     private var now: Double { ProcessInfo.processInfo.systemUptime }
     private var playingPriority: Int? {
-        // AVSpeechSynthesizer is not thread-safe: speak and stop run on audioQueue, so isSpeaking does too.
-        let speaking = audioQueue.sync { speech.isSpeaking }
-        guard speaking || now < busyUntil else { current = nil; return nil }
+        guard speech.isSpeaking || now < busyUntil else { current = nil; return nil }
         return current?.priority
     }
 
