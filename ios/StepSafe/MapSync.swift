@@ -13,6 +13,8 @@ final class MapSync: @unchecked Sendable { // main-confined; tasks hop back to m
     private var pollTimer: Timer?
     private var tick: Timer?
     private var polling = false
+    /// Bumped in stop so an in-flight /near from the previous walk cannot land or clear `polling`.
+    private var pollToken = 0
 
     private(set) var pins: [NearHazard] = []
     /// Last live path-guard output (uptime) and whether its floor was the plane under the walker.
@@ -32,6 +34,7 @@ final class MapSync: @unchecked Sendable { // main-confined; tasks hop back to m
         stop()
         state.reset()
         voter.reset()
+        pins = [] // previous walk's pins must not heads-up before this walk's poll returns
         poll()
         pollTimer = Timer.scheduledTimer(withTimeInterval: MapTuning.pollSeconds, repeats: true) { [weak self] _ in self?.poll() }
         // Heads-up and passive votes use the cached pins, so they keep up with walking between polls.
@@ -39,6 +42,8 @@ final class MapSync: @unchecked Sendable { // main-confined; tasks hop back to m
     }
 
     func stop() {
+        pollToken += 1
+        polling = false
         pollTimer?.invalidate(); pollTimer = nil
         tick?.invalidate(); tick = nil
         onAhead?([])
@@ -65,10 +70,12 @@ final class MapSync: @unchecked Sendable { // main-confined; tasks hop back to m
     private func poll() {
         guard !polling, let fix = localizer.fix else { return }
         polling = true
+        let token = pollToken
         let heading = localizer.walkingHeading
         Task {
             let rows = try? await api.near(lat: fix.lat, lng: fix.lng, radiusM: MapTuning.pollRadiusM, heading: heading)
             DispatchQueue.main.async {
+                guard token == self.pollToken else { return }
                 self.polling = false
                 if let rows { self.pins = rows }
             }
