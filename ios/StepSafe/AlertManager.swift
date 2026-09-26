@@ -40,7 +40,8 @@ final class AlertManager {
     private enum Notice {
         case say(String), whatsAhead
         /// A spoken label or heads-up: server clip, or speech when nil. Plays as serverPhrasePriority.
-        /// `onDrop` runs when this never starts (muted, audio down, expired, or cleared by what's-ahead).
+        /// `onDrop` runs when this never starts (muted, audio down, or the queue expired).
+        /// What's-ahead clears the queue but does not call this: the heads-up claim stays.
         case server(String, clip: AVAudioPCMBuffer?, onDrop: (() -> Void)?)
 
         var isServer: Bool { if case .server = self { return true } else { return false } }
@@ -272,10 +273,6 @@ final class AlertManager {
     private var holdStillHint = HoldStillHint()
     /// Closing objects (track ids) that already got their immediate tone and haptic.
     private var pinged: Set<Int> = []
-    /// Last non-priority-1 haptic while audio was down. Separate from `lastHapticOnly` so a ground buzz
-    /// cannot swallow the next drop-off or car.
-    private var lastSoftHaptic: Double = -.infinity
-
     /// A due priority-1 drop-off waiting behind closing words: its tone at the drop-off and the haptic now, mixed
     /// over the words (AlertPolicy.dropOffToCue); its words follow.
     private func cueBlockedDropOff(_ confirmed: [HazardKind: Detection]) {
@@ -347,8 +344,7 @@ final class AlertManager {
         drainNotices()
     }
 
-    /// Priority 1 haptics with the alert. While audio is down, head-height, ground, and a farther drop-off
-    /// haptic too (they would otherwise be silent) and nothing is marked, so it is spoken after recovery.
+    /// Haptic for every priority 1 (never-muted) alert.
     private func announce(_ d: Detection) {
         let urgent = AlertPolicy.neverMuted(d)
         // A pre-cued follow-on plays the drop-off tone first (right after the closing words) and no second haptic.
@@ -360,10 +356,6 @@ final class AlertManager {
         } else if urgent, now - lastHapticOnly >= 2 {
             // Audio down: not marked, so it replays after recovery; the haptic still warns meanwhile.
             lastHapticOnly = now
-            playHaptic()
-        } else if !urgent, now - lastSoftHaptic >= 2 {
-            // Head-height, ground, and a farther drop-off have no other channel while the engine is down.
-            lastSoftHaptic = now
             playHaptic()
         }
     }
@@ -459,8 +451,8 @@ final class AlertManager {
 
     /// A server label or map heads-up (PLAN priority 3/4), only while scanning. Queued like any notice
     /// (never cuts anything off) and plays as serverPhrasePriority, so any hazard alert cuts it off.
-    /// `onDrop` runs when the phrase never starts (muted, audio down, expired, or cleared).
-    func sayServer(_ text: String, clip: AVAudioPCMBuffer?, onDrop: (@escaping () -> Void)? = nil) {
+    /// `onDrop` runs when the phrase never starts (muted, audio down, or the queue expired).
+    func sayServer(_ text: String, clip: AVAudioPCMBuffer?, onDrop: (() -> Void)? = nil) {
         guard isScanning, !policy.isMuted(now: now) else { onDrop?(); return }
         notice(.server(text, clip: clip, onDrop: onDrop))
     }
@@ -512,7 +504,9 @@ final class AlertManager {
     func whatsAhead() {
         guard isScanning else { return notice(.say(Notices.stopped)) }
         if AlertPolicy.whatsAheadCutsOff(playingPriority) { cutOff() }
-        for n in pending.replaceAll(with: .whatsAhead, now: now) { n.onDrop?() }
+        // Throw the cleared notices away. Calling onDrop here released the heads-up claim, MapSync
+        // re-claimed the same pin, and the heads-up played straight after this answer.
+        pending.replaceAll(with: .whatsAhead, now: now)
         drainNotices()
     }
 

@@ -49,7 +49,8 @@ struct NoticeQueue<Item> {
     mutating func push(_ item: Item, server: Bool, now: Double) { items.append((item, server, now)) }
     mutating func removeAll() { items = [] }
     /// "What's ahead" clears every queued notice and server phrase: it is the only thing left to say.
-    /// Returns what was cleared, so a heads-up that never played can be said again.
+    /// Returns what was cleared. What's-ahead must ignore that list: a heads-up claim stays.
+    /// Mute, audio down, and queue expiry release the claim through onDrop, not through this return.
     @discardableResult
     mutating func replaceAll(with item: Item, now: Double) -> [Item] {
         let old = items.map(\.item)

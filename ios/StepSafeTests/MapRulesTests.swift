@@ -55,7 +55,7 @@ final class MapRulesTests: XCTestCase {
         XCTAssertEqual(Spoken.headsUp(due[1]), "Trash bin, 35 feet, ahead") // 10 m = 32.8 ft -> 35, 5 degrees off
         // Walking west, the north pin is to the right and outside the cone.
         XCTAssertTrue(HeadsUpState.ahead(pins, walker: home, heading: 270).isEmpty)
-        XCTAssertEqual(HeadsUpState.ahead([pin("r", 10, 300)], walker: home, heading: 270).first.map(Spoken.headsUp),
+        XCTAssertEqual(HeadsUpState.ahead([pin("r", 10, 300)], walker: home, heading: 270).first.map { Spoken.headsUp($0) },
                        "Trash bin, 35 feet, right")
     }
 

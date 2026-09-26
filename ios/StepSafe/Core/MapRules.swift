@@ -199,8 +199,8 @@ struct HeadsUpState {
         return due
     }
 
-    /// The pin was selected but never played (muted, audio down, queue expired, what's-ahead cleared it).
-    /// It can be said on a later tick instead of staying silent for five minutes.
+    /// The pin was selected but never played (muted, audio down, or the queue expired).
+    /// What's-ahead does not release the claim. It can be said on a later tick instead of staying silent for five minutes.
     mutating func release(_ id: String) { announced[id] = nil }
 
     mutating func reset() { announced = [:] }
