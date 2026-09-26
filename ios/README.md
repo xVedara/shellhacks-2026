@@ -71,8 +71,9 @@ LiDAR, so path guard and crossing assist only run for real on-device.
 
 ## Settings
 
-Server URL is a text field in the Walker tab's status panel (`ServerStatusView` in
-`ServerLink.swift`), stored in `UserDefaults` (`APIClient.baseURLKey`). Default:
+Server URL is a text field in the Walker tab's debug panel (`ServerStatusView` in
+`ServerLink.swift`; the panel header is "Debug"), stored in `UserDefaults`
+(`APIClient.baseURLKey`). Default:
 `http://192.168.81.233:8787`. Point it at your Mac's LAN IP with the server started
 via `HOST=0.0.0.0` (`scripts/dev-up.sh` does this by default).
 

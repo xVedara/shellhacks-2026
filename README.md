@@ -32,10 +32,11 @@ Built at ShellHacks 2026 (FIU Graham Center, Miami).
 ```
 
 A new hazard, end to end: the phone flags an obstacle on-device (no network needed for
-safety), crops it, sends `POST /hazards`. The server merges it into a nearby pin or
-names it (local Qwen via Ollama today, Google Gemini in production), and the phone
-speaks the label. The web map picks it up live over Server-Sent Events; other walkers
-get it on their next nearby lookup.
+safety), crops it, sends `POST /hazards`. That post is a path-guard or Scout hazard;
+`ServerLink.handle` does not pin a closing alert. The server merges it into a nearby
+pin or names it (local Qwen via Ollama today, Google Gemini in production), and the
+phone speaks the label. The web map picks it up live over Server-Sent Events; other
+walkers get it on their next nearby lookup.
 
 ## Repo layout
 
