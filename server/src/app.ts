@@ -128,8 +128,16 @@ export async function renamePending(db: Db, namer: Namer, limit = 5, busy: () =>
     const typeLocked = locked.includes('type');
     const n = await namer(h.crop.toString('base64'), h.heightBand, typeLocked && isTypeId(h.type) ? h.type : undefined);
     if (!n) {
+      // Match the row we read. A reclassify during the model call resets renameAttempts (and usually
+      // lockedFields). Writing the failure anyway can set needsNaming false and skip the rename they asked for.
       await hazards.updateOne(
-        { _id: h._id, needsNaming: true },
+        {
+          _id: h._id,
+          needsNaming: true,
+          type: h.type,
+          lockedFields: h.lockedFields ?? { $exists: false },
+          renameAttempts: h.renameAttempts ?? { $exists: false },
+        },
         { $set: { renameAttempts: attempts, renameAttemptAt: new Date(), needsNaming: attempts < RENAME_MAX_ATTEMPTS } },
       );
       continue;
@@ -198,6 +206,17 @@ export function buildApp({
   // ponytail: in-memory, single process; move to Mongo/Redis if this ever runs as more than one instance.
   const hits = new Map<string, { start: number; n: number }>();
   let lastSweep = 0;
+  const sweep = (now: number) => {
+    if (hits.size > RATE_KEYS_MAX && now - lastSweep > 1000) {
+      lastSweep = now;
+      for (const [k, w] of hits) if (now - w.start >= 60_000) hits.delete(k);
+    }
+  };
+  /** Hits already recorded for this key in the current window (0 when the window has expired). */
+  const windowCount = (key: string, now: number) => {
+    const w = hits.get(key);
+    return w && now - w.start < 60_000 ? w.n : 0;
+  };
   /** Counts a hit; true when the key is over its limit. */
   const over = (key: string, limit: number, now: number) => {
     let w = hits.get(key);
@@ -212,25 +231,33 @@ export function buildApp({
     const sock = req.socket.remoteAddress ?? req.ip;
     return ipKey(typeof cf === 'string' && LOOPBACK.has(sock) && /^[0-9A-Fa-f:.]{2,45}$/.test(cf) ? cf : sock);
   };
+  // Writes from an IP that is already over its cap never reach the JSON parser (body limit is 1 MB).
+  app.addHook('onRequest', async (req, reply) => {
+    if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return;
+    if (req.url.startsWith('/health') || req.url.startsWith('/events')) return;
+    const now = Date.now();
+    sweep(now);
+    if (windowCount(`wip:${clientIp(req)}`, now) >= ipWriteRateLimitPerMin) {
+      return reply.code(429).send({ error: 'rate_limited' });
+    }
+  });
+
   app.addHook('preValidation', async (req, reply) => {
     if (req.method === 'OPTIONS' || req.url.startsWith('/health') || req.url.startsWith('/events')) return;
     const now = Date.now();
-    if (hits.size > RATE_KEYS_MAX && now - lastSweep > 1000) {
-      lastSweep = now;
-      for (const [k, w] of hits) if (now - w.start >= 60_000) hits.delete(k); // evict only expired windows
-    }
+    sweep(now);
     const ip = clientIp(req);
-    let limited: boolean;
     if (req.method === 'GET' || req.method === 'HEAD') {
-      limited = over(`get:${ip}`, getRateLimitPerMin, now);
-    } else {
-      const dev = (req.body as { deviceId?: unknown } | undefined)?.deviceId;
-      const devKey = typeof dev === 'string' && DEVICE_RE.test(dev) ? `dev:${dev}` : `ipdev:${ip}`;
-      // count both buckets so one IP rotating deviceIds still hits the per-IP cap
-      const ipOver = over(`wip:${ip}`, ipWriteRateLimitPerMin, now);
-      limited = over(devKey, rateLimitPerMin, now) || ipOver;
+      if (over(`get:${ip}`, getRateLimitPerMin, now)) return reply.code(429).send({ error: 'rate_limited' });
+      return;
     }
-    if (limited) return reply.code(429).send({ error: 'rate_limited' });
+    const dev = (req.body as { deviceId?: unknown } | undefined)?.deviceId;
+    const devKey = typeof dev === 'string' && DEVICE_RE.test(dev) ? `dev:${dev}` : `ipdev:${ip}`;
+    // A device already over its own cap must not also burn the shared IP budget: one phone
+    // retrying 429s would lock every other walker behind the same venue NAT. Rotating deviceIds
+    // still count here, because each of those requests is under its own device cap.
+    if (over(devKey, rateLimitPerMin, now)) return reply.code(429).send({ error: 'rate_limited' });
+    if (over(`wip:${ip}`, ipWriteRateLimitPerMin, now)) return reply.code(429).send({ error: 'rate_limited' });
   });
 
   // ---- one global mutex around the final merge re-check + insert so concurrent reports cannot duplicate pins ----
@@ -349,8 +376,13 @@ export function buildApp({
     async (req, reply) => {
       const b = req.body;
       const b64 = b.crop.replace(/^data:image\/[a-z]+;base64,/, '');
+      // Encoded length first: the body limit is 1 MB, and Buffer.from would decode all of it.
+      const maxB64 = 4 * Math.ceil(CROP_MAX_BYTES / 3);
+      if (b64.length > maxB64 || b64.length % 4 !== 0) {
+        return reply.code(400).send(badRequest('crop must be base64 JPEG under 200 KB'));
+      }
       const bytes = Buffer.from(b64, 'base64');
-      if (b64.length % 4 !== 0 || bytes.length > CROP_MAX_BYTES) {
+      if (bytes.length > CROP_MAX_BYTES) {
         return reply.code(400).send(badRequest('crop must be base64 JPEG under 200 KB'));
       }
       const point = { type: 'Point' as const, coordinates: [b.lng, b.lat] as [number, number] };
@@ -592,7 +624,15 @@ export function buildApp({
       if (!h) return reply.code(404).send(notFound);
       await ensureUser(req.body.deviceId);
       // ponytail: reports are only stored; no moderation queue or -5 karma for upheld reports yet.
-      await reports.insertOne({ hazardId: h._id, deviceId: req.body.deviceId, reason: req.body.reason, status: 'open', at: new Date() });
+      // One row per device: a double-tap replaces the reason instead of inserting another open report.
+      const report = { hazardId: h._id, deviceId: req.body.deviceId, reason: req.body.reason, status: 'open', at: new Date() };
+      const filter = { hazardId: h._id, deviceId: req.body.deviceId };
+      try {
+        await reports.replaceOne(filter, report, { upsert: true });
+      } catch (err) {
+        if ((err as { code?: number }).code !== 11000) throw err;
+        await reports.replaceOne(filter, report); // the other upsert won the unique index
+      }
       return { ok: true };
     },
   );

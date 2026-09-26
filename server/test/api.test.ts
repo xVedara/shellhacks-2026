@@ -219,11 +219,15 @@ describe('reclassify, report, users', () => {
     }
   });
 
-  it('stores reports as open', async () => {
+  it('stores reports as open, one per device; a second report replaces the reason', async () => {
     const { body } = await create();
-    const res = await app.inject({ method: 'POST', url: `/hazards/${body.id}/report`, payload: { reason: 'spam', deviceId: 'dev-B' } });
-    expect(res.json()).toEqual({ ok: true });
-    expect(await db.collection('reports').findOne()).toMatchObject({ reason: 'spam', status: 'open', deviceId: 'dev-B' });
+    const send = (reason: string) =>
+      app.inject({ method: 'POST', url: `/hazards/${body.id}/report`, payload: { reason, deviceId: 'dev-B' } });
+    expect((await send('spam')).json()).toEqual({ ok: true });
+    expect((await send('abuse')).json()).toEqual({ ok: true });
+    const all = await db.collection('reports').find().toArray();
+    expect(all).toHaveLength(1);
+    expect(all[0]).toMatchObject({ reason: 'abuse', status: 'open', deviceId: 'dev-B' });
   });
 
   it('GET /users returns a default for unknown devices without writing', async () => {
@@ -454,6 +458,31 @@ describe('audit fixes', () => {
     }
   });
 
+  it('a failed rename does not clear needsNaming that a reclassify reset while the model ran', async () => {
+    naming = null;
+    const { body } = await create();
+    await renamePending(db, namer);
+    await renamePending(db, namer); // two failures; the next one would be the give-up
+    let started!: () => void;
+    const startedP = new Promise<void>((r) => (started = r));
+    let release!: (v: null) => void;
+    const gate = new Promise<null>((r) => (release = r));
+    const pending = renamePending(db, async () => {
+      started();
+      return gate;
+    }, 1);
+    await startedP;
+    for (const d of ['dev-B', 'dev-C', 'dev-D']) {
+      await app.inject({ method: 'POST', url: `/hazards/${body.id}/reclassify`, payload: { category: 'permanent', deviceId: d } });
+    }
+    release(null);
+    await pending;
+    const h = await db.collection('hazards').findOne({ _id: new ObjectId(body.id) });
+    expect(h).toMatchObject({
+      category: 'permanent', lockedFields: ['category'], needsNaming: true, renameAttempts: 0,
+    });
+  });
+
   it('renamer gives up after 3 failed attempts and tries least recently attempted first', async () => {
     naming = null;
     const a = await create();
@@ -496,6 +525,48 @@ describe('audit fixes', () => {
     const left = (await db.collection('hazards').findOne({ _id }))!.expiresAt.getTime() - Date.now();
     expect(left).toBeGreaterThan(59 * 60_000);
     expect(left).toBeLessThanOrEqual(3600_000);
+  });
+
+  it('a device already over its cap does not consume the shared IP write budget', async () => {
+    const limited = buildApp({ db, namer, rateLimitPerMin: 2, ipWriteRateLimitPerMin: 3 });
+    await limited.ready();
+    try {
+      const post = (deviceId: string) =>
+        limited.inject({
+          method: 'POST',
+          url: `/hazards/${new ObjectId()}/report`,
+          remoteAddress: '10.4.0.1',
+          payload: { reason: 'spam', deviceId },
+        });
+      expect((await post('dev-A')).statusCode).toBe(404);
+      expect((await post('dev-A')).statusCode).toBe(404);
+      expect((await post('dev-A')).statusCode).toBe(429);
+      expect((await post('dev-A')).statusCode).toBe(429);
+      expect((await post('dev-B')).statusCode).toBe(404);
+    } finally {
+      await limited.close();
+    }
+  });
+
+  it('rejects further writes from an exhausted IP before reading the body', async () => {
+    const limited = buildApp({ db, namer, ipWriteRateLimitPerMin: 1, rateLimitPerMin: 100 });
+    await limited.ready();
+    try {
+      const post = (payload: string | Record<string, string>) =>
+        limited.inject({
+          method: 'POST',
+          url: `/hazards/${new ObjectId()}/report`,
+          remoteAddress: '10.8.0.1',
+          headers: { 'content-type': 'application/json' },
+          payload,
+        });
+      expect((await post({ reason: 'spam', deviceId: 'dev-once' })).statusCode).toBe(404);
+      const huge = await post('{' + ' '.repeat(1_100_000));
+      expect(huge.statusCode).toBe(429);
+      expect(huge.json()).toEqual({ error: 'rate_limited' });
+    } finally {
+      await limited.close();
+    }
   });
 
   it('caps writes per IP even when deviceIds rotate', async () => {
@@ -713,6 +784,22 @@ describe('client IP trust', () => {
     } finally {
       await strict.close();
     }
+  });
+});
+
+describe('indexes', () => {
+  it('serves geo and rename from compound indexes and does not keep redundant hazardId indexes', async () => {
+    await ensureIndexes(db); // idempotent: also drops leftovers from an older ensureIndexes
+    const names = async (c: string) => (await db.collection(c).indexes()).map((i) => i.name);
+    expect(await names('hazards')).toContain('location_2dsphere_status_1_heightBand_1_expiresAt_1');
+    expect(await names('hazards')).toContain('renameAttemptAt_1');
+    expect(await names('hazards')).not.toContain('location_2dsphere');
+    expect(await names('votes')).toEqual(expect.arrayContaining(['_id_', 'hazardId_1_deviceId_1']));
+    expect(await names('votes')).not.toContain('hazardId_1');
+    expect(await names('reclassifications')).not.toContain('hazardId_1');
+    expect(await names('reports')).toContain('hazardId_1_deviceId_1');
+    const rename = (await db.collection('hazards').indexes()).find((i) => i.name === 'renameAttemptAt_1');
+    expect(rename?.partialFilterExpression).toEqual({ needsNaming: true });
   });
 });
 
