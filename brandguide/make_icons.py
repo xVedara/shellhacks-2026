@@ -1,7 +1,8 @@
 # Turns the two 1024 logos (rounded square on white) into full-bleed app icons
 # plus rounded transparent PNGs for the web.
+from pathlib import Path
 from PIL import Image, ImageDraw, ImageFilter
-B = '/Users/ara/Downloads/shellhacks2026/stepsafe/brandguide/'
+B = str(Path(__file__).resolve().parent) + '/'
 Z = 280  # corner zone size; eye art never enters it
 for n in ['blue', 'dark']:
     im = Image.open(f'{B}logo-{n}-1024.png').convert('RGB')
