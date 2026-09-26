@@ -169,6 +169,7 @@ final class AlertManager {
     /// AR tracking reset: forget which hazards were announced.
     func clearHistory() {
         pinged = []
+        dropToneAfterWords = nil
         policy.clearHistory()
         latest = [:]
     }
@@ -252,10 +253,20 @@ final class AlertManager {
     /// A due priority-1 drop-off waiting behind closing words: its tone at the drop-off and the haptic now, mixed
     /// over the words (AlertPolicy.dropOffToCue); its words follow.
     private func cueBlockedDropOff(_ confirmed: [HazardKind: Detection]) {
+        if let (point, at) = dropToneAfterWords, now >= at + 0.25, playingPriority == nil {
+            dropToneAfterWords = nil // no follow-on started: the tone alone once nothing is speaking
+            playDropOffTone(at: point)
+        }
         guard let d = policy.dropOffToCue(confirmed, playing: playing, now: now) else { return }
-        playHaptic()
+        playHaptic() // now, over the closing words; the tone waits for them to end (no tone over words)
+        dropToneAfterWords = (d.point, busyUntil)
+    }
+
+    /// The drop-off tone waiting for the closing words to end, and when they end.
+    private var dropToneAfterWords: (SIMD3<Float>, Double)?
+
+    private func playDropOffTone(at point: SIMD3<Float>) {
         guard audioReady, let buffer = tones[.dropOff] else { return }
-        let point = d.point
         audioQueue.async { [self] in
             tonePlayer.position = AVAudio3DPoint(x: point.x, y: point.y, z: point.z)
             tonePlayer.scheduleBuffer(buffer, at: nil, options: .interrupts)
@@ -292,10 +303,12 @@ final class AlertManager {
     /// Haptic for every priority 1 (never-muted) alert.
     private func announce(_ d: Detection) {
         let urgent = AlertPolicy.neverMuted(d)
-        if play(tone: d.followOn ? nil : Self.tone(for: d.kind), at: d.point, phrase: AlertPolicy.phrase(d),
-                priority: AlertPolicy.priority(d), hazard: d) {
+        // A pre-cued follow-on plays the drop-off tone first (right after the closing words) and no second haptic.
+        let tone: Tone? = d.followOn && !d.preCued ? nil : Self.tone(for: d.kind)
+        if d.preCued { dropToneAfterWords = nil }
+        if play(tone: tone, at: d.point, phrase: AlertPolicy.phrase(d), priority: AlertPolicy.priority(d), hazard: d) {
             policy.markAnnounced(d, now: now)
-            if urgent { playHaptic() }
+            if urgent && !d.preCued { playHaptic() }
         } else if urgent, now - lastHapticOnly >= 2 {
             // Audio down: not marked, so it replays after recovery; the haptic still warns meanwhile.
             lastHapticOnly = now

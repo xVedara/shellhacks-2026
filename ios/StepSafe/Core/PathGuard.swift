@@ -44,6 +44,9 @@ struct Detection {
     /// A drop-off spoken right after a closing phrase: just "Drop-off ahead.", no tone (it follows at once, as
     /// the combined phrase's second half would).
     var followOn = false
+    /// The drop-off already got its haptic while the closing words played (AlertPolicy.dropOffToCue): its
+    /// follow-on plays the drop-off tone first (right after the closing words) and no second haptic.
+    var preCued = false
 
     struct Closing: Equatable {
         var speed: Float

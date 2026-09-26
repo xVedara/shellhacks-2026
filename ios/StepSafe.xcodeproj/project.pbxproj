@@ -19,6 +19,7 @@
 		3D61ADA82E6F805587568BA2 /* Geo.swift in Sources */ = {isa = PBXBuildFile; fileRef = A16E3AB89629CEEEBC438971 /* Geo.swift */; };
 		4422252E46C9DDAEA9A44825 /* PhraseBookTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77F4BF4AB0B6BCDE2D023E9D /* PhraseBookTests.swift */; };
 		58C7A0ED3A5D17A05087D674 /* BoxTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31A9310022EF8AABA88BD42F /* BoxTracker.swift */; };
+		5A4F6C5E4F68BC153EB635D4 /* CrossingCurbTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 736324E99413968B183D28CE /* CrossingCurbTests.swift */; };
 		7107B467904DB1AA47807648 /* PhraseBook.swift in Sources */ = {isa = PBXBuildFile; fileRef = 210A7BC25DEAA7EC12AD1975 /* PhraseBook.swift */; };
 		73350F2C12ECBBF19AAF45BB /* AlertPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6EFDD0ECE64133E5D035ACF /* AlertPolicy.swift */; };
 		80D12132C17851073843C2D5 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 238C04EE91440584C0E04D99 /* APIClient.swift */; };
@@ -72,6 +73,7 @@
 		65B95E5208F0A0DD0DA7713B /* PhrasePlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhrasePlayer.swift; sourceTree = "<group>"; };
 		6D1DE9518070C5FC011A66A4 /* ScoutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutView.swift; sourceTree = "<group>"; };
 		734358435B5F3C063F69C2E0 /* AlertPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlertPolicyTests.swift; sourceTree = "<group>"; };
+		736324E99413968B183D28CE /* CrossingCurbTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrossingCurbTests.swift; sourceTree = "<group>"; };
 		77F4BF4AB0B6BCDE2D023E9D /* PhraseBookTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhraseBookTests.swift; sourceTree = "<group>"; };
 		9179013510196CB698160697 /* CrossingMonteCarloTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrossingMonteCarloTests.swift; sourceTree = "<group>"; };
 		931296A1A1F89F0D9B96705B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -104,6 +106,7 @@
 			isa = PBXGroup;
 			children = (
 				734358435B5F3C063F69C2E0 /* AlertPolicyTests.swift */,
+				736324E99413968B183D28CE /* CrossingCurbTests.swift */,
 				9179013510196CB698160697 /* CrossingMonteCarloTests.swift */,
 				C712FB0F4C6D87FFC94B9508 /* CrossingScenarioBoxPolicyTests.swift */,
 				FF6AA8B3A6EDAB150F21873F /* CrossingScenarioTests.swift */,
@@ -301,6 +304,7 @@
 				24E9C93544221CE03188C3E5 /* AlertPolicyTests.swift in Sources */,
 				58C7A0ED3A5D17A05087D674 /* BoxTracker.swift in Sources */,
 				97F6AC71C1733944276E8AE1 /* ClosingDetector.swift in Sources */,
+				5A4F6C5E4F68BC153EB635D4 /* CrossingCurbTests.swift in Sources */,
 				BC3EDAE98CB363405C8F76FC /* CrossingMonteCarloTests.swift in Sources */,
 				221B4E0CFE4D2B215E8D24FC /* CrossingScenarioBoxPolicyTests.swift in Sources */,
 				09A66D5B22112C26ACF4AF02 /* CrossingScenarioTests.swift in Sources */,

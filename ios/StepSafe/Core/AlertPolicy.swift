@@ -91,7 +91,8 @@ struct AlertPolicy {
     /// (nothing playing) since it was queued.
     private(set) var pending: (d: Detection, lastSeen: Double, idleSince: Double?)?
     /// Drop-offs (points) that already got their immediate tone + haptic while blocked behind closing words.
-    private var cuedDropOffs: [(point: SIMD3<Float>, time: Double)] = []
+    /// Start time of the closing phrase during which a drop-off got its haptic (one cue per closing phrase).
+    private var cuedPhraseStart: Double?
     /// What was playing at the last decide() that could not start anything (for follow-on drop-offs).
     private var lastPlaying: Playing?
 
@@ -221,11 +222,10 @@ struct AlertPolicy {
     /// haptic AT ONCE, mixed over the words, once per drop-off; its words follow ("Drop-off ahead."). AlertManager
     /// plays what this returns on the tone player; the policy sims log it.
     mutating func dropOffToCue(_ confirmed: [HazardKind: Detection], playing: Playing?, now: Double) -> Detection? {
-        cuedDropOffs.removeAll { now - $0.time > Tuning.repeatWindow }
         guard let d = confirmed[.dropOff], Self.priority(d) == 1, isDue(d, now: now),
-              let current = playing?.hazard, current.kind == .closing,
-              !cuedDropOffs.contains(where: { simd_distance($0.point, d.point) <= Tuning.sameHazardRadius }) else { return nil }
-        cuedDropOffs.append((d.point, now))
+              let playing, let current = playing.hazard, current.kind == .closing,
+              cuedPhraseStart != playing.startedAt else { return nil } // one cue per closing phrase
+        cuedPhraseStart = playing.startedAt
         return d
     }
 
@@ -269,7 +269,7 @@ struct AlertPolicy {
         return true
     }
 
-    mutating func clearHistory() { history = []; spokenClosing = []; pending = nil; blocked = []; cuedDropOffs = [] }
+    mutating func clearHistory() { history = []; spokenClosing = []; pending = nil; blocked = []; cuedPhraseStart = nil }
 
     /// The hazard to announce now, or nil.
     func next(_ confirmed: [HazardKind: Detection], now: Double, playing: Playing?, walkerSpeed: Float = 0) -> Detection? {
@@ -297,7 +297,8 @@ struct AlertPolicy {
         }
         // Passing curb vehicles queue too (they sort after other hazards by their TTC penalty).
         if let c = confirmed[.closing], isDue(c, now: now) {
-            if let p = pending, !Self.sameObject(p.d, c), aged(p, now: now).closing!.ttc <= (c.closing?.ttc ?? .infinity) {
+            if let p = pending, !Self.sameObject(p.d, c),
+               Self.ttc(aged(p, now: now), walkerSpeed: walkerSpeed) <= Self.ttc(c, walkerSpeed: walkerSpeed) { // passing penalty included
                 // keep the more urgent pending phrase
             } else if let p = pending, Self.sameObject(p.d, c) {
                 pending = (c, now, p.idleSince)
@@ -320,6 +321,7 @@ struct AlertPolicy {
         if d.kind == .dropOff, playing == nil, let lp = lastPlaying, lp.hazard?.kind == .closing,
            lp.hazard?.closing?.dropOffPoint == nil, now - lp.endsAt < Tuning.followOnSeconds {
             d.followOn = true
+            d.preCued = cuedPhraseStart == lp.startedAt // its haptic already fired during those closing words
         }
         lastPlaying = nil
         return d

@@ -305,6 +305,17 @@ final class CrossingScenarioBoxPolicyTests: XCTestCase {
         var words: [(t: Double, what: String, end: Double)] = []
         /// Tone / haptic onsets per hazard kind ("closing", "dropOff", ...).
         var cues: [(t: Double, what: String)] = []
+        /// Hazard tone onsets (drop-off tone 0.42 s long).
+        var tones: [(t: Double, what: String)] = []
+        /// Drop-off tones that overlap closing words (a tone stops when the next utterance starts, as
+        /// AlertManager.play stops the tone player).
+        var dropToneOverClosingWords: Int {
+            tones.filter { $0.what == "dropOff" }.filter { tone in
+                let cut = spoken.first { $0.t > tone.t + 1e-6 }?.t ?? .infinity
+                let end = min(tone.t + Tuning.dropOffToneSeconds, cut)
+                return words.contains { $0.what == "closing" && tone.t < $0.end - 1e-6 && end > $0.t + 1e-6 }
+            }.count
+        }
         /// First tone, haptic or words for `what`.
         func firstCue(_ what: String) -> Double? {
             [cues.first { $0.what == what }?.t, words.first { $0.what == what }?.t].compactMap { $0 }.min()
@@ -323,7 +334,7 @@ final class CrossingScenarioBoxPolicyTests: XCTestCase {
     /// combined phrase adds "Drop-off ahead." 1.05; drop-off = tone 0.4 + 1.75 + 0.1.
     static func duration(_ d: Detection) -> Double {
         if d.kind == .closing { return 0.15 + 1.45 + 0.1 + (d.closing?.dropOffPoint == nil ? 0 : 1.05) }
-        if d.followOn { return 1.05 + 0.1 } // "Drop-off ahead.", no tone
+        if d.followOn { return (d.preCued ? Tuning.dropOffToneSeconds : 0) + 1.05 + 0.1 } // "Drop-off ahead." (tone if pre-cued)
         return 0.4 + 1.75 + 0.1
     }
 
@@ -334,6 +345,7 @@ final class CrossingScenarioBoxPolicyTests: XCTestCase {
         var playing: AlertPolicy.Playing?
         var pinged: Set<Int> = []
         var log = PolicyLog()
+        var pendingDropTone: Double?
         var t = 0.0
         while t <= secs {
             if let p = playing, t >= p.endsAt {
@@ -351,7 +363,13 @@ final class CrossingScenarioBoxPolicyTests: XCTestCase {
                 log.pinged[id] = t
                 log.cues.append((t, "closing"))
             }
-            if policy.dropOffToCue(confirmed, playing: playing, now: t) != nil { log.cues.append((t, "dropOff")) }
+            if let tone = pendingDropTone, t >= tone + 0.25, playing == nil { // no follow-on: the tone alone, when idle
+                log.tones.append((t, "dropOff")); pendingDropTone = nil
+            }
+            if policy.dropOffToCue(confirmed, playing: playing, now: t) != nil {
+                log.cues.append((t, "dropOff")) // haptic now
+                pendingDropTone = playing?.endsAt // tone right after the closing words
+            }
             let ws = walkerSpeed(t)
             if let d = policy.decide(confirmed, now: t, playing: playing, walkerSpeed: ws) {
                 if let p = playing, let victim = p.hazard {
@@ -365,9 +383,10 @@ final class CrossingScenarioBoxPolicyTests: XCTestCase {
                 policy.markAnnounced(d, now: t)
                 log.spoken.append((t, d))
                 let name = d.kind == .closing ? "closing" : "\(d.kind)"
-                if !d.followOn { log.cues.append((t, name)) } // its tone (and haptic for priority 1)
+                if !d.followOn { log.cues.append((t, name)); log.tones.append((t, name)) } // its tone (+ haptic for P1)
+                if d.followOn && d.preCued { log.tones.append((t, "dropOff")); pendingDropTone = nil } // tone, no 2nd haptic
                 if d.closing?.dropOffPoint != nil { log.cues.append((t, "dropOff")) } // combined: haptic covers the drop-off
-                let w0 = t + (d.kind == .closing ? 0.15 : d.followOn ? 0 : Tuning.dropOffToneSeconds)
+                let w0 = t + (d.kind == .closing ? 0.15 : d.followOn && !d.preCued ? 0 : Tuning.dropOffToneSeconds)
                 let end = t + duration(d) - 0.1
                 if d.closing?.dropOffPoint != nil {
                     log.words.append((w0, "closing", w0 + 1.45))
@@ -498,7 +517,7 @@ final class CrossingScenarioBoxPolicyTests: XCTestCase {
         // 3. Demo step 3 timing sweep: cart pushed at 1.2 m/s from 3.6 m (TTC 3 s at t = 0); the drop-off appears
         //    at 24 timings (0-2.875 s) with the walker at 1.0 or 0.6 m/s: 48 timings. The cart's alert must be
         //    heard to the end with TTC >= 1 s, and both hazards heard to the end at least once.
-        var demoOK = 0
+        var demoOK = 0, demoWords = 0
         for ws in [Float(1.0), 0.6] {
             for k in 0..<24 {
                 let dropAt = Double(k) * 0.125
@@ -512,13 +531,16 @@ final class CrossingScenarioBoxPolicyTests: XCTestCase {
                 // The drop-off starts 2.5 m ahead when it appears; its words must be heard before the edge.
                 let edge = dropAt + Double(2.5 / ws)
                 let dropHeard = (log.heard("dropOff") ?? 99) <= edge
-                if cartHeard && noPingPong && dropHeard { demoOK += 1 } else {
+                if dropHeard { demoWords += 1 }
+                let dropCued = edge - (log.firstCue("dropOff") ?? 99) >= 0.8
+                if cartHeard && noPingPong && dropCued { demoOK += 1 } else {
                     print(String(format: "SCENARIO [policy] demo-3 ws %.1f drop at %.3f: cart heard %@, pre-emptions %@ :: %@  FAIL",
                                  ws, dropAt, cartHeard ? "yes" : "no", "\(log.preemptions)", Self.describe(log)))
                 }
             }
         }
-        print("SCENARIOS policy demo-3 sweep: \(demoOK)/48 timings with the cart heard to the end at TTC >= 1 s, drop-off words before the edge, no ping-pong")
+        print("SCENARIOS policy demo-3 sweep: \(demoOK)/48 timings with the cart heard to the end at TTC >= 1 s, a drop-off cue >= 0.8 s before the edge, no ping-pong; drop-off words heard before the edge \(demoWords)/48")
+        XCTAssertGreaterThanOrEqual(demoWords, 44) // round 7: a pre-cued follow-on starts with the drop-off tone (0.42 s)
         XCTAssertEqual(demoOK, 48)
         total += 1; if demoOK == 48 { passed += 1 }
         // 4. Two closing tracks with near-equal, noisy TTC: the more urgent one flips every frame.
@@ -594,9 +616,10 @@ final class CrossingScenarioBoxPolicyTests: XCTestCase {
         }
         print("SCENARIOS policy curb walk: first drop-off cue >= 0.8 s before the edge \(cueOK)/\(runs); >= 0.6 s of words heard before the edge \(ok)/\(runs)")
         XCTAssertEqual(cueOK, runs)
-        // Words: 41/45 since drop-offs beyond 2 m are priority 2 again (round 6, item 6) and may not cut closing
-        // words; the immediate cue covers the rest. Locked at the current value to catch regressions.
-        XCTAssertGreaterThanOrEqual(ok, 41)
+        // Words: drop-offs beyond 2 m are priority 2 (round 6) and may not cut closing words, and a pre-cued
+        // follow-on starts with the drop-off tone (round 7); the immediate haptic covers the rest. Locked at the
+        // current value to catch regressions.
+        XCTAssertGreaterThanOrEqual(ok, 37)
     }
 
     func testCutOffCombinedPhraseUnmarksTheDropOff() {
@@ -688,7 +711,7 @@ final class CrossingScenarioBoxPolicyTests: XCTestCase {
     /// worst phase. The first drop-off cue (tone / haptic / words) must come >= 0.8 s before the edge in >= 100/102
     /// cases, and never after the edge.
     func testOnsetSweepDropOffCueBeforeEdge() {
-        var total = 0, early = 0, afterEdge = 0, heardBefore = 0
+        var total = 0, early = 0, afterEdge = 0, heardBefore = 0, overlaps = 0
         var worstCue = 99.0
         for walk in [Float(0.9), 1.0, 1.1, 1.2, 1.3, 1.4] {
             for k in 0..<17 {
@@ -704,6 +727,7 @@ final class CrossingScenarioBoxPolicyTests: XCTestCase {
                         return a <= 3.0 - walk * 0.4 && a > 0.2 ? Self.dropAt(a, edgeZ: -4) : nil
                     })
                     cueMin = min(cueMin, edge - ph - (log.firstCue("dropOff") ?? 99))
+                    overlaps += log.dropToneOverClosingWords
                     heardMin = min(heardMin, edge - ph - (log.heard("dropOff") ?? 99))
                 }
                 total += 1
@@ -713,10 +737,11 @@ final class CrossingScenarioBoxPolicyTests: XCTestCase {
                 worstCue = min(worstCue, cueMin)
             }
         }
-        print(String(format: "SCENARIOS policy onset sweep: first drop-off cue >= 0.8 s before the edge %d/%d, after the edge %d, worst %.2f s; words heard before the edge %d/%d",
-                     early, total, afterEdge, worstCue, heardBefore, total))
+        print(String(format: "SCENARIOS policy onset sweep: first drop-off cue (haptic) >= 0.8 s before the edge %d/%d, after the edge %d, worst %.2f s; drop-off tones over closing words %d; words heard before the edge %d/%d",
+                     early, total, afterEdge, worstCue, overlaps, heardBefore, total))
+        XCTAssertEqual(overlaps, 0)
         XCTAssertEqual(total, 102)
-        XCTAssertGreaterThanOrEqual(early, 100)
+        XCTAssertEqual(early, 102)
         XCTAssertEqual(afterEdge, 0)
     }
 
@@ -727,9 +752,14 @@ final class CrossingScenarioBoxPolicyTests: XCTestCase {
         let far = Self.dropAt(2.5, edgeZ: -4), near = Self.dropAt(1.9, edgeZ: -4)
         XCTAssertNil(policy.dropOffToCue([.dropOff: far], playing: talking, now: 0.5)) // > 2 m: priority 2, no cue
         XCTAssertEqual(policy.dropOffToCue([.dropOff: near], playing: talking, now: 0.9)?.kind, .dropOff) // blocked: cue now
-        XCTAssertNil(policy.dropOffToCue([.dropOff: near], playing: talking, now: 1.0)) // once per drop-off
+        XCTAssertNil(policy.dropOffToCue([.dropOff: near], playing: talking, now: 1.0)) // once per closing phrase
+        let nextPhrase = AlertPolicy.Playing(priority: 1, hazard: Self.closingObj(4, ttc: 2, range: 3), endsAt: 4, startedAt: 2.2, ttcAtStart: 2)
+        var other = policy
+        XCTAssertNotNil(other.dropOffToCue([.dropOff: Self.dropAt(1.5, edgeZ: -4)], playing: nextPhrase, now: 2.5)) // a new phrase: again
         XCTAssertNil(policy.decide([.dropOff: near], now: 1.0, playing: talking)) // words wait behind the closing words
-        XCTAssertEqual(policy.decide([.dropOff: near], now: 2.05, playing: nil).map(AlertPolicy.phrase), AlertPolicy.dropOffAhead)
+        let follow = policy.decide([.dropOff: near], now: 2.05, playing: nil)
+        XCTAssertEqual(follow.map(AlertPolicy.phrase), AlertPolicy.dropOffAhead)
+        XCTAssertEqual(follow?.preCued, true) // tone first, no second haptic
         var idle = AlertPolicy()
         XCTAssertNil(idle.dropOffToCue([.dropOff: near], playing: nil, now: 0)) // nothing playing: it just plays
         // Priority back to distance only: 2.5 m is priority 2 (muted by mute), 1.9 m priority 1.
@@ -741,5 +771,26 @@ final class CrossingScenarioBoxPolicyTests: XCTestCase {
         // A drop-off farther than 2 m never cuts head-height words.
         let head = Detection(kind: .headHeight, point: SIMD3(0, 1.8, -2), ahead: 2, lateral: 0, pointCount: 200)
         XCTAssertFalse(AlertPolicy.mayStart(far, over: AlertPolicy.Playing(priority: 2, hazard: head, endsAt: 3), now: 1, walkerSpeed: 1.3))
+    }
+
+    /// audit-r6 pq: a passing curb vehicle queued first is replaced by a car on a collision course (the passing
+    /// penalty counts in the comparison), which is then said when the voice frees.
+    func testPendingReplacementUsesPassingPenalty() {
+        func car(_ id: Int, ttc: Float, range: Float, lateral: Float, passing: Bool) -> Detection {
+            var d = Detection(kind: .closing, point: SIMD3(lateral, 1, -range), ahead: range, lateral: lateral, pointCount: 0,
+                              closing: .init(speed: range / ttc, ttc: ttc, label: "Car", trackId: id))
+            d.closing?.passing = passing
+            return d
+        }
+        var pol = AlertPolicy()
+        let other = car(1, ttc: 2.8, range: 8, lateral: 3, passing: false)
+        pol.markAnnounced(other, now: 0)
+        let busy = AlertPolicy.Playing(priority: 1, hazard: other, endsAt: 1.6, startedAt: 0, ttcAtStart: 2.8)
+        _ = pol.decide([.closing: car(2, ttc: 2.0, range: 20, lateral: -6, passing: true)], now: 0.4, playing: busy)
+        XCTAssertEqual(pol.pending?.d.closing?.trackId, 2)
+        let approaching = car(3, ttc: 2.9, range: 14, lateral: 2, passing: false)
+        _ = pol.decide([.closing: approaching], now: 0.8, playing: busy)
+        XCTAssertEqual(pol.pending?.d.closing?.trackId, 3) // TTC 2.9 beats the passing car's 2.0 + penalty
+        XCTAssertEqual(pol.decide([.closing: approaching], now: 1.7, playing: nil)?.closing?.trackId, 3)
     }
 }

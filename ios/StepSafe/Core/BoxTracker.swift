@@ -57,6 +57,9 @@ struct BoxTracker {
     private var nextId = 1
     /// Camera roll about the view axis relative to gravity (deg) at the previous update, for the roll rate.
     private var lastRoll: (t: Double, deg: Double)?
+    private var lastCamera: (t: Double, p: SIMD3<Float>)?
+    /// Smoothed camera speed (m/s): walking vs standing for the roll gate and side-clipped samples.
+    private var walkerSpeed: Float = 0
     /// Roll at the last roll step, and when it happened: after the head's roll moves more than
     /// rollStepDeg from the anchor, growth must be re-established (5 samples over >= 0.8 s) before alerting.
     private var rollAnchor: Double?
@@ -70,7 +73,11 @@ struct BoxTracker {
     /// Walking: the growth slope less this many standard errors must still leave an own approach >= 1.5 m/s.
     static let pessimisticSE = 2.5
     /// Growth samples are skipped (and confirmations reset) while the head rolls faster than this (deg/s).
-    static let maxRollRateDegPerSec = 25.0 // the per-frame un-roll does the work; gait roll (+-3 deg at 0.9 Hz = 17 deg/s peak) stays under this
+    static let maxRollRateDegPerSec = 15.0 // standing
+    /// Walking: gait roll (+-3 deg at 0.9 Hz = 17 deg/s peak) stays under this; the per-frame un-roll does the work.
+    static let maxRollRateWalkingDegPerSec = 25.0
+    /// A track re-found by bearing alone after longer than this unseen restarts its growth samples.
+    static let restartGapSeconds = 0.6
 
     /// Camera roll relative to gravity, degrees in (-90, 90]: the angle between the portrait image's vertical
     /// axis (sensor x) and world up projected into the image plane.
@@ -126,9 +133,17 @@ struct BoxTracker {
     mutating func update(_ boxes: [Box], time: Double, camera: Camera) -> [Track] {
         tracks.removeAll { time - $0.lastSeen > Self.dropAfter }
         let rollDeg = Self.roll(camera)
+        // Walking or standing, from the camera track (ARKit position between YOLO frames).
+        if let last = lastCamera, time > last.t {
+            let v = SIMD2(camera.position.x - last.p.x, camera.position.z - last.p.z) / Float(time - last.t)
+            walkerSpeed = walkerSpeed * 0.5 + 0.5 * simd_length(v)
+        }
+        lastCamera = (time, camera.position)
+        let walking = walkerSpeed > 0.3
         var rolling = false
         if let last = lastRoll, time > last.t {
-            rolling = abs(rollDeg - last.deg) / (time - last.t) > Self.maxRollRateDegPerSec
+            // Gait roll (+-3 deg at 0.9 Hz = 17 deg/s) is tolerated only while walking; standing, 15 deg/s.
+            rolling = abs(rollDeg - last.deg) / (time - last.t) > (walking ? Self.maxRollRateWalkingDegPerSec : Self.maxRollRateDegPerSec)
         }
         lastRoll = (time, rollDeg)
         if let anchor = rollAnchor {
@@ -166,13 +181,15 @@ struct BoxTracker {
         }
         // Tracks with no IoU match (after a sweep gap, or cut by the side border) may still match by world
         // bearing: centre within half the box size plus 10 deg/s x the gap, and a plausible size change (0.7-2x).
+        // Ranked below every IoU match, nearest bearing first (not oldest track first).
         for (ti, t) in tracks.enumerated() where !pairs.contains(where: { $0.ti == ti }) {
             for (oi, o) in obs.enumerated() where Self.group(o.box.label) == t.group {
                 let daz = abs(Self.unwrap(o.az, around: t.azimuth) - t.azimuth)
                 let del = abs(Double(o.rect.midY - t.bearing.midY))
                 let gate = 0.5 * Double(max(o.rect.width, o.rect.height, t.bearing.width, t.bearing.height)) + 10 * (time - t.lastSeen)
                 let ratio = o.ang / max(t.samples.last?.ang ?? o.ang, 1e-9)
-                if (daz * daz + del * del).squareRoot() < gate && ratio > 0.7 && ratio < 2 { pairs.append((ti, oi, 0.01)) }
+                let dist = (daz * daz + del * del).squareRoot()
+                if dist < gate && ratio > 0.7 && ratio < 2 { pairs.append((ti, oi, CGFloat(0.01 / (1 + dist)))) }
             }
         }
         var usedT = Set<Int>(), usedO = Set<Int>(), seen: [Int] = []
@@ -183,6 +200,13 @@ struct BoxTracker {
             tracks[p.ti].bearing = o.rect
             tracks[p.ti].azimuth = o.az
             tracks[p.ti].direction = o.center
+            if p.iou < Self.minIoU && time - tracks[p.ti].lastSeen > Self.restartGapSeconds {
+                // Re-found by bearing alone (no box overlap) after a gap: it may be another car at a similar
+                // bearing. Growth starts over (an approaching car seen again after a head sweep still overlaps).
+                tracks[p.ti].samples = []
+                tracks[p.ti].positions = []
+                tracks[p.ti].hits = 0
+            }
             tracks[p.ti].lastSeen = time
             if !rolling { // while the head rolls, box heights are not trusted: no growth sample, no confirmation
                 tracks[p.ti].samples.append((time, o.ang))
@@ -210,7 +234,7 @@ struct BoxTracker {
         return seen.map { tracks[$0] }
     }
 
-    mutating func reset() { tracks = []; lastRoll = nil; rollAnchor = nil; rollStepAt = -.infinity }
+    mutating func reset() { tracks = []; lastRoll = nil; rollAnchor = nil; rollStepAt = -.infinity; lastCamera = nil; walkerSpeed = 0 }
 
     /// Significance of the growth: least-squares slope of ln(angular height) over time divided by its standard
     /// error. A car driving at the walker grows clearly; jittery or partly clipped boxes (a head sweep, a roll)
