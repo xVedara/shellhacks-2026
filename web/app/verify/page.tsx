@@ -71,8 +71,10 @@ export default function VerifyPage() {
     [taxonomy],
   );
 
+  // `busy` flips on the next render, so a second click in the same turn would POST again.
+  const voteLock = useRef(false);
   const skip = useCallback(() => {
-    if (!currentId || !current) return;
+    if (!currentId || !current || voteLock.current) return;
     const next = queue.find((h) => h.id !== currentId);
     const name = hazardName(current);
     setSkipped((s) => new Set(s).add(currentId));
@@ -83,8 +85,6 @@ export default function VerifyPage() {
     });
   }, [current, currentId, hazardName, queue]);
 
-  // `busy` flips on the next render, so a second click in the same turn would POST again.
-  const voteLock = useRef(false);
   const vote = useCallback(
     async (dir: "up" | "down") => {
       if (!currentId || voteLock.current || !ready) return;
@@ -182,7 +182,7 @@ export default function VerifyPage() {
         )}
       </div>
 
-      <div aria-live="polite" className="mb-4 empty:hidden">
+      <div aria-live="polite" className={message ? "mb-4" : undefined}>
         {message && <Notice tone={message.tone} title={message.text} />}
       </div>
 
