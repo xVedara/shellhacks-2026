@@ -73,7 +73,7 @@ export function namingPrompt(heightBand: HeightBand, typeHint?: string) {
   return PROMPT.replace('%BAND%', heightBand) + hint;
 }
 
-export function geminiNamer(apiKey: string | undefined, model = 'gemini-2.5-flash', timeoutMs = 4000): Namer {
+export function geminiNamer(apiKey: string | undefined, model = 'gemini-flash-lite-latest', timeoutMs = 6000): Namer {
   if (!apiKey) return async () => null;
   const ai = new GoogleGenAI({ apiKey });
   return async (cropBase64, heightBand, typeHint) => {

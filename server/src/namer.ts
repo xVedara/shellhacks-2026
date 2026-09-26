@@ -11,7 +11,7 @@ export const MAX_CONCURRENT_NAMING = 2;
 /** A 32x32 JPEG used once at startup to load the model into memory. */
 export const WARMUP_JPEG =
   '/9j/4AAQSkZJRgABAQAASABIAAD/4QCwRXhpZgAATU0AKgAAAAgABAEaAAUAAAABAAAAPgEbAAUAAAABAAAARgEoAAMAAAABAAIAAIdpAAQAAAABAAAATgAAAAAAAABIAAAAAQAAAEgAAAABAAeQAAAHAAAABDAyMjGRAQAHAAAABAECAwCgAAAHAAAABDAxMDCgAQADAAAAAQABAACgAgAEAAAAAQAAACCgAwAEAAAAAQAAACCkBgADAAAAAQAAAAAAAAAA/8AAEQgAIAAgAwEiAAIRAQMRAf/EAB8AAAEFAQEBAQEBAAAAAAAAAAABAgMEBQYHCAkKC//EALUQAAIBAwMCBAMFBQQEAAABfQECAwAEEQUSITFBBhNRYQcicRQygZGhCCNCscEVUtHwJDNicoIJChYXGBkaJSYnKCkqNDU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6g4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn6Onq8fLz9PX29/j5+v/EAB8BAAMBAQEBAQEBAQEAAAAAAAABAgMEBQYHCAkKC//EALURAAIBAgQEAwQHBQQEAAECdwABAgMRBAUhMQYSQVEHYXETIjKBCBRCkaGxwQkjM1LwFWJy0QoWJDThJfEXGBkaJicoKSo1Njc4OTpDREVGR0hJSlNUVVZXWFlaY2RlZmdoaWpzdHV2d3h5eoKDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uLj5OXm5+jp6vLz9PX29/j5+v/bAEMAHBwcHBwcMBwcMEQwMDBEXERERERcdFxcXFxcdIt0dHR0dHSLi4uLi4uLi6enp6enp8PDw8PD29vb29vb29vb2//bAEMBIiQkODQ4YDQ0YOWbf5vl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5f/dAAQAAv/aAAwDAQACEQMRAD8AfchTOHH8WM0wrzmpLkDZnOD2qi05HCnisnrsWtC+vAxV+GEOMtWRDNuABPTr71opNheKpaCep//Qg3yyn5zxVORVjmPoTV6MQg+WpywyTVe7AbDj0/lUdShoXbyK0Yz8oArPTDKM8VoxjgYobGkf/9k=';
-export const DEFAULT_TIMEOUT_MS = { gemini: 4000, ollama: 12_000 } as const;
+export const DEFAULT_TIMEOUT_MS = { gemini: 6000, ollama: 12_000 } as const;
 export const DEFAULT_OLLAMA_URL = 'http://localhost:11434';
 export const DEFAULT_OLLAMA_MODEL = 'qwen3.8:27b-mlx';
 
@@ -108,7 +108,7 @@ export async function selectNamer(env: NodeJS.ProcessEnv = process.env, fetchImp
   const timeout = (fallback: number) =>
     Math.min(NAMER_TIMEOUT_CAP_MS, Number(env.NAMER_TIMEOUT_MS) > 0 ? Number(env.NAMER_TIMEOUT_MS) : fallback);
   if (env.GEMINI_API_KEY) {
-    const model = env.GEMINI_MODEL || 'gemini-2.5-flash';
+    const model = env.GEMINI_MODEL || 'gemini-flash-lite-latest';
     const ms = timeout(DEFAULT_TIMEOUT_MS.gemini);
     // ponytail: no concurrency cap for Gemini (cloud, 4 s timeout); wrap it in limitConcurrency if quota bites
     return {

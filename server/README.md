@@ -18,7 +18,7 @@ only when the socket is loopback (cloudflared on the same box) and the value loo
 limiter keys on the socket address, so a LAN client cannot spoof it. IPv6 clients are keyed by their /64 prefix.
 
 Naming provider, chosen at startup and logged (`naming provider: ...`; the Ollama URL is logged as scheme://host:port only):
-1. `GEMINI_API_KEY` set: Gemini (`GEMINI_MODEL`, default `gemini-2.5-flash`).
+1. `GEMINI_API_KEY` set: Gemini (`GEMINI_MODEL`, default `gemini-flash-lite-latest` (gemini-2.5-flash is retired for new keys; flash-lite answers in about 1-4 s)).
 2. Else a local Ollama at `OLLAMA_URL` (default `http://localhost:11434`) that answers `/api/tags` within 2 s and
    has `OLLAMA_MODEL` (default `qwen3.8:27b-mlx`, vision capable) pulled.
 3. Else none: every new hazard is saved as type "obstacle" with `needsNaming`. Selection re-runs every 30 s while the provider is

@@ -65,7 +65,8 @@ describe('provider selection', () => {
     const f = fakeFetch(tags);
     const c = await selectNamer({ GEMINI_API_KEY: 'k' }, f);
     expect(c.provider).toBe('gemini');
-    expect(c.detail).toContain('timeout 4000 ms');
+    expect(c.detail).toContain('gemini-flash-lite-latest');
+    expect(c.detail).toContain('timeout 6000 ms');
     expect(f.calls).toHaveLength(0);
   });
 
