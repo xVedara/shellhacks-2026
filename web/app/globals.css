@@ -1,0 +1,126 @@
+@import "tailwindcss";
+
+/* StepSafe palette. Contrast on navy #081624: white 18:1, muted 8.7:1, blue 4.7:1, signal 8:1.
+   Brand Slate #66717E is only 3.7:1 on navy, so it is used on light surfaces only. */
+@theme {
+  --color-navy: #081624;
+  --color-navy-2: #0f2235; /* raised surface */
+  --color-line: #2c4158; /* borders on navy */
+  --color-muted: #a9b4c2; /* secondary text on navy */
+  --color-cloud: #f5f7fa;
+  --color-slate-brand: #66717e;
+  --color-blue: #087ff5; /* links, controls, active */
+  --color-signal: #13b9f2; /* live / scan indicators */
+  --color-alert: #ff7900; /* hazards and warnings only */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: var(--color-navy);
+  color: #fff;
+}
+
+/* Visible, thick focus ring everywhere (WCAG 2.4.7 / 2.4.11). */
+:focus-visible {
+  outline: 3px solid var(--color-signal);
+  outline-offset: 2px;
+}
+/* On the light map tiles the ring is navy with a white halo. */
+.leaflet-container :focus-visible,
+.leaflet-marker-icon:focus-visible {
+  outline: 3px solid var(--color-navy);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 6px #fff;
+  border-radius: 6px;
+}
+
+.leaflet-container {
+  font: inherit;
+  background: #dfe3e8;
+}
+
+.kbd {
+  display: inline-block;
+  min-width: 1.5em;
+  padding: 0 0.35em;
+  border: 1px solid var(--color-muted);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  font: 600 0.85em/1.4 ui-monospace, monospace;
+  text-align: center;
+  color: #fff;
+  background: var(--color-navy-2);
+}
+
+/* Attribution must stay legible (OSM tile policy + contrast). */
+.leaflet-control-attribution {
+  font-size: 12px;
+  color: var(--color-navy) !important;
+  background: rgba(255, 255, 255, 0.94) !important;
+}
+.leaflet-control-attribution a {
+  color: #0657b0 !important;
+  text-decoration: underline;
+}
+
+/* Hazard pins (Leaflet divIcon). */
+.ss-pin-wrap {
+  background: none;
+  border: none;
+}
+.ss-pin {
+  position: relative;
+  line-height: 0;
+}
+.ss-pin__sample {
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  transform: translateX(-50%);
+  margin-top: 2px;
+  padding: 1px 4px;
+  font: 700 10px/1.3 var(--font-sans);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-navy);
+  background: #fff;
+  border: 1px dashed var(--color-navy);
+  border-radius: 3px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+/* Newest live report: a steady ring plus a few pulses. */
+.ss-pin--new::before,
+.ss-pin--new::after {
+  content: "";
+  position: absolute;
+  inset: -7px;
+  border-radius: 9999px;
+  border: 3px solid var(--color-navy);
+  box-shadow: 0 0 0 2px #fff;
+  pointer-events: none;
+}
+.ss-pin--new::after {
+  animation: ss-pulse 1.4s ease-out 4;
+  opacity: 0;
+}
+@keyframes ss-pulse {
+  0% {
+    transform: scale(0.6);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ss-pin--new::after {
+    animation: none;
+  }
+}
