@@ -17,22 +17,21 @@ import {
   formatLength,
   getVotedIds,
   rememberVote,
+  typeDisplayName,
   type Category,
+  type HazardType,
   type HeightBand,
 } from "@/lib/api";
-import { announceAction, useLiveHazards } from "@/lib/hooks";
-
-const COMMON_TYPES = ["scooter", "bin", "bike", "construction", "scaffolding", "flooding", "branch", "broken sidewalk", "missing curb ramp", "low sign", "pole", "stairs", "curb"];
+import { announceAction, useLiveHazards, useTaxonomy } from "@/lib/hooks";
 
 type Panel = null | "reclassify" | "report";
-
-const TYPE_RE = /^[a-z0-9 -]{1,40}$/;
 
 const voteButton =
   "flex flex-col items-center justify-center gap-0.5 rounded-xl border px-1 py-2.5 font-semibold leading-tight transition-colors disabled:cursor-not-allowed disabled:opacity-50 md:px-4 md:py-3";
 
 export default function VerifyPage() {
   const { hazards, connection, loaded, error, detailVersion } = useLiveHazards();
+  const { taxonomy, error: taxonomyError } = useTaxonomy();
   const [voted, setVoted] = useState<Set<string>>(() => (typeof window === "undefined" ? new Set() : getVotedIds()));
   const [skipped, setSkipped] = useState<Set<string>>(new Set());
   const [pinnedId, setPinnedId] = useState<string | null>(null);
@@ -219,14 +218,14 @@ export default function VerifyPage() {
             {detail && detail.id === current.id && (
               <>
                 <div id="verify-heading">
-                  <HazardHeading hazard={detail} />
+                  <HazardHeading hazard={detail} taxonomy={taxonomy} />
                 </div>
                 {detail.sample && (
                   <Notice tone="info" title="Sample hazard">
                     Seeded for the demo, not a real report. Votes still count for the demo.
                   </Notice>
                 )}
-                <Crop hazard={detail} className="max-h-96" />
+                <Crop hazard={detail} className="max-h-96" taxonomy={taxonomy} />
               </>
             )}
           </div>
@@ -302,7 +301,9 @@ export default function VerifyPage() {
               </button>
             </div>
 
-            {panel === "reclassify" && <ReclassifyForm key={current.id} hazardId={current.id} current={current} />}
+            {panel === "reclassify" && (
+              <ReclassifyForm key={current.id} hazardId={current.id} current={current} taxonomy={taxonomy} taxonomyError={taxonomyError} />
+            )}
             {panel === "report" && <ReportForm key={current.id} hazardId={current.id} />}
           </div>
         </article>
@@ -314,9 +315,13 @@ export default function VerifyPage() {
 function ReclassifyForm({
   hazardId,
   current,
+  taxonomy,
+  taxonomyError,
 }: {
   hazardId: string;
   current: { type: string; category: Category; heightBand: HeightBand };
+  taxonomy: HazardType[] | null;
+  taxonomyError: string | null;
 }) {
   const [type, setType] = useState("");
   const [category, setCategory] = useState<Category | "">("");
@@ -324,11 +329,23 @@ function ReclassifyForm({
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ tone: "info" | "warn"; text: string } | null>(null);
 
-  // The server accepts types matching ^[a-z0-9 -]+$ (max 40), so normalize before sending.
-  const normalizedType = type.trim().toLowerCase().replace(/\s+/g, " ");
-  const typeInvalid = normalizedType !== "" && !TYPE_RE.test(normalizedType);
+  const grouped = useMemo(
+    () => CATEGORIES.map((c) => ({ category: c, options: (taxonomy ?? []).filter((t) => t.category === c) })),
+    [taxonomy],
+  );
+
+  // Picking a type pre-fills its default category and height band; the volunteer can still edit them.
+  const onTypeChange = (id: string) => {
+    setType(id);
+    const entry = taxonomy?.find((t) => t.id === id);
+    if (entry) {
+      setCategory(entry.category);
+      setHeightBand(entry.defaultHeightBand);
+    }
+  };
+
   const change = {
-    ...(normalizedType && normalizedType !== current.type ? { type: normalizedType } : {}),
+    ...(type && type !== current.type ? { type } : {}),
     ...(category && category !== current.category ? { category } : {}),
     ...(heightBand && heightBand !== current.heightBand ? { heightBand } : {}),
   };
@@ -336,7 +353,7 @@ function ReclassifyForm({
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (empty || typeInvalid) return;
+    if (empty) return;
     setBusy(true);
     try {
       const res = await api.reclassify(hazardId, change);
@@ -360,27 +377,34 @@ function ReclassifyForm({
       <fieldset className="space-y-3" disabled={busy}>
         <legend className="font-semibold text-white">Propose a correction (change only what’s wrong)</legend>
         <label className="block text-sm font-semibold text-white">
-          Type <span className="font-normal text-muted">(now “{current.type}”)</span>
-          <input
-            list="type-options"
-            value={type}
-            onChange={(e) => setType(e.target.value)}
-            placeholder="e.g. scooter"
-            maxLength={40}
-            pattern="[A-Za-z0-9 \-]+"
-            title="Letters, numbers, spaces and hyphens only"
-            aria-describedby="type-hint"
-            aria-invalid={typeInvalid || undefined}
-            className={field}
-          />
-          <span id="type-hint" className={`mt-1 block font-normal ${typeInvalid ? "text-alert" : "text-muted"}`}>
-            Letters, numbers, spaces and hyphens, up to 40 characters.
+          Type <span className="font-normal text-muted">(now “{typeDisplayName(current.type, taxonomy)}”)</span>
+          {taxonomyError ? (
+            <p role="alert" className={`mt-1 font-normal text-alert`}>
+              Couldn’t load hazard types ({taxonomyError}). Type can’t be changed right now; category and height band still can.
+            </p>
+          ) : (
+            <select
+              value={type}
+              onChange={(e) => onTypeChange(e.target.value)}
+              disabled={!taxonomy}
+              aria-describedby="type-hint"
+              className={field}
+            >
+              <option value="">{taxonomy ? "No change" : "Loading…"}</option>
+              {grouped.map(({ category: c, options }) => (
+                <optgroup key={c} label={CATEGORY_META[c].label}>
+                  {options.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.en}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          )}
+          <span id="type-hint" className="mt-1 block font-normal text-muted">
+            Choosing a type also sets its usual category and height band below.
           </span>
-          <datalist id="type-options">
-            {COMMON_TYPES.map((t) => (
-              <option key={t} value={t} />
-            ))}
-          </datalist>
         </label>
         <label className="block text-sm font-semibold text-white">
           Category <span className="font-normal text-muted">(now {CATEGORY_META[current.category].label.toLowerCase()})</span>
@@ -404,7 +428,7 @@ function ReclassifyForm({
             ))}
           </select>
         </label>
-        <button type="submit" disabled={empty || busy || typeInvalid} className={`${primaryButton}`}>
+        <button type="submit" disabled={empty || busy} className={`${primaryButton}`}>
           {busy ? "Sending…" : "Submit correction"}
         </button>
       </fieldset>

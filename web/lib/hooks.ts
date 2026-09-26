@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { API_URL, ApiError, GRAHAM_CENTER, api, getDeviceId, type HazardEvent, type HazardSummary } from "./api";
+import { API_URL, ApiError, GRAHAM_CENTER, api, getDeviceId, getTaxonomy, type HazardEvent, type HazardSummary, type HazardType } from "./api";
 import { createLivePins } from "./live-pins";
 
 export type Connection = "loading" | "live" | "reconnecting" | "down";
@@ -171,6 +171,23 @@ export function useIdentity() {
   }, []);
 
   return { deviceId, user, status };
+}
+
+/** The fixed hazard-type list, fetched once per session (memoized in `getTaxonomy`). */
+export function useTaxonomy() {
+  const [taxonomy, setTaxonomy] = useState<HazardType[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    getTaxonomy().then(
+      (t) => live && setTaxonomy(t),
+      (e) => live && setError(e instanceof Error ? e.message : String(e)),
+    );
+    return () => {
+      live = false;
+    };
+  }, []);
+  return { taxonomy, error, loading: !taxonomy && !error };
 }
 
 /** Tell the header to refresh karma after this device acts. */

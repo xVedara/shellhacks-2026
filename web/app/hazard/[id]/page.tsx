@@ -5,7 +5,8 @@ import { useParams } from "next/navigation";
 import HazardDetail, { useHazardDetail } from "@/components/HazardDetail";
 import Map from "@/components/Map";
 import { Notice } from "@/components/ui";
-import { useLiveHazards } from "@/lib/hooks";
+import { typeDisplayName } from "@/lib/api";
+import { useLiveHazards, useTaxonomy } from "@/lib/hooks";
 
 export default function HazardPage() {
   const { id } = useParams<{ id: string }>();
@@ -13,6 +14,7 @@ export default function HazardPage() {
   // Subscribed only so the detail re-fetches when this hazard changes on the server.
   const { detailVersion } = useLiveHazards();
   const { detail, error, loading } = useHazardDetail(hazardId, detailVersion(hazardId));
+  const { taxonomy } = useTaxonomy();
 
   return (
     <div className="mx-auto w-full max-w-6xl p-3 lg:p-6">
@@ -26,7 +28,7 @@ export default function HazardPage() {
         {detail && (
           <div className="grid items-start gap-4 md:grid-cols-[minmax(0,1fr)_360px]">
             <div className="glass p-5">
-              <HazardDetail hazard={detail} />
+              <HazardDetail hazard={detail} taxonomy={taxonomy} />
             </div>
             <div className="glass h-80 overflow-hidden md:sticky md:top-4">
               <Map
@@ -35,7 +37,7 @@ export default function HazardPage() {
                 zoom={18}
                 selectedId={detail.id}
                 compact
-                label={`Location of ${detail.label || detail.type}`}
+                label={`Location of ${detail.label || typeDisplayName(detail.type, taxonomy)}`}
               />
             </div>
           </div>

@@ -5,8 +5,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import HazardDetail, { useHazardDetail } from "@/components/HazardDetail";
 import Map from "@/components/Map";
 import { Legend, LiveDot, Notice, PinTile, SampleBadge, secondaryButton } from "@/components/ui";
-import { API_URL, CATEGORY_META, GRAHAM_CENTER, HEIGHT_META, getVotedIds, relativeTime } from "@/lib/api";
-import { useLiveHazards, useNow, type Connection } from "@/lib/hooks";
+import { API_URL, CATEGORY_META, GRAHAM_CENTER, HEIGHT_META, getVotedIds, relativeTime, typeDisplayName } from "@/lib/api";
+import { useLiveHazards, useNow, useTaxonomy, type Connection } from "@/lib/hooks";
 
 const HOUR = 3_600_000;
 
@@ -84,6 +84,7 @@ function LiveMetric({ connection, lastEventAt }: { connection: Connection; lastE
 
 export default function MapPage() {
   const { hazards, connection, loaded, error, recentlyAdded, detailVersion, cleared, lastEventAt } = useLiveHazards();
+  const { taxonomy } = useTaxonomy();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showOsm, setShowOsm] = useState(false);
   const [voted] = useState<Set<string>>(() => (typeof window === "undefined" ? new Set() : getVotedIds()));
@@ -204,7 +205,7 @@ export default function MapPage() {
 
         <aside aria-label="Hazard feed and details" className="glass flex flex-col lg:min-h-0 lg:w-[420px] lg:shrink-0">
           <p className="sr-only" aria-live="polite">
-            {newest ? `New hazard reported: ${newest.sample ? "sample, " : ""}${newest.label || newest.type}` : ""}
+            {newest ? `New hazard reported: ${newest.sample ? "sample, " : ""}${newest.label || typeDisplayName(newest.type, taxonomy)}` : ""}
           </p>
 
           {(connection === "reconnecting" || (connection === "down" && loaded)) && (
@@ -241,7 +242,7 @@ export default function MapPage() {
               )}
               {detailLoading && <p role="status" className="text-muted">Loading hazard details…</p>}
               {detailError && <Notice tone="warn" title="Couldn’t load this hazard">{detailError}</Notice>}
-              {detail && <HazardDetail hazard={detail} />}
+              {detail && <HazardDetail hazard={detail} taxonomy={taxonomy} />}
             </section>
           ) : (
             <section aria-labelledby="list-heading" className="flex flex-col lg:min-h-0 lg:flex-1">
@@ -296,7 +297,7 @@ export default function MapPage() {
                           <PinTile hazard={h} />
                           <span className="min-w-0 flex-1">
                             <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[15px] font-semibold leading-snug text-white">
-                              {h.label || h.type} {h.sample && <SampleBadge />}
+                              {h.label || typeDisplayName(h.type, taxonomy)} {h.sample && <SampleBadge />}
                               {isNew && (
                                 <span className="rounded-full bg-signal px-2 py-px text-[10px] font-bold uppercase tracking-wider text-navy">New</span>
                               )}

@@ -9,7 +9,9 @@ import {
   cropSrc,
   formatLength,
   relativeTime,
+  typeDisplayName,
   type HazardDetail as Detail,
+  type HazardType,
 } from "@/lib/api";
 import { Notice, PinTile, SampleBadge } from "./ui";
 
@@ -47,16 +49,24 @@ export function useHazardDetail(id: string | null, version?: string) {
   return { ...current, loading: !!id && !current.detail && !current.error };
 }
 
-export function HazardHeading({ hazard, as: Tag = "h2" }: { hazard: Detail; as?: "h1" | "h2" }) {
+export function HazardHeading({
+  hazard,
+  as: Tag = "h2",
+  taxonomy,
+}: {
+  hazard: Detail;
+  as?: "h1" | "h2";
+  taxonomy?: readonly HazardType[] | null;
+}) {
   return (
     <div className="flex items-start gap-3">
       <PinTile hazard={hazard} size={48} />
       <div className="min-w-0">
         <Tag className="font-display text-[1.7rem] font-bold uppercase leading-[1.05] tracking-wide text-white">
-          {hazard.label || hazard.type} {hazard.sample && <SampleBadge />}
+          {hazard.label || typeDisplayName(hazard.type, taxonomy)} {hazard.sample && <SampleBadge />}
         </Tag>
         <p className="mt-1 text-sm text-muted">
-          {CATEGORY_META[hazard.category].label} · {HEIGHT_META[hazard.heightBand].label} · type “{hazard.type}”
+          {CATEGORY_META[hazard.category].label} · {HEIGHT_META[hazard.heightBand].label} · type “{typeDisplayName(hazard.type, taxonomy)}”
           {hazard.status === "cleared" && <strong className="ml-1 text-white">· Cleared</strong>}
         </p>
       </div>
@@ -64,7 +74,15 @@ export function HazardHeading({ hazard, as: Tag = "h2" }: { hazard: Detail; as?:
   );
 }
 
-export function Crop({ hazard, className = "" }: { hazard: Detail; className?: string }) {
+export function Crop({
+  hazard,
+  className = "",
+  taxonomy,
+}: {
+  hazard: Detail;
+  className?: string;
+  taxonomy?: readonly HazardType[] | null;
+}) {
   if (!hazard.crop)
     return (
       <div className={`flex h-36 w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-edge bg-well text-sm text-muted ${className}`}>
@@ -78,23 +96,23 @@ export function Crop({ hazard, className = "" }: { hazard: Detail; className?: s
     // eslint-disable-next-line @next/next/no-img-element -- base64 data URL, nothing for next/image to optimize
     <img
       src={cropSrc(hazard.crop)}
-      alt={`Camera crop of the reported ${hazard.label || hazard.type}`}
+      alt={`Camera crop of the reported ${hazard.label || typeDisplayName(hazard.type, taxonomy)}`}
       className={`w-full rounded-xl border border-edge bg-black/30 object-contain ${className}`}
     />
   );
 }
 
-export default function HazardDetail({ hazard }: { hazard: Detail }) {
+export default function HazardDetail({ hazard, taxonomy }: { hazard: Detail; taxonomy?: readonly HazardType[] | null }) {
   const m = hazard.measurements;
   return (
     <div className="space-y-4 text-white">
-      <HazardHeading hazard={hazard} />
+      <HazardHeading hazard={hazard} taxonomy={taxonomy} />
       {hazard.sample && (
         <Notice tone="info" title="Sample hazard">
           Seeded for the demo. It was not reported by a real walker.
         </Notice>
       )}
-      <Crop hazard={hazard} className="max-h-72" />
+      <Crop hazard={hazard} className="max-h-72" taxonomy={taxonomy} />
 
       <dl className="grid grid-cols-2 gap-2 text-sm">
         <div className="well px-3 py-2">
@@ -147,7 +165,7 @@ export default function HazardDetail({ hazard }: { hazard: Detail }) {
               <li key={i}>
                 Change to{" "}
                 <strong>
-                  {[p.type && `type “${p.type}”`, p.category && CATEGORY_META[p.category].label.toLowerCase(), p.heightBand && HEIGHT_META[p.heightBand].label.toLowerCase()]
+                  {[p.type && `type “${typeDisplayName(p.type, taxonomy)}”`, p.category && CATEGORY_META[p.category].label.toLowerCase(), p.heightBand && HEIGHT_META[p.heightBand].label.toLowerCase()]
                     .filter(Boolean)
                     .join(", ")}
                 </strong>

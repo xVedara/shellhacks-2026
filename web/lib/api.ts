@@ -3,6 +3,8 @@
 export type Category = "moving" | "temporary" | "permanent";
 export type HeightBand = "ground" | "head" | "dropoff";
 
+export type HazardType = { id: string; en: string; es: string; category: Category; defaultHeightBand: HeightBand };
+
 export type HazardSummary = {
   id: string;
   type: string;
@@ -62,8 +64,12 @@ export const HEIGHT_META: Record<HeightBand, { label: string; shape: string }> =
 };
 
 export class ApiError extends Error {
-  constructor(public status: number, public code: string, message: string) {
+  status: number;
+  code: string;
+  constructor(status: number, code: string, message: string) {
     super(message);
+    this.status = status;
+    this.code = code;
   }
 }
 
@@ -110,7 +116,30 @@ export const api = {
   report: (id: string, reason: "spam" | "abuse" | "other") =>
     post<{ ok: true }>(`/hazards/${encodeURIComponent(id)}/report`, { reason, deviceId: getDeviceId() }),
   user: (deviceId: string) => request<{ displayName: string; karma: number }>(`/users/${encodeURIComponent(deviceId)}`),
+  taxonomy: () => request<HazardType[]>("/taxonomy"),
 };
+
+// --- taxonomy (fetched once per session; cacheable per the frozen contract) ---
+
+let taxonomyPromise: Promise<HazardType[]> | null = null;
+
+/** The fixed hazard-type list from GET /taxonomy. Cached in memory for the session; a failed fetch
+ * clears the cache so the next call retries instead of being stuck failed forever. */
+export function getTaxonomy(): Promise<HazardType[]> {
+  if (!taxonomyPromise) {
+    taxonomyPromise = api.taxonomy().catch((e) => {
+      taxonomyPromise = null;
+      throw e;
+    });
+  }
+  return taxonomyPromise;
+}
+
+/** The taxonomy's English name for a type id (e.g. "trash-bin" -> "trash bin"), or the raw id when
+ * it's unknown or the taxonomy hasn't loaded (legacy free-text types keep their original text). */
+export function typeDisplayName(id: string, taxonomy: readonly HazardType[] | null | undefined): string {
+  return taxonomy?.find((t) => t.id === id)?.en ?? id;
+}
 
 // --- local identity and vote memory (localStorage can throw or be empty; never rely on it) ---
 
