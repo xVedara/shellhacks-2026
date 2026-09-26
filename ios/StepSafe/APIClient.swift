@@ -7,7 +7,7 @@ import UIKit
 /// The StepSafe server (PLAN.md section 6, server/README.md). Nothing here is on the safety path:
 /// callers never wait on it before warning the walker. Thread-safe; completion work is the caller's.
 final class APIClient {
-    static let defaultBaseURL = "http://100.90.192.75:8787" // the Mac over Tailscale (LAN fallback: http://192.168.81.233:8787)
+    static let defaultBaseURL = "https://api.stepsafe.miami" // Jetson behind the Cloudflare tunnel (dev fallbacks: http://100.90.192.75:8787 Tailscale, http://192.168.81.233:8787 LAN)
     static let baseURLKey = "serverURL"
 
     struct ReportResult: Decodable { var id: String; var label: String; var merged: Bool }
