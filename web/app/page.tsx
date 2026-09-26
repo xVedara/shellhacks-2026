@@ -264,7 +264,7 @@ export default function MapPage() {
                   <summary className="cursor-pointer text-[13px] font-medium text-ink">Map legend</summary>
                   <div className="mt-3">
                     <Legend />
-                    <OsmLayerNotice className="mt-2 text-[12px] text-ink-3" />}
+                    <OsmLayerNotice className="mt-2 text-[12px] text-ink-3" />
                   </div>
                 </details>
 
