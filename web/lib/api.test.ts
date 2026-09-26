@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applyTypePick, isTaxonomyArray, typeDisplayName, type HazardType, type ReclassifyPickState } from "./api.ts";
+import { applyTypePick, isTaxonomyArray, relativeTime, typeDisplayName, type HazardType, type ReclassifyPickState } from "./api.ts";
 
 const trashBin: HazardType = { id: "trash-bin", en: "trash bin", es: "cubo de basura", category: "moving", defaultHeightBand: "ground" };
 const ladder: HazardType = { id: "ladder", en: "ladder", es: "escalera de mano", category: "temporary", defaultHeightBand: "head" };
@@ -62,6 +62,16 @@ test("applyTypePick picking a different type does not re-fill a field that alrea
 test("applyTypePick resetting type to 'No change' clears only the fields it auto-filled", () => {
   const filled = applyTypePick("ladder", ladder, empty);
   assert.deepEqual(applyTypePick("", undefined, filled), empty);
+});
+
+test("relativeTime uses minutes, hours, and days, and rejects a bad timestamp", () => {
+  const now = Date.parse("2026-09-26T12:00:00.000Z");
+  assert.equal(relativeTime("2026-09-26T11:59:30.000Z", now), "just now");
+  assert.equal(relativeTime("2026-09-26T11:58:00.000Z", now), "2 minutes ago");
+  assert.equal(relativeTime("2026-09-26T10:00:00.000Z", now), "2 hours ago");
+  assert.equal(relativeTime("2026-09-25T12:00:00.000Z", now), "yesterday");
+  assert.equal(relativeTime("2026-09-26T12:00:30.000Z", now), "in under a minute");
+  assert.equal(relativeTime("not-a-date", now), "unknown");
 });
 
 test("applyTypePick resetting type to 'No change' leaves a manually-set field alone", () => {
