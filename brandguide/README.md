@@ -5,7 +5,7 @@
 | File | Use |
 | --- | --- |
 | `logo-blue-1024.png`, `logo-dark-1024.png` | Original artwork (rounded square on white) |
-| `appicon-blue-1024.png`, `appicon-dark-1024.png` | Full-bleed square for Xcode app icons (iOS applies its own mask). Blue is the default icon, dark is the dark-appearance icon |
+| `appicon-dark-1024.png`, `appicon-blue-1024.png` | Full-bleed square for Xcode app icons (iOS applies its own mask). Navy (`dark`) is the app icon in every appearance and the web favicon/logo. The blue gradient is an accent, not the primary mark |
 | `logo-{blue,dark}-rounded-{1024,512,180}.png` | Rounded with transparent corners, for the web (favicon, apple-touch-icon, headers) |
 
 Regenerate the derived files with `python3 make_icons.py` (needs Pillow).
@@ -27,7 +27,7 @@ Regenerate the derived files with `python3 make_icons.py` (needs Pillow).
 | White | `#FFFFFF` | Text on dark, eye outline |
 | Cloud | `#F5F7FA` | Light surfaces |
 | Slate | `#66717E` | Secondary text |
-| Blue gradient | `#13B9F2` to `#0868F8` | Blue icon background |
+| Blue gradient | `#13B9F2` to `#0868F8` | Accent (alternate blue logo, marketing) |
 
 Never signal a hazard with color alone: pair it with an icon, text, sound or haptics.
 
