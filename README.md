@@ -1,10 +1,11 @@
 # StepSafe
 
 StepSafe is a head-mounted iPhone (LiDAR) plus AirPods that warns blind and low-vision
-pedestrians about what's ahead — ground obstacles, head-height hazards, and drop-offs —
-and a community map where every walk makes the next one safer. It's a hazard layer, not
-a guide: StepSafe doesn't replace a cane, a guide dog, or your own judgment, and it never
-gives walking directions.
+pedestrians about what's ahead — ground obstacles, head-height hazards, drop-offs, and
+fast-closing crossing hazards (cars, bikes, a pushed cart) — and a community map where
+every walk makes the next one safer. Sighted Scouts can report and verify hazards from
+the same app. It's a hazard layer, not a guide: StepSafe doesn't replace a cane, a guide
+dog, or your own judgment, and it never gives walking directions.
 
 Built at ShellHacks 2026 (FIU Graham Center, Miami).
 
@@ -15,10 +16,12 @@ Built at ShellHacks 2026 (FIU Graham Center, Miami).
  ARKit LiDAR + Vision                 Node + TypeScript            Next.js + Leaflet
  ─────────────────────                ───────────────              ────────────────
  PathGuard (ground/head/drop-off) ─┐                            ┌─ live pin updates
- CrossingAssist (in progress)      │   POST /hazards            │
- AlertManager (spatial tones,      ├──────────────────────────► │  (SSE)
-   AirPods what's-ahead / mute)    │   crop, lat/lng, band       │
-                                    │                            │
+ ClosingDetector + YOLO11n         │   POST /hazards            │
+   (crossing assist)               ├──────────────────────────► │  (SSE)
+ AlertManager (spatial tones,      │   crop, lat/lng, band       │
+   AirPods what's-ahead / mute)    │                            │
+ Scout tab (tap to report,         │                            │
+   taxonomy type picker)           │                            │
                                     ▼                            │
                               MongoDB (geo + TTL + change stream)│
                                     │                            │
@@ -47,8 +50,7 @@ brandguide/     Logos, colors, voice (uncommitted assets; see its own README)
 
 - [`server/README.md`](server/README.md) — API, env vars, naming provider, run/test.
 - [`web/README.md`](web/README.md) — pages, map encoding, accessibility, run/build.
-- `ios/` — SwiftUI app (path guard, alerts). `project.yml` (XcodeGen) generates
-  `StepSafe.xcodeproj`; open and run from Xcode. No README yet.
+- [`ios/README.md`](ios/README.md) — app modules, build (Release note), test, Settings URL, credits.
 
 ## Quick start (local demo)
 

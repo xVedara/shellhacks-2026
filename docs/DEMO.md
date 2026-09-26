@@ -1,104 +1,141 @@
 # StepSafe: 3-minute live demo
 
-Source: `PLAN.md` section 14, updated below to what's actually built on `work` as of
-this branch's base commit (`bd2f366`).
+Source: `PLAN.md` section 14. Crossing assist, the server link (hazard reports,
+heads-up, `/tts`), and the Scout tab have landed in `ios/` (commit `1cd146e`). As of
+that commit the app has not yet run on a physical iPhone — see the phone-test
+checklist and first-time device test below before the actual demo.
 
-## Status check (read this first)
-
-What's confirmed working on `work` today:
+## What's built
 
 - **Path guard, on-device, no network:** drop-off, head-height, and ground-obstacle
   alerts with spatial tones, priority ordering, and AirPods mute / what's-ahead
   (`ios/StepSafe/AlertManager.swift`, `Core/PathGuard.swift`, `Core/AlertPolicy.swift`).
-- **Server + web, fully working on their own:** hazard reports, merging, naming
-  (local Qwen via Ollama or Gemini), ElevenLabs voice, the live map, and the verify
-  queue with a type picker (`server/README.md`, `web/README.md`).
+- **Crossing assist:** `ClosingDetector` (depth) and `VehicleDetector` (YOLO11n Core
+  ML) fire a priority-1 crossing alert for anything closing fast — a car, a bike, a
+  pushed cart. The hard rule in `AlertPolicy`'s header: closing objects are never
+  muted, and their haptic + spatial tone fire immediately even while another clip
+  plays.
+- **Server link:** `APIClient`/`ServerLink` post hazard reports, `MapSync` gives a
+  heads-up for pins ahead within 30 m (once per 5 min), `TTSPlayer` calls `/tts` with
+  a speech fallback. Server URL is a text field in the Walker tab's status panel
+  (`ServerStatusView` in `ServerLink.swift`), default `http://192.168.81.233:8787`.
+- **Scout tab:** tap to report, nearby list, votes, a taxonomy type picker
+  (`GET /taxonomy`).
+- **Server + web, working on their own:** hazard reports, merging, naming (local
+  Qwen via Ollama or Gemini), ElevenLabs voice, the live map, and the verify queue
+  with a type picker (`server/README.md`, `web/README.md`).
+- **Bundled voice:** 70 phrases x EN/ES in the ElevenLabs voice "Sarah", played
+  on-device with no network for every fixed alert.
 
-**Not yet on `work`, still in separate iOS worktrees (in progress):**
+## Phone-test checklist (before the demo)
 
-- **Crossing assist.** `ios/` on `work` has no `ClosingDetector` / crossing-assist
-  code at all — `AlertPolicy`/`PathGuard` only know `ground`, `head`, and `dropoff`.
-  It exists on the `ios-slice2` worktree ("iOS slice 3: crossing assist... priority 1")
-  but has not merged.
-- **Phone-to-server round trip.** There is no networking code in `ios/StepSafe` yet
-  (no `POST /hazards`, no Settings screen for the server URL, no heads-up / Scout
-  view). This means demo steps 2-4 below (naming a sign, a second phone getting a
-  heads-up, live pins from a real phone) are **not runnable from the iOS app on
-  `work` today** — they need the iOS server-integration work to land first.
+- [ ] Build in **Release**, not Debug: Xcode -> Product > Scheme > Edit Scheme >
+      Run > Build Configuration > **Release** (Debug's on-device analysis is roughly
+      30x slower and will miss detections).
+- [ ] Install on the iPhone from Xcode (select the device, ⌘R) — no App Store or
+      TestFlight.
+- [ ] Start the server with `HOST=0.0.0.0` so phones on the LAN can reach it —
+      `scripts/dev-up.sh` does this by default (don't override to `127.0.0.1`).
+- [ ] In the app's Walker tab, set the **Server URL** field to
+      `http://<Mac LAN IP>:8787` (the IP `dev-up.sh` prints, e.g.
+      `http://192.168.81.233:8787`).
+- [ ] On first launch, allow **Local Network**, **Camera**, and **Location** (When
+      In Use) when iOS prompts — all three are required (Info.plist also requests
+      Motion, for head-direction tracking).
+- [ ] AirPods paired with **default** press controls: one press = "What's ahead",
+      a second press within 2 s = mute toggle (arrives as `MPRemoteCommandCenter`
+      play/pause, or next-track on some AirPods).
+- [ ] `ollama ps` shows `qwen3.8:27b-mlx` **loaded** (not just pulled) — a cold load
+      adds several seconds to the first naming call; `dev-up.sh` warms it on
+      startup.
+- [ ] `ELEVENLABS_API_KEY` is set in `server/.env` (without it, `/tts` answers 503
+      and the phone falls back to its built-in system voice — the app still works).
 
-If that work has landed by demo time, ignore the "not runnable" notes below and run
-the script as written. If it hasn't, use the fallback for each step — the server and
-web map are real and can be shown live without a phone (see step 4 fallback).
+## First-time device test (10 steps)
 
-## Pre-demo checklist
+Run this once on the actual iPhone before trusting the demo script below.
 
-- [ ] Both demo phones charged.
-- [ ] Phones and laptop on the same Wi-Fi (the venue network, or a hotspot if it's flaky).
-- [ ] Start the stack with `HOST=0.0.0.0` so phones on the LAN can reach it:
-      `scripts/dev-up.sh` (defaults to `HOST=0.0.0.0` already; don't override to `127.0.0.1`).
-- [ ] Note the "Phone Settings server URL" `dev-up.sh` prints and enter it in the iOS
-      app's server setting on **both** phones (once that setting exists).
-- [ ] `ollama ps` shows `qwen3.8:27b-mlx` loaded (not just pulled) — a cold load adds
-      several seconds to the first naming call. If it's not loaded, `dev-up.sh`
-      already warms it via the server's startup call; give it a few seconds and
-      re-check.
-- [ ] `ELEVENLABS_API_KEY` is present in `server/.env` (voice fallback is silent
-      otherwise — the app still works, just with the built-in system voice).
-- [ ] Demo hazards are seeded (`dev-up.sh` runs `npm run seed:demo` automatically;
-      confirm the map isn't empty).
-- [ ] iOS app installed on both phones from Xcode (⌘R) — no App Store/TestFlight.
-- [ ] AirPods paired to the walker's phone with **default** press controls (a single
-      press = what's ahead, double press = mute toggle; rebound controls have not
-      been tested against `MPRemoteCommandCenter`).
+1. **Drop-off.** Walk the head rig toward a step or ledge.
+   *Expect:* a sharp drop-off tone plus haptic within about 2 m, spoken direction
+   if named.
+2. **Head-height object.** Face a sign or pole at head height.
+   *Expect:* a distinct tone from the correct side (left/right/ahead).
+3. **"What's ahead."** Press the on-screen button, or a single AirPods press.
+   *Expect:* the nearest hazard is spoken back immediately.
+4. **Mute.** Press "Mute 5 minutes" (or a double AirPods press).
+   *Expect:* "Muted for 5 minutes"; ground/head/drop-off alerts go quiet.
+5. **Closing object while muted.** Have someone walk or push something toward the
+   phone fast.
+   *Expect:* the haptic and spatial tone fire immediately anyway — closing objects
+   are never muted (`AlertPolicy`'s hard rule).
+6. **Pushed cart.** Push a cart across the phone's path like a crossing.
+   *Expect:* a priority-1 crossing alert with side, from `ClosingDetector` +
+   `VehicleDetector`.
+7. **Hazard report -> web map.** Let a hazard get reported (path guard or Scout),
+   then open the web map.
+   *Expect:* a new pin appears live (`GET /events` SSE) with a name generated by
+   Qwen (or Gemini).
+8. **Heads-up on a second phone.** Walk a second phone toward the pinned hazard.
+   *Expect:* a spoken heads-up ("<name>, <N> feet, <side>") once, within 30 m.
+9. **Scout tap + type picker.** On the Scout tab, tap to report a hazard, then open
+   the type picker.
+   *Expect:* the report appears in the nearby list; the picker lists taxonomy types
+   from `GET /taxonomy` and can set/correct the type.
+10. **Spanish device language.** Set the phone's Language & Region to Español,
+    relaunch the app.
+    *Expect:* fixed alerts and notices play the bundled Spanish (`.es.mp3`) clips
+    instead of English.
 
-## The script
+## The 3-minute script
 
-**1. Drop-off (path guard, on-device — works today).** Judge wears the head rig,
-walks toward a step or stage edge. Expect a sharp drop-off tone plus haptic within
-about 2 m, spoken direction if named.
+**1. Drop-off (path guard, on-device).** Judge wears the head rig, walks toward a
+step or stage edge. Expect a sharp drop-off tone plus haptic within about 2 m,
+spoken direction if named.
 *Fallback:* if the tone doesn't fire, the edge may be outside the 1-3 m detection
-range or LiDAR is confused by strong light — back up a step and re-approach; narrate
-the geometry rule (ground points 1-3 m ahead, more than 0.1 m below expected floor)
-while retrying.
+range or LiDAR is confused by strong light — back up a step and re-approach.
 
-**2. Head-height sign (path guard + naming — naming needs the phone-to-server
-integration; path-guard tone works today).** Judge faces a sign or pole at head
-height. Expect a distinct tone from the correct side; once the phone reports it, the
-server names it (Qwen or Gemini) and speaks the label back.
-*Fallback:* if naming isn't wired up on the phone yet, call out the tone-only
-behavior as intentional ("path guard never waits on naming — that's the safety
-rule") and show naming live on the **web verify queue** instead: open a seeded or
-just-created hazard and show its label, type picker, and confidence.
+**2. Head-height sign (path guard + naming).** Judge faces a sign or pole at head
+height. Expect a distinct tone from the correct side; once the phone reports it,
+the server names it (Qwen or Gemini) and speaks the label back.
+*Fallback:* if naming is slow, call out that path guard never waits on naming
+("that's the safety rule") and show the label land on the **web verify queue**
+a moment later.
 
-**3. Crossing assist (in progress — not on `work` yet).** Someone pushes a cart
-toward the judge at a marked "curb." Intended behavior: a priority-1 crossing alert
-fires with side, and it is **not** silenced by mute — "approaching" alerts always
-sound.
-*Fallback:* narrate this as the hard safety rule that's built into the alert policy
-today for drop-offs and will extend to crossing assist (`AlertPolicy` already treats
-priority 1 as mute-proof — show the code / a muted drop-off alert firing anyway as
-the closest live proof), and show recorded footage or the merge/testing plan if
-crossing assist has landed by the actual demo.
+**3. Crossing assist.** Someone pushes a cart toward the judge at a marked "curb."
+Expect a priority-1 crossing alert with side, and it is **not** silenced by mute —
+approaching alerts always sound.
+*Fallback:* if the cart isn't picked up cleanly, mute the app first and show a
+drop-off or head-height alert firing anyway, then narrate the same hard rule
+extends to crossing assist.
 
-**4. Community map lights up (server + web — works today; needs a real phone
-report or the seeded data to change).** On the laptop, a new hazard appears live on
-the map (`GET /events` SSE); walk through the verify queue's type picker, upvote a
-pin, and show the confidence/label update. If a second phone has the app with
-server integration, walk it toward a pinned hazard for the heads-up ("Scaffolding,
-40 feet, right side").
-*Fallback with no phone integration:* trigger a hazard directly against the API to
-simulate a phone report and show it land on the map live —
+**4. Community map lights up.** On the laptop, the new hazard from step 2 or 3
+appears live on the map (`GET /events` SSE); walk through the verify queue's type
+picker, upvote a pin, and show the confidence/label update. With a second phone
+running the app, walk it toward a pinned hazard for the heads-up ("<name>, 40 feet,
+right side").
+*Fallback with no second phone:* trigger a hazard directly against the API to
+simulate a report and show it land on the map live:
 ```sh
 curl -s -X POST "http://$LAN_IP:$API_PORT/hazards" \
   -H 'content-type: application/json' \
   -d '{"lat":25.7566,"lng":-80.3739,"heightBand":"ground","deviceId":"demo-phone-1"}'
 ```
-— then narrate the heads-up and Scout flows from `PLAN.md`/screenshots since they
-need the iOS integration to demo live.
 
 Keep the whole thing indoors or just outside the Graham Center. GPS is poor indoors;
 if the map step needs it, use a clearly labeled simulated position rather than
 waiting on a real fix.
+
+## Known limits
+
+- Depth does not see sideways crossers; YOLO-only pedestrians are not alerted;
+  walking head-on alerts come late (TTC 0.68-1.3 s, limited by LiDAR range and
+  field of view).
+- Combined drop-off + closing phrases are marked done at start, not on completion.
+- Spanish phrase wording wants a native speaker's pass.
+- Repo LICENSE for AGPL (YOLO11n is AGPL-3.0, see `ios/CREDITS.md`) is Ara's
+  decision, pending.
+- As of commit `1cd146e`, none of this had run on a physical device — that's what
+  the first-time device test above is for.
 
 ## General fallback
 
@@ -106,4 +143,4 @@ If the API or Mongo dies mid-demo, do not `pkill`/`killall` and do not touch
 anything on the shared ports (3000, 8787, 27018, 11434) unless you started it this
 session: run `scripts/dev-up.sh stop` then `scripts/dev-up.sh` again on the same
 ports, or bring it up on spare ports (`MONGO_PORT`/`API_PORT`/`WEB_PORT`) and repoint
-the phones' server setting.
+the phones' Server URL field.
