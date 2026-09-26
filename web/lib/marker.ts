@@ -1,5 +1,5 @@
 // Marker drawing shared by the Leaflet map and the plain-HTML legend/list (no Leaflet import here).
-import { CATEGORY_META, HEIGHT_META, type HazardSummary } from "./api";
+import { CATEGORY_META, HEIGHT_META, type HazardSummary } from "./api.ts";
 
 /** Pin diameter in px: bigger means more community confidence. */
 export const markerSize = (confidence: number) => Math.round(Math.min(40, Math.max(22, 24 + confidence * 3)));
@@ -33,5 +33,9 @@ export function markerSvg(h: Pick<HazardSummary, "category" | "heightBand">, siz
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${s}" height="${s}" viewBox="0 0 ${s} ${s}" aria-hidden="true" focusable="false" style="overflow:visible;filter:${shadow}">${shape}${text}${ring}</svg>`;
 }
 
-export const hazardAccessibleName = (h: HazardSummary) =>
-  `${h.sample ? "Sample: " : ""}${h.label || h.type}, ${CATEGORY_META[h.category].label.toLowerCase()}, ${HEIGHT_META[h.heightBand].label.toLowerCase()}, confidence ${h.confidence.toFixed(1)}`;
+/** Includes the letter and "Sample" drawn on the pin, in that order, so the accessible name contains the visible label. */
+export const hazardAccessibleName = (h: HazardSummary) => {
+  const meta = CATEGORY_META[h.category];
+  const sample = h.sample ? " Sample:" : "";
+  return `${meta.letter}${sample} ${h.label || h.type}, ${meta.label.toLowerCase()}, ${HEIGHT_META[h.heightBand].label.toLowerCase()}, confidence ${h.confidence.toFixed(1)}`;
+};
