@@ -61,6 +61,8 @@ export default function VerifyPage() {
   const { detail, error: detailError, loading: detailLoading } = useHazardDetail(currentId, detailVersion(currentId));
   // Nothing can be voted on until its photo and details are on screen.
   const ready = !!detail && detail.id === currentId;
+  const measured = (m: number | null | undefined) =>
+    !ready ? (detailError ? "—" : "Loading…") : m != null ? formatLength(m) : "Not measured";
 
   const skip = useCallback(() => {
     if (!currentId) return;
@@ -137,16 +139,18 @@ export default function VerifyPage() {
               <p className="text-sm font-semibold text-white">
                 <span className="font-display text-2xl tabular-nums">{queue.length}</span> left to review
               </p>
-              <div
-                className="mt-1 h-1.5 overflow-hidden rounded-full bg-white/10"
-                role="progressbar"
-                aria-label="Hazards checked from this device"
-                aria-valuemin={0}
-                aria-valuemax={all.length}
-                aria-valuenow={checked}
-              >
-                <div className="h-full rounded-full bg-signal" style={{ width: `${all.length ? (checked / all.length) * 100 : 0}%` }} />
-              </div>
+              {all.length > 0 && (
+                <div
+                  className="mt-1 h-1.5 overflow-hidden rounded-full bg-white/10"
+                  role="progressbar"
+                  aria-label="Hazards checked from this device"
+                  aria-valuemin={0}
+                  aria-valuemax={all.length}
+                  aria-valuenow={checked}
+                >
+                  <div className="h-full rounded-full bg-signal" style={{ width: `${(checked / all.length) * 100}%` }} />
+                </div>
+              )}
               <p className="mt-1 text-xs text-muted">
                 {checked} of {all.length} checked from this device
               </p>
@@ -245,11 +249,11 @@ export default function VerifyPage() {
               </div>
               <div className="well px-3 py-2">
                 <dt className="eyebrow">Clearance</dt>
-                <dd className="mt-0.5 font-medium">{ready && detail.measurements?.clearanceM != null ? formatLength(detail.measurements.clearanceM) : "—"}</dd>
+                <dd className="mt-0.5 font-medium">{measured(detail?.measurements?.clearanceM)}</dd>
               </div>
               <div className="well px-3 py-2">
                 <dt className="eyebrow">Width left</dt>
-                <dd className="mt-0.5 font-medium">{ready && detail.measurements?.widthM != null ? formatLength(detail.measurements.widthM) : "—"}</dd>
+                <dd className="mt-0.5 font-medium">{measured(detail?.measurements?.widthM)}</dd>
               </div>
             </dl>
             <Link

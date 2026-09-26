@@ -42,11 +42,11 @@ function Metric({
           {ICONS[icon]}
         </svg>
       </span>
-      <div className="min-w-0">
-        <p className="eyebrow truncate">{label}</p>
-        <p className="font-display text-[1.75rem] font-bold leading-[1.05] tabular-nums text-white sm:text-[2rem]">{value}</p>
-        <p className="text-[11px] leading-snug text-muted sm:truncate">{note}</p>
-      </div>
+      <dl className="min-w-0">
+        <dt className="eyebrow truncate">{label}</dt>
+        <dd className="font-display text-[1.75rem] font-bold leading-[1.05] tabular-nums text-white sm:text-[2rem]">{value}</dd>
+        <dd className="text-[11px] leading-snug text-muted sm:truncate">{note}</dd>
+      </dl>
     </div>
   );
 }
@@ -60,22 +60,24 @@ function LiveMetric({ connection, lastEventAt }: { connection: Connection; lastE
       <span className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-signal/35 bg-signal/15 sm:flex" aria-hidden="true">
         <LiveDot connection={connection} />
       </span>
-      <div className="flex min-w-0 flex-1 items-center gap-2.5 sm:block">
-        <span className="sm:hidden">
-          <LiveDot connection={connection} />
-        </span>
-        <p className="eyebrow hidden sm:block">Stream</p>
-        <p role="status" className="font-display text-2xl font-bold uppercase leading-[1.05] text-white sm:text-[2rem]">
-          {STREAM_WORD[connection]}
-        </p>
-        <p className="ml-auto truncate text-[11px] text-muted sm:ml-0">
+      <dl className="flex min-w-0 flex-1 items-center gap-2.5 sm:block">
+        <dt className="flex items-center">
+          <span className="sm:hidden">
+            <LiveDot connection={connection} />
+          </span>
+          <span className="eyebrow sr-only sm:not-sr-only">Stream</span>
+        </dt>
+        <dd className="font-display text-2xl font-bold uppercase leading-[1.05] text-white sm:text-[2rem]">
+          <span role="status">{STREAM_WORD[connection]}</span>
+        </dd>
+        <dd className="ml-auto truncate text-[11px] text-muted sm:ml-0">
           {connection === "down"
             ? "Can’t reach the server · retrying"
             : lastEventAt
               ? `Updated ${relativeTime(new Date(lastEventAt).toISOString())}`
               : "Waiting for first update"}
-        </p>
-      </div>
+        </dd>
+      </dl>
     </div>
   );
 }
@@ -98,9 +100,14 @@ export default function MapPage() {
 
   // Metric strip, computed from what the page already holds (no extra endpoints).
   const midnight = new Date(now).setHours(0, 0, 0, 0);
-  const sampleCount = list.filter((h) => h.sample).length;
-  const lastHour = list.filter((h) => now - new Date(h.lastSeen).getTime() < HOUR).length;
-  const awaiting = list.filter((h) => !voted.has(h.id)).length;
+  const samples = (hs: typeof list) => hs.filter((h) => h.sample).length;
+  const sampleCount = samples(list);
+  // 0 to 1 h old; a lastSeen in the future (clock skew) doesn't count as recent.
+  const lastHour = list.filter((h) => {
+    const age = now - new Date(h.lastSeen).getTime();
+    return age >= 0 && age <= HOUR;
+  });
+  const awaiting = list.filter((h) => !voted.has(h.id));
   const clearedToday = [...cleared.values()].filter((t) => t >= midnight).length;
   const show = (n: number) => (loaded ? n : "—");
 
@@ -132,8 +139,20 @@ export default function MapPage() {
           value={show(list.length)}
           note={loaded ? `${sampleCount} sample · ${list.length - sampleCount} real · 5 km` : "Within 5 km"}
         />
-        <Metric icon="clock" tint="#13b9f2" label="Last hour" value={show(lastHour)} note="Reported or seen again" />
-        <Metric icon="eye" tint="#5aa7ff" label="Awaiting check" value={show(awaiting)} note="Not yet verified from this device" />
+        <Metric
+          icon="clock"
+          tint="#13b9f2"
+          label="Last hour"
+          value={show(lastHour.length)}
+          note={loaded ? `Reported or seen again · ${samples(lastHour)} sample` : "Reported or seen again"}
+        />
+        <Metric
+          icon="eye"
+          tint="#5aa7ff"
+          label="Awaiting check"
+          value={show(awaiting.length)}
+          note={loaded ? `Not yet verified here · ${samples(awaiting)} sample` : "Not yet verified from this device"}
+        />
         <Metric icon="check" tint="#9fb3c8" label="Cleared today" value={show(clearedToday)} note="Seen clearing live on this page" />
         <LiveMetric connection={connection} lastEventAt={lastEventAt} />
       </section>

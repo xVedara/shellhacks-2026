@@ -118,6 +118,6 @@ const base =
   "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50";
 /** Primary control: brand blue with navy text (4.7:1). */
 export const primaryButton = `${base} bg-blue text-navy hover:bg-[#3597f7]`;
-/** Secondary control: quiet glass. */
-export const secondaryButton = `${base} border border-edge bg-well text-white hover:border-signal/60 hover:bg-white/10`;
+/** Secondary control: quiet glass, border at 3:1+ so the control edge is visible. */
+export const secondaryButton = `${base} border border-control bg-well text-white hover:border-signal/60 hover:bg-white/10`;
 export const linkClass = "font-semibold text-signal underline underline-offset-4 hover:text-white";

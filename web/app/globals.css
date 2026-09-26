@@ -18,6 +18,7 @@
   --color-glass: rgb(20 34 54 / 0.62);
   --color-edge: rgb(148 170 196 / 0.18); /* hairline on glass */
   --color-well: rgb(255 255 255 / 0.045); /* recessed tile inside a glass panel */
+  --color-control: #6b819a; /* control borders: 4.1:1 on glass, 3.6:1 on the map (WCAG 1.4.11) */
   --font-sans: var(--font-body), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
   --font-display: var(--font-display-face), "Arial Narrow", ui-sans-serif, sans-serif;
 }
@@ -38,7 +39,7 @@ body {
   background-attachment: fixed;
 }
 
-/* One glass surface for every panel. */
+/* Shared frosted panel: the metric tiles, the side rail and the map frame all use it. */
 .glass {
   background: var(--color-glass);
   border: 1px solid var(--color-edge);
@@ -95,7 +96,6 @@ body {
 .leaflet-bar {
   border: 1px solid var(--color-edge) !important;
   border-radius: 0.75rem !important;
-  overflow: hidden;
   box-shadow: 0 6px 22px rgb(2 8 20 / 0.45) !important;
 }
 .leaflet-bar a,
@@ -109,6 +109,20 @@ body {
 }
 .leaflet-bar a:hover {
   background: rgb(20 40 64 / 0.95) !important;
+}
+/* No overflow clip on the bar (it would cut off the focus ring), so round the end buttons instead. */
+.leaflet-bar a:first-child {
+  border-top-left-radius: calc(0.75rem - 1px) !important;
+  border-top-right-radius: calc(0.75rem - 1px) !important;
+}
+.leaflet-bar a:last-child {
+  border-bottom-left-radius: calc(0.75rem - 1px) !important;
+  border-bottom-right-radius: calc(0.75rem - 1px) !important;
+}
+/* Lift the focused button so its neighbour doesn't paint over the ring. */
+.leaflet-bar a:focus-visible {
+  position: relative;
+  z-index: 1;
 }
 .leaflet-bar a.leaflet-disabled {
   color: var(--color-muted) !important;

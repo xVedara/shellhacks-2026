@@ -22,7 +22,7 @@ export function useLiveHazards() {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [recentlyAdded, setRecentlyAdded] = useState<string | null>(null);
-  /** Hazards this page saw leave the map live (remove or cleared upsert): id -> time. Client-side only. */
+  /** Hazards this page saw marked cleared live (cleared upserts only): id -> time. Client-side only. */
   const [cleared, setCleared] = useState<Map<string, number>>(new Map());
   const [lastEventAt, setLastEventAt] = useState<number | null>(null);
 
@@ -31,7 +31,8 @@ export function useLiveHazards() {
     let source: EventSource | null = null;
     let retry: ReturnType<typeof setTimeout> | undefined;
     let resyncTimer: ReturnType<typeof setTimeout> | undefined;
-    const session = createLivePins();
+    // Keep the first time a hazard was seen clearing; a replay after resync must not move it.
+    const session = createLivePins((id) => setCleared((c) => (c.has(id) ? c : new Map(c).set(id, Date.now()))));
     const revisions = new Map<string, number>();
     let epoch = 0;
 
@@ -94,8 +95,6 @@ export function useLiveHazards() {
         } catch {
           return;
         }
-        const goneId = evt.op === "remove" ? evt.id : evt.op === "upsert" && evt.hazard?.status === "cleared" ? evt.hazard.id : null;
-        if (goneId && session.pins.has(goneId)) setCleared((c) => new Map(c).set(goneId, Date.now()));
         setLastEventAt(Date.now());
         const added = session.note(evt);
         if (evt.op === "upsert" && evt.hazard?.id) revisions.set(evt.hazard.id, (revisions.get(evt.hazard.id) ?? 0) + 1);

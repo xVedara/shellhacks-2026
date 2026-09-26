@@ -71,3 +71,17 @@ test("a failed snapshot leaves events that already arrived", async () => {
   assert.equal(await pending, "fail");
   assert.equal(session.pins.get("a")?.type, "live");
 });
+
+test("only cleared upserts count as cleared, including ones that land mid-snapshot", async () => {
+  const cleared: string[] = [];
+  const session = createLivePins((id) => cleared.push(id));
+  const shot = deferred<HazardSummary[] | null>();
+  const pending = session.load(() => shot.promise);
+  session.note({ op: "upsert", hazard: { ...hazard("a", "snap"), status: "cleared" } });
+  session.note({ op: "remove", id: "b" });
+  session.note({ op: "upsert", hazard: { ...hazard("far", "x"), status: "cleared" } });
+  shot.resolve([hazard("a", "snap"), hazard("b", "snap")]);
+  assert.equal(await pending, "ok");
+  assert.deepEqual(cleared, ["a"]);
+  assert.equal(session.pins.size, 0);
+});
