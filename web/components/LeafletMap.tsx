@@ -37,7 +37,7 @@ function hazardIcon(h: HazardSummary, selected: boolean, highlighted: boolean) {
   const html =
     `<div class="ss-pin${selected ? " ss-pin--selected" : ""}${highlighted ? " ss-pin--new" : ""}">` +
     markerSvg(h, size, selected, true) +
-    (h.sample ? `<span class="ss-pin__sample">Sample</span>` : "") +
+    (h.sample ? ` <span class="ss-pin__sample">Sample</span>` : "") +
     `</div>`;
   return L.divIcon({ html, className: "ss-pin-wrap", iconSize: [size, size], iconAnchor: [size / 2, size / 2] });
 }
