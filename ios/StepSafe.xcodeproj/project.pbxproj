@@ -37,6 +37,7 @@
 		B84D6502AD809081542B6B52 /* SensorSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20F9BE3BE4FC4C1489A5352F /* SensorSession.swift */; };
 		B8E8D2CD56C7C422DA6B5236 /* PathGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE17BC878D94A712EC820C35 /* PathGuard.swift */; };
 		BC0C58275FAF04E9C059BF6C /* Tuning.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4271F6477FE33E5191E83C48 /* Tuning.swift */; };
+		BC3EDAE98CB363405C8F76FC /* CrossingMonteCarloTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9179013510196CB698160697 /* CrossingMonteCarloTests.swift */; };
 		BE120D23FEC5CCD503D3AFFC /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4A7EF0F08F24BA8163B05FEC /* Assets.xcassets */; };
 		BF748C8A273ACD6C4DC758FF /* PathGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F082091A4DDB2F07392C30FF /* PathGuardTests.swift */; };
 		C6F4A94F6EE71C8D21E45339 /* MapRulesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B340FE981BC9DFF3ABC653 /* MapRulesTests.swift */; };
@@ -72,6 +73,7 @@
 		6D1DE9518070C5FC011A66A4 /* ScoutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutView.swift; sourceTree = "<group>"; };
 		734358435B5F3C063F69C2E0 /* AlertPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlertPolicyTests.swift; sourceTree = "<group>"; };
 		77F4BF4AB0B6BCDE2D023E9D /* PhraseBookTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhraseBookTests.swift; sourceTree = "<group>"; };
+		9179013510196CB698160697 /* CrossingMonteCarloTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrossingMonteCarloTests.swift; sourceTree = "<group>"; };
 		931296A1A1F89F0D9B96705B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		9EBE1E5BD27CD71C4C7A7B96 /* TTSPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSPlayer.swift; sourceTree = "<group>"; };
 		A16E3AB89629CEEEBC438971 /* Geo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Geo.swift; sourceTree = "<group>"; };
@@ -102,6 +104,7 @@
 			isa = PBXGroup;
 			children = (
 				734358435B5F3C063F69C2E0 /* AlertPolicyTests.swift */,
+				9179013510196CB698160697 /* CrossingMonteCarloTests.swift */,
 				C712FB0F4C6D87FFC94B9508 /* CrossingScenarioBoxPolicyTests.swift */,
 				FF6AA8B3A6EDAB150F21873F /* CrossingScenarioTests.swift */,
 				143A8472B3B37B4061F1DDAA /* CrossingTests.swift */,
@@ -298,6 +301,7 @@
 				24E9C93544221CE03188C3E5 /* AlertPolicyTests.swift in Sources */,
 				58C7A0ED3A5D17A05087D674 /* BoxTracker.swift in Sources */,
 				97F6AC71C1733944276E8AE1 /* ClosingDetector.swift in Sources */,
+				BC3EDAE98CB363405C8F76FC /* CrossingMonteCarloTests.swift in Sources */,
 				221B4E0CFE4D2B215E8D24FC /* CrossingScenarioBoxPolicyTests.swift in Sources */,
 				09A66D5B22112C26ACF4AF02 /* CrossingScenarioTests.swift in Sources */,
 				9BB18CDBC93F4BACD14528CD /* CrossingTests.swift in Sources */,

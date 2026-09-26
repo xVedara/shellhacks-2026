@@ -60,9 +60,14 @@ struct BoxTracker {
     /// rollStepDeg from the anchor, growth must be re-established (5 samples over >= 0.8 s) before alerting.
     private var rollAnchor: Double?
     private(set) var rollStepAt = -Double.infinity
-    static let rollStepDeg = 5.0
-    /// Minimum R^2 of the growth fit before a vehicle may alert.
-    static let minGrowthFit = 0.8
+    static let rollStepDeg = 8.0 // gait roll (+-4 deg, 8 peak to peak) must not count as a step
+    /// Minimum significance of the growth slope (slope / its standard error) before a vehicle may alert.
+    static let minGrowthT = 3.0
+    /// Walking: at least this many growth samples over this long before a vehicle may alert.
+    static let walkingMinSamples = 5
+    static let walkingMinSpan = 1.0
+    /// Walking: the growth slope less this many standard errors must still leave an own approach >= 1.5 m/s.
+    static let pessimisticSE = 2.5
     /// Growth samples are skipped (and confirmations reset) while the head rolls faster than this (deg/s).
     static let maxRollRateDegPerSec = 15.0 // the per-frame un-roll does most of the work; gait roll stays under this
 
@@ -206,17 +211,25 @@ struct BoxTracker {
 
     mutating func reset() { tracks = []; lastRoll = nil; rollAnchor = nil; rollStepAt = -.infinity }
 
-    /// How well ln(angular height) follows a straight line in time (R^2 of the least-squares fit): a car driving
-    /// at the walker grows smoothly; jittery or partly clipped boxes (a head sweep, a roll) do not.
-    static func growthFit(_ samples: [(t: Double, ang: Double)]) -> Double {
-        guard samples.count >= 3, let t0 = samples.first?.t else { return 0 }
+    /// Significance of the growth: least-squares slope of ln(angular height) over time divided by its standard
+    /// error. A car driving at the walker grows clearly; jittery or partly clipped boxes (a head sweep, a roll)
+    /// give a slope within their noise. (R^2 >= 0.8 was too strict for fast cars with jittery boxes.)
+    static func growthT(_ samples: [(t: Double, ang: Double)]) -> Double {
+        guard let (slope, se) = growthSlope(samples) else { return 0 }
+        return se > 1e-9 ? slope / se : (slope > 0 ? .infinity : 0)
+    }
+
+    /// Least-squares slope of ln(angular height) over time and its standard error.
+    static func growthSlope(_ samples: [(t: Double, ang: Double)]) -> (slope: Double, se: Double)? {
+        guard samples.count >= 3, let t0 = samples.first?.t else { return nil }
         let xs = samples.map { $0.t - t0 }, ys = samples.map { log(max($0.ang, 1e-9)) }
         let n = Double(xs.count), mx = xs.reduce(0, +) / n, my = ys.reduce(0, +) / n
         let sxx = zip(xs, xs).map { ($0 - mx) * ($1 - mx) }.reduce(0, +)
-        let sxy = zip(xs, ys).map { ($0 - mx) * ($1 - my) }.reduce(0, +)
-        let syy = zip(ys, ys).map { ($0 - my) * ($1 - my) }.reduce(0, +)
-        guard sxx > 0, syy > 0 else { return 0 }
-        return sxy * sxy / (sxx * syy)
+        guard sxx > 0 else { return nil }
+        let slope = zip(xs, ys).map { ($0 - mx) * ($1 - my) }.reduce(0, +) / sxx
+        var ssr = 0.0
+        for (x, y) in zip(xs, ys) { let e: Double = y - (my + slope * (x - mx)); ssr += e * e }
+        return (slope, (ssr / max(n - 2, 1) / sxx).squareRoot())
     }
 
     /// d(ln x)/dt by least squares over the window (1/s; > 0 = growing = closing),
@@ -289,8 +302,12 @@ struct BoxTracker {
             if rollStepAt > (tr.samples.first?.t ?? rollStepAt) {
                 guard afterStep.count >= 5, let a = afterStep.first?.t, let b = afterStep.last?.t, b - a >= 0.8 else { continue }
             }
-            guard Self.growthFit(tr.samples) >= Self.minGrowthFit else { continue } // noisy sizes are not approach
+            guard Self.growthT(tr.samples) >= Self.minGrowthT else { continue } // growth not clearly above the noise
             let grewEveryTime = zip(tr.samples, tr.samples.dropFirst()).allSatisfy { $1.ang > $0.ang }
+            let walking = simd_length(walkerVelocity) > 0.3
+            // Walking: the walker's own approach makes every parked car grow, so the quick confirmations (two hits,
+            // or a few sweep samples) are off; the growth needs a longer look.
+            if walking && (tr.samples.count < Self.walkingMinSamples || span < Self.walkingMinSpan) { continue }
             guard (tr.samples.count >= 5 && span >= 0.8) || tracks[i].hits >= 2
                     || (tr.samples.count >= 3 && span >= 1.5 && grewEveryTime) else { continue }
             // Position: the last unclipped estimate, else (still entering from the side) direction x distance.
@@ -299,6 +316,18 @@ struct BoxTracker {
             var miss = Float(0)
             if let v = Self.velocity(tr.positions) {
                 miss = ClosingDetector.miss(p, v - walkerVelocity)
+                // While the walker moves, box growth mixes the walker's own approach with perspective (a parked
+                // car's side comes into view): the world track must agree that the object itself approaches.
+                let dist = simd_length(p)
+                if simd_length(walkerVelocity) > 0.3, dist > 0.1,
+                   simd_dot(v, -p / dist) < Tuning.vehicleMinClosingSpeedMps { continue }
+            } else if simd_length(walkerVelocity) > 0.3 {
+                continue // walking: no world track yet to confirm the growth
+            }
+            if simd_length(walkerVelocity) > 0.3, let (slope, se) = Self.growthSlope(tr.samples), let ang = tr.samples.last?.ang {
+                // Walking: even the pessimistic growth (slope - 2 SE) must leave an approach of the object's own.
+                let z = tr.heightM / (2 * tan(ang / 2))
+                if z * (slope - Self.pessimisticSE * se) - ego < Double(Tuning.vehicleMinClosingSpeedMps) { continue }
             }
             let decision = ClosingDetector.missDecision(miss: miss, ttc: Float(c.ttc), passCount: &tracks[i].passCount)
             out.append(ClosingObject(point: SIMD3(pos.x, 0.75, pos.y), range: simd_length(p), ahead: simd_dot(p, forward),

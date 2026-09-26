@@ -1,0 +1,127 @@
+import XCTest
+import simd
+
+/// Random-phase Monte Carlo for the YOLO vehicle path (ported from audit-s3e mc/mc3/wp): gait roll, yaw sway and
+/// box jitter start at random phases every run, drawn from fixed seeds, so the rates are reproducible.
+final class CrossingMonteCarloTests: XCTestCase {
+    typealias B = CrossingScenarioBoxPolicyTests
+    typealias S = CrossingScenarioTests
+
+    /// First non-passing alert in a run: the TRUE time to contact then, or nil.
+    static func firstAlertTTC(secs: Double, jitterPx: Double, rng: inout S.SplitMix, cars: (Double) -> [B.Car],
+                              cam: (Double) -> simd_float4x4, truth: (Double) -> Double) -> Double? {
+        var tracker = BoxTracker()
+        var lastCam: (t: Double, p: SIMD3<Float>)?
+        var t = 0.0
+        while t <= secs + 1e-9 {
+            let cm = cam(t)
+            let boxes = cars(t).compactMap { B.yoloBox($0, cam: cm, jitterPx: jitterPx, rng: &rng) }
+            let p = SIMD3(cm.columns.3.x, cm.columns.3.y, cm.columns.3.z)
+            var vel = SIMD2<Float>.zero
+            if let l = lastCam, t > l.t { vel = SIMD2(p.x - l.p.x, p.z - l.p.z) / Float(t - l.t) }
+            lastCam = (t, p)
+            _ = tracker.update(boxes, time: t, camera: B.info(cm))
+            let look = -B.rot(cm).columns.2
+            if tracker.assess(time: t, walker: SIMD2(p.x, p.z), walkerVelocity: vel, forward: simd_normalize(SIMD2(look.x, look.z)))
+                .contains(where: { !$0.passing }) { return truth(t) }
+            t += 0.2
+        }
+        return nil
+    }
+
+    struct Row { var ttcs: [Double]; var n: Int { ttcs.count }
+        func pct(_ f: (Double) -> Bool) -> Double { 100 * Double(ttcs.filter(f).count) / Double(n) }
+        var median: Double { ttcs.sorted()[n / 2] } // -1 = never alerted
+    }
+
+    /// Head-on car (lateral 0.5 m), true TTC 4.5 s at t = 0; walker walking or standing; random phases.
+    static func headOnRow(speed: Float, walk: Float, roll: Float, yaw: Float, sway: Float, jitter: Double, runs: Int, seed: UInt64) -> Row {
+        var rng = S.SplitMix(state: seed)
+        var out: [Double] = []
+        for _ in 0..<runs {
+            let ph = Double.random(in: 0..<(2 * .pi), using: &rng)
+            let closing = speed + walk, d0 = closing * 4.5
+            out.append(firstAlertTTC(secs: 4.2, jitterPx: jitter, rng: &rng,
+                cars: { t in [B.Car(center: SIMD3(0.5, 0, -(d0 - speed * Float(t)) - 2.25), heading: .pi / 2)] },
+                cam: { t in
+                    let bob = walk > 0 ? 0.03 * Float(sin(2 * .pi * 1.8 * t + ph)) : 0
+                    return B.head(SIMD3(sway * Float(sin(2 * .pi * 0.9 * t + ph)), 1.6 + bob, -walk * Float(t)),
+                                  yaw: yaw * Float(sin(2 * .pi * 0.4 * t + ph)), pitch: -10,
+                                  roll: roll * Float(sin(2 * .pi * 0.9 * t + ph + 0.7)))
+                },
+                truth: { t in (Double(d0) - Double(closing) * t) / Double(closing) }) ?? -1)
+        }
+        return Row(ttcs: out)
+    }
+
+    func testHeadOnCarUnderGaitRollAlwaysAlerts() {
+        // Item 1: walker 1.3 m/s, +-3 / +-4 deg gait roll, 1 px jitter: every run alerts with TTC >= 1.5 s.
+        for roll: Float in [3, 4] {
+            let r = Self.headOnRow(speed: 12, walk: 1.3, roll: roll, yaw: 0, sway: 0.02, jitter: 1, runs: 60, seed: UInt64(300 + roll))
+            print(String(format: "MONTECARLO head-on 12 m/s, walk 1.3, roll +-%.0f, 1 px: >=1.5 s %.0f%%, median %.2f s", roll, r.pct { $0 >= 1.5 }, r.median))
+            XCTAssertEqual(r.pct { $0 >= 1.5 }, 100, "roll +-\(roll)")
+        }
+    }
+
+    func testFastCarWithJitterAlertsEarlyEnough() {
+        // Item 2: 20 m/s car, +-2 deg roll, 3 px jitter: median first alert TTC >= 2.0 s, <= 10% of runs under 1.0 s.
+        for walk: Float in [0, 1.3] {
+            let r = Self.headOnRow(speed: 20, walk: walk, roll: 2, yaw: 0, sway: 0.02, jitter: 3, runs: 60, seed: UInt64(400 + walk * 10))
+            let under1 = r.pct { $0 < 1.0 } // includes never (-1)
+            print(String(format: "MONTECARLO head-on 20 m/s, walk %.1f, roll +-2, 3 px: median %.2f s, under 1.0 s %.0f%%, >=2.0 s %.0f%%",
+                         walk, r.median, under1, r.pct { $0 >= 2.0 }))
+            XCTAssertGreaterThanOrEqual(r.median, 2.0, "walk \(walk)")
+            XCTAssertLessThanOrEqual(under1, 10, "walk \(walk)")
+        }
+    }
+
+    func testWalkPastParkedCarsRarelyFalseAlerts() {
+        // Item 4: walking 1.3 m/s past parked cars, +-2 deg roll, +-30 deg yaw, 100 random-phase runs: <= 5%.
+        var parked: [B.Car] = []
+        for i in 0..<4 {
+            parked.append(B.Car(center: SIMD3(-6 - Float(i) * 5.5, 0, -2.2), heading: 0))
+            parked.append(B.Car(center: SIMD3(6 + Float(i) * 5.5, 0, -2.2), heading: 0))
+        }
+        parked.append(B.Car(center: SIMD3(-3, 0, -12), heading: 0.3))
+        var side: [B.Car] = []
+        for i in 0..<6 { side.append(B.Car(center: SIMD3(2.2, 0, -8 - Float(i) * 5.5), heading: .pi / 2)) }
+        for jit in [0.0, 1.0, 3.0] {
+            var rng = S.SplitMix(state: 500 + UInt64(jit))
+            var hits = 0
+            for _ in 0..<100 {
+                let ph = Double.random(in: 0..<(2 * .pi), using: &rng)
+                if Self.firstAlertTTC(secs: 8, jitterPx: jit, rng: &rng, cars: { _ in side + parked }, cam: { t in
+                    B.head(SIMD3(0.02 * Float(sin(2 * .pi * 0.9 * t + ph)), 1.6 + 0.03 * Float(sin(2 * .pi * 1.8 * t)), -1.3 * Float(t)),
+                           yaw: 30 * Float(sin(2 * .pi * 0.4 * t + ph)), pitch: -8, roll: 2 * Float(sin(2 * .pi * 0.9 * t + ph)))
+                }, truth: { $0 }) != nil { hits += 1 }
+            }
+            print(String(format: "MONTECARLO walk-past parked, roll +-2, yaw +-30, %.0f px: %d%% runs false-alert", jit, hits))
+            XCTAssertLessThanOrEqual(hits, 5, "jitter \(jit)")
+        }
+    }
+
+    func testParkedRollRigStaysSilentUnderRandomPhases() {
+        // Standing, head sweeping +-60 deg while rolling (ramp 2.5 deg/s, or a 12 deg step): 60 runs each, 0 alerts.
+        var parked: [B.Car] = []
+        for i in 0..<4 {
+            parked.append(B.Car(center: SIMD3(-6 - Float(i) * 5.5, 0, -2.2), heading: 0))
+            parked.append(B.Car(center: SIMD3(6 + Float(i) * 5.5, 0, -2.2), heading: 0))
+        }
+        parked.append(B.Car(center: SIMD3(-3, 0, -12), heading: 0.3))
+        for (name, roll) in [("ramp 2.5 deg/s", { (t: Double) in Float(-7.5 + 2.5 * t) }),
+                             ("step 12 deg", { (t: Double) in Float(min(max((t - 2) * 12, 0), 12)) })] {
+            for jit in [1.0, 3.0] {
+                var rng = S.SplitMix(state: 600 + UInt64(jit))
+                var hits = 0
+                for _ in 0..<60 {
+                    let ph = Double.random(in: 0..<(2 * .pi), using: &rng)
+                    if Self.firstAlertTTC(secs: 6, jitterPx: jit, rng: &rng, cars: { _ in parked }, cam: { t in
+                        B.head(SIMD3(0, 1.6, 0), yaw: Float(60 * sin(2 * .pi * 0.33 * t + ph)), pitch: -5, roll: roll(t))
+                    }, truth: { $0 }) != nil { hits += 1 }
+                }
+                print("MONTECARLO parked, sweep +-60 + roll \(name), \(Int(jit)) px: \(hits)/60 runs alert")
+                XCTAssertEqual(hits, 0, "\(name), jitter \(jit)")
+            }
+        }
+    }
+}

@@ -90,11 +90,25 @@ enum Tuning {
     static let p1MinPlaySeconds: Double = 0.8
     /// A newcomer must be this much more urgent (TTC) than the playing priority-1 hazard to cut it off.
     static let p1PreemptMarginSeconds: Double = 0.3
-    /// A priority 1 that would have less than this left to react after the playing clip may cut it off
-    /// (with p1MinPlaySeconds and p1PreemptMarginSeconds).
+    /// "Too late after the clip": a priority 1 that would have less than this left to react once the playing
+    /// clip ends may cut it off - a closing object over a drop-off at once, closing vs closing only after
+    /// p1MinPlaySeconds and with p1PreemptMarginSeconds. A drop-off never cuts closing words (it queues).
+    /// 0.6 s is tuned on the policy sims (curb walk, demo-3 sweep).
     static let p1LeadSeconds: Double = 0.6
+    /// A drop-off is priority 1 within dropUrgentDistance or under this time to contact at the walker's speed.
+    static let dropUrgentTTC: Float = 3.0
+    /// Drop-off tone length before its words (AlertManager's drop-off tone: 3 x 0.14 s).
+    static let dropOffToneSeconds: Double = 0.42
+    /// Words count as heard after this long audible.
+    static let heardWordsSeconds: Double = 0.6
+    /// A drop-off starting within this of the end of closing words is said as their follow-on ("Drop-off ahead.").
+    static let followOnSeconds: Double = 0.35
+    /// A deferred closing phrase is still worth saying this long after its object was last confirmed.
+    static let pendingClosingSeconds: Double = 2.0
     /// Closing object and drop-off both under this TTC: one combined phrase.
-    static let combinedTTCSeconds: Float = 2.0
+    static let combinedTTCSeconds: Float = 3.5
+    /// ...and the closing object's TTC is at most this much longer than the drop-off's.
+    static let combineSimilarTTCSeconds: Float = 0.6
     /// Walker speed floor for a drop-off's time to contact (distance / speed).
     static let minWalkerSpeedMps: Float = 0.5
     /// Report only objects whose predicted miss distance at closest approach is below this (they will

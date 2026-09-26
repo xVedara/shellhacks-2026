@@ -301,10 +301,14 @@ final class CrossingScenarioBoxPolicyTests: XCTestCase {
         var completed: Set<Int> = []
         /// Pre-emptions per (victim, cutter) identity pair.
         var preemptions: [String: Int] = [:]
-        /// When each spoken part becomes audible (after its tone): "closing" or "dropOff".
-        var words: [(t: Double, what: String)] = []
+        /// Each spoken part: when its words become audible (after the tone) and when they stop (end or cut).
+        var words: [(t: Double, what: String, end: Double)] = []
         var cuts: Int { preemptions.values.reduce(0, +) }
         func firstWords(_ what: String) -> Double? { words.first { $0.what == what }?.t }
+        /// First time `what` had >= heardWordsSeconds of audible words finished, or nil.
+        func heard(_ what: String) -> Double? {
+            words.first { $0.what == what && $0.end - $0.t >= Tuning.heardWordsSeconds }.map { $0.t + Tuning.heardWordsSeconds }
+        }
     }
 
     static func identity(_ d: Detection) -> Int { d.closing?.trackId ?? (d.kind == .dropOff ? -1 : -2) }
@@ -313,6 +317,7 @@ final class CrossingScenarioBoxPolicyTests: XCTestCase {
     /// combined phrase adds "Drop-off ahead." 1.05; drop-off = tone 0.4 + 1.75 + 0.1.
     static func duration(_ d: Detection) -> Double {
         if d.kind == .closing { return 0.15 + 1.45 + 0.1 + (d.closing?.dropOffPoint == nil ? 0 : 1.05) }
+        if d.followOn { return 1.05 + 0.1 } // "Drop-off ahead.", no tone
         return 0.4 + 1.75 + 0.1
     }
 
@@ -340,19 +345,25 @@ final class CrossingScenarioBoxPolicyTests: XCTestCase {
                 log.pinged[id] = t
             }
             let ws = walkerSpeed(t)
-            if let d = policy.next(confirmed, now: t, playing: playing, walkerSpeed: ws) {
+            if let d = policy.decide(confirmed, now: t, playing: playing, walkerSpeed: ws) {
                 if let p = playing, let victim = p.hazard {
                     policy.unmark(victim)
                     policy.noteCutOff(victim: victim, by: d, until: t + duration(d))
                     log.preemptions["\(identity(victim))>\(identity(d))", default: 0] += 1
+                    for i in log.words.indices where log.words[i].end > t { log.words[i].end = max(log.words[i].t, t) } // cut: words stop now
                 }
-                playing = AlertPolicy.Playing(priority: AlertPolicy.priority(d), hazard: d, endsAt: t + duration(d),
+                playing = AlertPolicy.Playing(priority: AlertPolicy.priority(d, walkerSpeed: ws), hazard: d, endsAt: t + duration(d),
                                               startedAt: t, ttcAtStart: AlertPolicy.ttc(d, walkerSpeed: ws))
                 policy.markAnnounced(d, now: t)
                 log.spoken.append((t, d))
-                let w0 = t + (d.kind == .closing ? 0.15 : 0.4)
-                log.words.append((w0, d.kind == .closing ? "closing" : "\(d.kind)"))
-                if d.closing?.dropOffPoint != nil { log.words.append((w0 + 1.45, "dropOff")) }
+                let w0 = t + (d.kind == .closing ? 0.15 : d.followOn ? 0 : Tuning.dropOffToneSeconds)
+                let end = t + duration(d) - 0.1
+                if d.closing?.dropOffPoint != nil {
+                    log.words.append((w0, "closing", w0 + 1.45))
+                    log.words.append((w0 + 1.45, "dropOff", end))
+                } else {
+                    log.words.append((w0, d.kind == .closing ? "closing" : "\(d.kind)", end))
+                }
             }
             t += 1.0 / hz
         }
@@ -368,8 +379,10 @@ final class CrossingScenarioBoxPolicyTests: XCTestCase {
                   closing: .init(speed: range / max(ttc, 0.01), ttc: ttc, label: label, trackId: id))
     }
 
-    static func dropAt(_ ahead: Float) -> Detection {
-        Detection(kind: .dropOff, point: SIMD3(0, 0, -ahead), ahead: ahead, lateral: 0, pointCount: 300)
+    /// A drop-off `ahead` metres ahead; `edgeZ` = its fixed world position (the same curb keeps its identity while
+    /// the walker approaches), default: straight ahead of a standing walker.
+    static func dropAt(_ ahead: Float, edgeZ: Float? = nil) -> Detection {
+        Detection(kind: .dropOff, point: SIMD3(0, 0, edgeZ ?? -ahead), ahead: ahead, lateral: 0, pointCount: 300)
     }
 
     /// <= 1 pre-emption per hazard pair, and every hazard that was spoken also played to the end at least once.
@@ -463,7 +476,7 @@ final class CrossingScenarioBoxPolicyTests: XCTestCase {
         // 1. Walker 1.3 m/s, drop-off 1.8 m ahead, cart at TTC 1.6 s: one combined phrase, heard to the end.
         let a = Self.simulate(secs: 4, walkerSpeed: { _ in 1.3 },
                               closing: { t in t < 1.5 ? Self.closingObj(7, ttc: Float(1.6 - t), range: Float(2.2 * (1.6 - t))) : nil },
-                              drop: { t in t < 1.3 ? Self.dropAt(Float(1.8 - 1.3 * t)) : nil })
+                              drop: { t in t < 1.3 ? Self.dropAt(Float(1.8 - 1.3 * t), edgeZ: -1.8) : nil })
         let combined = a.spoken.first.map { AlertPolicy.phrase($0.d) } ?? ""
         XCTAssertEqual(combined, "Object approaching, right. Drop-off ahead.")
         run("walker 1.3, drop-off 1.8 m + cart TTC 1.6 s", a, extra: combined.hasSuffix(AlertPolicy.dropOffAhead))
@@ -480,18 +493,14 @@ final class CrossingScenarioBoxPolicyTests: XCTestCase {
                 let dropAt = Double(k) * 0.125
                 let log = Self.simulate(secs: 5, walkerSpeed: { _ in ws },
                                         closing: { t in t < 2.8 ? Self.closingObj(5, ttc: Float(3 - t), range: Float(3.6 - 1.2 * t), label: nil) : nil },
-                                        drop: { t in t >= dropAt ? Self.dropAt(max(0.3, 2.5 - ws * Float(t - dropAt))) : nil })
+                                        drop: { t in t >= dropAt ? Self.dropAt(max(0.3, 2.5 - ws * Float(t - dropAt)), edgeZ: -9) : nil })
                 // Cart heard to the end while TTC >= 1 s: a cart utterance that was not cut, starting at TTC >= 1 + duration.
-                let cartHeard = log.spoken.enumerated().contains { i, e in
-                    guard e.d.closing?.trackId == 5 else { return false }
-                    let end = e.t + Self.duration(e.d)
-                    let cut = log.spoken.dropFirst(i + 1).first.map { $0.t < end } ?? false
-                    return !cut && (3 - end) >= 1.0
-                }
+                // Cart words heard in full (1.45 s, not cut) and finished while its TTC was still >= 1 s.
+                let cartHeard = log.words.contains { $0.what == "closing" && $0.end - $0.t >= 1.45 - 1e-6 && 3 - $0.end >= 1.0 }
                 let noPingPong = (log.preemptions.values.max() ?? 0) <= 1
                 // The drop-off starts 2.5 m ahead when it appears; its words must be heard before the edge.
-                let edge = dropAt + Double((2.5 - 0.3) / ws)
-                let dropHeard = (log.firstWords("dropOff") ?? 99) < edge
+                let edge = dropAt + Double(2.5 / ws)
+                let dropHeard = (log.heard("dropOff") ?? 99) <= edge
                 if cartHeard && noPingPong && dropHeard { demoOK += 1 } else {
                     print(String(format: "SCENARIO [policy] demo-3 ws %.1f drop at %.3f: cart heard %@, pre-emptions %@ :: %@  FAIL",
                                  ws, dropAt, cartHeard ? "yes" : "no", "\(log.preemptions)", Self.describe(log)))
@@ -532,7 +541,7 @@ final class CrossingScenarioBoxPolicyTests: XCTestCase {
                 guard t >= appear - 1e-9, t < appear + Double(ttc0) else { return nil }
                 let ttc = ttc0 - Float(t - appear)
                 return Self.closingObj(7, ttc: ttc, range: 1.5 * ttc, lateral: 0, label: "Person")
-            }, drop: { t in Self.dropAt(max(0.3, dropAhead - walker * Float(t))) })
+            }, drop: { t in Self.dropAt(max(0.3, dropAhead - walker * Float(t)), edgeZ: -dropAhead) })
         }
         let fast = scenarioA(appear: 0.1, ttc0: 0.9)
         let fastWords = fast.firstWords("closing") ?? 99
@@ -561,17 +570,17 @@ final class CrossingScenarioBoxPolicyTests: XCTestCase {
                     return Self.closingObj(3, ttc: ttc, range: 1.2 * ttc + 0.3, lateral: 0, label: "Person")
                 }, drop: { t in
                     let a = 4 - walk * Float(t)
-                    return a <= 3.0 - walk * 0.4 && a > 0.2 ? Self.dropAt(a) : nil
+                    return a <= 3.0 - walk * 0.4 && a > 0.2 ? Self.dropAt(a, edgeZ: -4) : nil
                 })
                 runs += 1
-                let w = log.firstWords("dropOff") ?? 99
-                if w < edge { ok += 1 } else {
+                let w = log.heard("dropOff") ?? 99 // >= 0.6 s of audible drop-off words, finished before the edge
+                if w <= edge { ok += 1 } else {
                     print(String(format: "SCENARIO [policy] curb walk %.1f m/s, person onset %.1f s: drop-off words %.2f, edge %.2f :: %@  FAIL",
                                  walk, onset, w, edge, Self.describe(log)))
                 }
             }
         }
-        print("SCENARIOS policy curb walk: \(ok)/\(runs) runs with the drop-off words before the edge")
+        print("SCENARIOS policy curb walk: \(ok)/\(runs) runs with >= 0.6 s of drop-off words heard before the edge")
         XCTAssertGreaterThanOrEqual(ok, 44)
     }
 
@@ -585,5 +594,56 @@ final class CrossingScenarioBoxPolicyTests: XCTestCase {
         XCTAssertNil(policy.next([.dropOff: drop], now: 0.5, playing: nil)) // drop-off counted as said
         policy.unmark(combo) // the combined phrase was cut off before its drop-off part
         XCTAssertEqual(policy.next([.dropOff: drop], now: 0.6, playing: nil)?.kind, .dropOff) // due again
+    }
+
+    // MARK: Deferred closing speech really queues (sol round 5)
+
+    func testDeferredClosingPhraseQueuesAndDrains() {
+        // A: closing object 1 speaks at t = 0 (clip 1.7 s). B: object 2 appears at 0.4 s, not urgent enough to cut
+        // A off, and leaves the camera view at 0.9 s. When the voice frees (1.7 s) B is still said (< 2 s since seen).
+        let log = Self.simulate(secs: 4, closing: { t in
+            if t < 0.4 { return Self.closingObj(1, ttc: 2.8 - Float(t), range: 4, lateral: -1) }
+            if t < 0.9 { return Self.closingObj(2, ttc: 2.9 - Float(t), range: 4.2, lateral: 1) }
+            return t < 1.2 ? Self.closingObj(1, ttc: 2.8 - Float(t), range: 3, lateral: -1) : nil
+        }, drop: { _ in nil })
+        let b = log.spoken.first { $0.d.closing?.trackId == 2 }?.t
+        print(String(format: "SCENARIO [policy] deferred closing B (left view at 0.90): spoken at %.2f :: %@%@", b ?? -1, Self.describe(log),
+                     (b ?? 99) <= 1.9 ? "  PASS" : "  FAIL"))
+        XCTAssertNotNil(b)
+        XCTAssertLessThanOrEqual(b ?? 99, 1.9)
+        XCTAssertEqual(log.cuts, 0) // it queued, it did not cut A off
+        // Only a more urgent closing object replaces the pending one; an older pending phrase expires after 2 s.
+        var policy = AlertPolicy()
+        let a = Self.closingObj(1, ttc: 2.5, range: 4)
+        let playingA = AlertPolicy.Playing(priority: 1, hazard: a, endsAt: 10, startedAt: 0, ttcAtStart: 2.5)
+        policy.markAnnounced(a, now: 0)
+        XCTAssertNil(policy.decide([.closing: Self.closingObj(2, ttc: 2.4, range: 4)], now: 0.2, playing: playingA))
+        XCTAssertEqual(policy.pending?.d.closing?.trackId, 2)
+        XCTAssertNil(policy.decide([.closing: Self.closingObj(3, ttc: 2.6, range: 4)], now: 0.3, playing: playingA))
+        XCTAssertEqual(policy.pending?.d.closing?.trackId, 2) // 3 is less urgent than 2 (aged 2.3 s): 2 stays
+        XCTAssertNil(policy.decide([.closing: Self.closingObj(4, ttc: 1.9, range: 3)], now: 0.4, playing: playingA))
+        XCTAssertEqual(policy.pending?.d.closing?.trackId, 4) // more urgent: replaces it
+        XCTAssertEqual(policy.decide([:], now: 1.5, playing: nil)?.closing?.trackId, 4) // voice free: out of view, still said
+        XCTAssertNil(policy.pending)
+        _ = policy.decide([.closing: Self.closingObj(5, ttc: 3, range: 5)], now: 2.0, playing: playingA)
+        XCTAssertNil(policy.decide([:], now: 4.1, playing: nil)) // 2.1 s since last seen: no longer worth saying
+    }
+
+    func testRepeatedClosingMayNotCutUnheardDropOff() {
+        var policy = AlertPolicy()
+        let person = Self.closingObj(8, ttc: 1.0, range: 1.5)
+        policy.markAnnounced(person, now: 0) // spoken once already
+        let drop = Self.dropAt(1.0, edgeZ: -3)
+        // The drop-off started 0.5 s ago: its words (after a 0.42 s tone) are not heard yet.
+        let early = AlertPolicy.Playing(priority: 1, hazard: drop, endsAt: 4.75, startedAt: 2.5, ttcAtStart: 2)
+        XCTAssertFalse(policy.mayStart(person, over: early, now: 3.0, walkerSpeed: 0.5))
+        // A first-time closing object may (its words would otherwise come too late).
+        XCTAssertTrue(policy.mayStart(Self.closingObj(9, ttc: 1.0, range: 1.5), over: early, now: 3.0, walkerSpeed: 0.5))
+        // Once 0.6 s of the drop-off's words were heard, the repeat may cut in.
+        let heard = AlertPolicy.Playing(priority: 1, hazard: drop, endsAt: 4.5, startedAt: 2.0, ttcAtStart: 2)
+        XCTAssertTrue(policy.mayStart(person, over: heard, now: 3.1, walkerSpeed: 0.5))
+        // A drop-off never cuts closing words.
+        let closingPlaying = AlertPolicy.Playing(priority: 1, hazard: person, endsAt: 5, startedAt: 0, ttcAtStart: 3)
+        XCTAssertFalse(policy.mayStart(Self.dropAt(0.3, edgeZ: -3), over: closingPlaying, now: 2, walkerSpeed: 1.3))
     }
 }

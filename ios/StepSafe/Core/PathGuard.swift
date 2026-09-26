@@ -41,6 +41,9 @@ struct Detection {
     var pointCount: Int
     /// Set for .closing only; then `ahead` is the object's horizontal distance (range), not the along-lane part.
     var closing: Closing? = nil
+    /// A drop-off spoken right after a closing phrase: just "Drop-off ahead.", no tone (it follows at once, as
+    /// the combined phrase's second half would).
+    var followOn = false
 
     struct Closing: Equatable {
         var speed: Float

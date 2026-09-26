@@ -205,7 +205,7 @@ final class AlertManager {
         guard isScanning else { return }
         lastAudioRetry = now
         audioReady = startAudio()
-        guard audioReady, let d = policy.next(latest, now: now, playing: playing, walkerSpeed: walkerSpeed) else { return }
+        guard audioReady, let d = policy.decide(latest, now: now, playing: playing, walkerSpeed: walkerSpeed) else { return }
         announce(d)
     }
 
@@ -268,7 +268,7 @@ final class AlertManager {
     func update(_ confirmed: [HazardKind: Detection]) {
         latest = confirmed
         pingNewClosing(confirmed)
-        if let d = policy.next(confirmed, now: now, playing: playing, walkerSpeed: walkerSpeed) {
+        if let d = policy.decide(confirmed, now: now, playing: playing, walkerSpeed: walkerSpeed) {
             announce(d)
         }
         drainNotices()
@@ -276,8 +276,9 @@ final class AlertManager {
 
     /// Haptic for every priority 1 (never-muted) alert.
     private func announce(_ d: Detection) {
-        let urgent = AlertPolicy.neverMuted(d)
-        if play(tone: Self.tone(for: d.kind), at: d.point, phrase: AlertPolicy.phrase(d), priority: AlertPolicy.priority(d), hazard: d) {
+        let urgent = AlertPolicy.neverMuted(d, walkerSpeed: walkerSpeed)
+        if play(tone: d.followOn ? nil : Self.tone(for: d.kind), at: d.point, phrase: AlertPolicy.phrase(d),
+                priority: AlertPolicy.priority(d, walkerSpeed: walkerSpeed), hazard: d) {
             policy.markAnnounced(d, now: now)
             if urgent { playHaptic() }
         } else if urgent, now - lastHapticOnly >= 2 {
