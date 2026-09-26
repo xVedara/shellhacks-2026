@@ -126,6 +126,11 @@ enum Tuning {
     static let vehicleMinConfidence: Float = 0.4
     /// Vehicles need a clearer closing speed: their distance comes from box size, which is noisy.
     static let vehicleMinClosingSpeedMps: Float = 1.5
+    /// A closing vehicle whose box spans the walker's heading (widened by the margin) within this range alerts even
+    /// when its box-centre miss says it passes (head-on in a parking aisle or driveway, no curb). Walks 18-16-49Z /
+    /// 18-19-51Z: 1 more nuisance tag of 34, FA/min unchanged.
+    static let vehicleInPathRangeM: Float = 6
+    static let vehicleInPathMarginM: Float = 1.0
 
     // MARK: Community map
     /// Passive walker downvotes (MapRules PassiveVoter). Off: a false downvote erases a real hazard.

@@ -389,13 +389,28 @@ struct BoxTracker {
                 let z = tr.heightM / (2 * tan(exp(meanLog) / 2))
                 if z * (slope - Self.pessimisticSE * se) - ego < Double(Tuning.vehicleMinClosingSpeedMps) { continue }
             }
-            let decision = ClosingDetector.missDecision(miss: miss, ttc: Float(c.ttc), passCount: &tracks[i].passCount)
+            var decision = ClosingDetector.missDecision(miss: miss, ttc: Float(c.ttc), passCount: &tracks[i].passCount)
+            // Head-on: the car's box spans the walker's heading within vehicleInPathRangeM. The miss from the box
+            // centre drifts outward as a turning car's side comes into view (Tesla, 18-16-49Z f725-736: miss 1.8-3.3 m,
+            // body 0.1-0.9 m off the path). The box span widened by vehicleInPathMarginM still covers the heading.
+            // Such a car counts with or without a curb.
+            let heading = simd_length(walkerVelocity) > 0.3 ? walkerVelocity : forward
+            if decision != .alert, Self.inPath(tr.bearing, range: simd_length(p), heading: heading) { decision = .alert }
             out.append(ClosingObject(point: SIMD3(pos.x, 0.75, pos.y), range: simd_length(p), ahead: simd_dot(p, forward),
                                      lateral: simd_dot(p, SIMD2(-forward.y, forward.x)), speed: Float(c.speed),
                                      ttc: Float(c.ttc), missM: miss, label: Self.spokenLabel(tr.label),
                                      trackId: 1_000_000 + tr.id, passing: decision != .alert))
         }
         return out
+    }
+
+    /// The heading (world xz) lies inside the world azimuth span `bearing` widened by vehicleInPathMarginM at `range`,
+    /// and range < vehicleInPathRangeM.
+    static func inPath(_ bearing: CGRect, range: Float, heading: SIMD2<Float>) -> Bool {
+        guard range < Tuning.vehicleInPathRangeM, simd_length(heading) > 1e-3 else { return false }
+        let h = unwrap(Double(atan2(heading.x, -heading.y)) * 180 / .pi, around: Double(bearing.midX))
+        let margin = Double(atan2(Tuning.vehicleInPathMarginM, max(range, 0.1))) * 180 / .pi
+        return h >= Double(bearing.minX) - margin && h <= Double(bearing.maxX) + margin
     }
 
     /// Least-squares world velocity over at least 3 positions spanning 0.4 s.
