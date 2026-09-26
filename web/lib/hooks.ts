@@ -2,26 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { API_URL, ApiError, GRAHAM_CENTER, api, getDeviceId, type HazardEvent, type HazardSummary } from "./api";
+import { createLivePins } from "./live-pins";
 
 export type Connection = "loading" | "live" | "reconnecting" | "down";
 
 const RETRY_MS = 5000;
-
-/** Apply one stream event to a pin map. Returns the id when it added a pin that was not there. */
-export function applyEvent(pins: Map<string, HazardSummary>, evt: HazardEvent): string | null {
-  if (evt.op === "remove") {
-    pins.delete(evt.id);
-    return null;
-  }
-  if (evt.op !== "upsert" || !evt.hazard?.id) return null;
-  if (evt.hazard.status === "cleared") {
-    pins.delete(evt.hazard.id);
-    return null;
-  }
-  const added = !pins.has(evt.hazard.id);
-  pins.set(evt.hazard.id, evt.hazard);
-  return added ? evt.hazard.id : null;
-}
 
 type LiveState = {
   hazards: Map<string, HazardSummary>;
@@ -43,14 +28,11 @@ export function useLiveHazards() {
     let source: EventSource | null = null;
     let retry: ReturnType<typeof setTimeout> | undefined;
     let resyncTimer: ReturnType<typeof setTimeout> | undefined;
-    // Source of truth for this subscription; React state gets a copy after each change.
-    let pins = new Map<string, HazardSummary>();
+    const session = createLivePins();
     const revisions = new Map<string, number>();
     let epoch = 0;
-    // Events received while a snapshot request is in flight, replayed on top of it.
-    let buffer: HazardEvent[] | null = null;
 
-    const publish = () => setLive({ hazards: new Map(pins), revisions: new Map(revisions), epoch });
+    const publish = () => setLive({ hazards: new Map(session.pins), revisions: new Map(revisions), epoch });
 
     const fetchSnapshot = async () => {
       try {
@@ -66,20 +48,13 @@ export function useLiveHazards() {
       }
     };
 
-    // Replace the pin set from a snapshot, then replay whatever the stream delivered meanwhile,
-    // so an older snapshot can never undo a newer upsert or remove.
     const load = async () => {
-      buffer = [];
-      const list = await fetchSnapshot();
-      const pending = buffer ?? [];
-      buffer = null;
-      if (cancelled || !list) return false;
-      pins = new Map(list.map((h) => [h.id, h]));
-      for (const evt of pending) applyEvent(pins, evt);
+      const result = await session.load(fetchSnapshot);
+      if (cancelled || result !== "ok") return result;
       epoch++;
       publish();
       setLoaded(true);
-      return true;
+      return "ok" as const;
     };
 
     // Resync on every open (first connect and each reconnect): events sent while we were not
@@ -87,9 +62,10 @@ export function useLiveHazards() {
     // stream is up, retry with backoff (1 s .. 30 s) instead of claiming the server is down.
     const resync = async (attempt = 0) => {
       clearTimeout(resyncTimer);
-      const ok = await load();
-      if (cancelled || source?.readyState !== EventSource.OPEN) return;
-      if (ok) setConnection("live");
+      const result = await load();
+      if (cancelled || result === "stale") return;
+      if (source?.readyState !== EventSource.OPEN) return;
+      if (result === "ok") setConnection("live");
       else {
         setConnection("reconnecting");
         resyncTimer = setTimeout(() => resync(attempt + 1), Math.min(30_000, 1000 * 2 ** attempt));
@@ -114,8 +90,7 @@ export function useLiveHazards() {
         } catch {
           return;
         }
-        buffer?.push(evt);
-        const added = applyEvent(pins, evt);
+        const added = session.note(evt);
         if (evt.op === "upsert" && evt.hazard?.id) revisions.set(evt.hazard.id, (revisions.get(evt.hazard.id) ?? 0) + 1);
         if (added) setRecentlyAdded(added);
         publish();
@@ -124,8 +99,10 @@ export function useLiveHazards() {
 
     // First contact: nothing to show until /hazards/near answers, so this is the "down" state.
     const start = async () => {
-      if (await load()) connect();
-      else if (!cancelled) {
+      const result = await load();
+      if (cancelled || result === "stale") return;
+      if (result === "ok") connect();
+      else {
         setConnection("down");
         retry = setTimeout(start, RETRY_MS);
       }
