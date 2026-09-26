@@ -381,9 +381,12 @@ struct BoxTracker {
             } else if walking {
                 continue // walking: no world track yet to confirm the growth
             }
-            if walking, let (slope, se) = Self.growthSlope(tr.samples), let ang = tr.samples.last?.ang {
+            if walking, let (slope, se) = Self.growthSlope(tr.samples) { // nil under 3 samples
                 // Walking: even the pessimistic growth (slope - 2.5 SE) must leave an approach of the object's own.
-                let z = tr.heightM / (2 * tan(ang / 2))
+                // The slope is the window's middle rate: pair it with zMid as closing() does (the last sample's
+                // distance under-reads a close, fast-growing car by 30-60%: a head-on car in a parking aisle).
+                let meanLog = tr.samples.map { log(max($0.ang, 1e-9)) }.reduce(0, +) / Double(tr.samples.count)
+                let z = tr.heightM / (2 * tan(exp(meanLog) / 2))
                 if z * (slope - Self.pessimisticSE * se) - ego < Double(Tuning.vehicleMinClosingSpeedMps) { continue }
             }
             let decision = ClosingDetector.missDecision(miss: miss, ttc: Float(c.ttc), passCount: &tracks[i].passCount)

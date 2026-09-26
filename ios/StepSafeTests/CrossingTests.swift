@@ -290,6 +290,32 @@ final class CrossingTests: XCTestCase {
         }
     }
 
+    func testWalkingIntoSlowHeadOnCarAlerts() {
+        // Parking aisle (recording 18-16-49Z f724): walking 1.1 m/s at a car creeping head-on at 2 m/s from 14 m,
+        // 0.5 m off the walker's line. The walking pessimistic slope must use zMid, not the last sample's distance,
+        // or it never alerts. A car that only creeps (1 m/s) or is parked stays silent. Head still, YOLO at 5 Hz.
+        for (own, expect) in [(Float(2), true), (1, false), (0, false)] {
+            var tracker = BoxTracker()
+            var lastCam: (t: Double, p: SIMD3<Float>)?
+            var vel = SIMD2<Float>.zero
+            var alerted = false
+            for i in 0...40 {
+                let t = Double(i) * 0.2
+                let walker = SIMD3<Float>(0, 1.6, -1.1 * Float(t)), carZ = -14 + own * Float(t)
+                if walker.z - carZ < 2.5 { break }
+                let cam = camera(walker, pitchDeg: 0)
+                var (box, c) = carBox(SIMD3(0.5, 0, carZ), cam: cam)
+                c.position = walker // world positions, not camera-relative: the walker's own speed stays out of the car's
+                if let l = lastCam, t > l.t { vel = vel * 0.5 + 0.5 * SIMD2(walker.x - l.p.x, walker.z - l.p.z) / Float(t - l.t) }
+                lastCam = (t, walker)
+                _ = tracker.update(box.map { [$0] } ?? [], time: t, camera: c)
+                alerted = alerted || tracker.assess(time: t, walker: SIMD2(walker.x, walker.z), walkerVelocity: vel,
+                                                    forward: SIMD2(0, -1)).contains { !$0.passing }
+            }
+            XCTAssertEqual(alerted, expect, "car own speed \(own) m/s")
+        }
+    }
+
     func testStaticObjectsWhileHeadYawsDoNotClose() {
         // A parked car 10 m ahead while the head turns 20 or 40 deg/s toward the frame edge: angular height
         // is unchanged by rotation, so no closing (pixel height would grow by 1/cos).
