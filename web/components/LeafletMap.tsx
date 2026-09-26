@@ -8,7 +8,7 @@ import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { CircleMarker, MapContainer, Marker, Polyline, TileLayer, Tooltip, ZoomControl, useMap } from "react-leaflet";
 import type { HazardSummary } from "@/lib/api";
 import { hazardAccessibleName, markerSize, markerSvg } from "@/lib/marker";
-import { sameHazardMarker } from "@/lib/pin-equal";
+import { sameHazardMarker, type HazardMarkerProps } from "@/lib/pin-equal";
 
 export type MapProps = {
   hazards: HazardSummary[];
@@ -123,13 +123,7 @@ const HazardMarker = memo(function HazardMarker({
   highlighted,
   compact,
   onSelect,
-}: {
-  hazard: HazardSummary;
-  selected: boolean;
-  highlighted: boolean;
-  compact?: boolean;
-  onSelect?: (id: string) => void;
-}) {
+}: HazardMarkerProps) {
   const ref = useRef<L.Marker>(null);
   const name = hazardAccessibleName(h);
   const icon = useMemo(() => hazardIcon(h, selected, highlighted), [h, selected, highlighted]);

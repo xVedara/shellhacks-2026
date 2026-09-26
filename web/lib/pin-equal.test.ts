@@ -29,9 +29,38 @@ test("same pin data skips a marker redraw", () => {
   assert.equal(sameHazardMarker(props(), props()), true);
 });
 
-test("a new object with the same fields still skips a redraw", () => {
-  assert.equal(sameHazardMarker(props(), props({ confidence: 2 })), true);
-});
+// Each case changes one field HazardMarker draws or one non-hazard prop.
+const hazardChanges: [string, Partial<HazardSummary>][] = [
+  ["id", { id: "h2" }],
+  ["lat", { lat: 25.76 }],
+  ["lng", { lng: -80.38 }],
+  ["category", { category: "permanent" }],
+  ["heightBand", { heightBand: "head" }],
+  ["confidence", { confidence: 3 }],
+  ["sample", { sample: true }],
+  ["label", { label: "bin" }],
+  ["type", { type: "cone" }],
+  ["status", { status: "cleared" }],
+];
+
+for (const [field, over] of hazardChanges) {
+  test(`${field} change forces a redraw`, () => {
+    assert.equal(sameHazardMarker(props(), props(over)), false);
+  });
+}
+
+const markerPropChanges: [string, Partial<HazardMarkerProps>][] = [
+  ["selected", { selected: true }],
+  ["highlighted", { highlighted: true }],
+  ["compact", { compact: true }],
+  ["onSelect", { onSelect: () => {} }],
+];
+
+for (const [field, rest] of markerPropChanges) {
+  test(`${field} change forces a redraw`, () => {
+    assert.equal(sameHazardMarker(props(), props({}, rest)), false);
+  });
+}
 
 test("confidence, selection, and highlight each force a redraw", () => {
   assert.equal(sameHazardMarker(props(), props({ confidence: 3 })), false);
