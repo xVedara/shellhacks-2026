@@ -6,7 +6,7 @@ import dynamic from "next/dynamic";
 const Map = dynamic(() => import("./LeafletMap"), {
   ssr: false,
   loading: () => (
-    <div className="flex h-full w-full items-center justify-center bg-navy-2 text-muted" role="status">
+    <div className="flex h-full w-full items-center justify-center bg-sunken text-ink-3" role="status">
       Loading map…
     </div>
   ),

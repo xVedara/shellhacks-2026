@@ -60,14 +60,14 @@ export function HazardHeading({
 }) {
   return (
     <div className="flex items-start gap-3">
-      <PinTile hazard={hazard} size={48} />
+      <PinTile hazard={hazard} size={44} />
       <div className="min-w-0">
-        <Tag className="font-display text-[1.7rem] font-bold uppercase leading-[1.05] tracking-wide text-white">
+        <Tag className="text-[18px] font-semibold leading-snug text-heading">
           {hazard.label || typeDisplayName(hazard.type, taxonomy)} {hazard.sample && <SampleBadge />}
         </Tag>
-        <p className="mt-1 text-sm text-muted">
+        <p className="mt-0.5 text-[13px] text-ink-3">
           {CATEGORY_META[hazard.category].label} · {HEIGHT_META[hazard.heightBand].label} · type “{typeDisplayName(hazard.type, taxonomy)}”
-          {hazard.status === "cleared" && <strong className="ml-1 text-white">· Cleared</strong>}
+          {hazard.status === "cleared" && <strong className="ml-1 font-semibold text-ink">· Cleared</strong>}
         </p>
       </div>
     </div>
@@ -85,7 +85,7 @@ export function Crop({
 }) {
   if (!hazard.crop)
     return (
-      <div className={`flex h-36 w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-edge bg-well text-sm text-muted ${className}`}>
+      <div className={`flex h-36 w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-line bg-sunken text-[13px] text-ink-3 ${className}`}>
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M3 3l18 18M9.5 5h5l1.5 2H19a2 2 0 0 1 2 2v8.5M17.5 19H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.5M9.9 10.2a3 3 0 0 0 4 4" />
         </svg>
@@ -97,7 +97,7 @@ export function Crop({
     <img
       src={cropSrc(hazard.crop)}
       alt={`Camera crop of the reported ${hazard.label || typeDisplayName(hazard.type, taxonomy)}`}
-      className={`w-full rounded-xl border border-edge bg-black/30 object-contain ${className}`}
+      className={`w-full rounded-lg border border-line bg-sunken object-contain ${className}`}
     />
   );
 }
@@ -105,7 +105,7 @@ export function Crop({
 export default function HazardDetail({ hazard, taxonomy }: { hazard: Detail; taxonomy?: readonly HazardType[] | null }) {
   const m = hazard.measurements;
   return (
-    <div className="space-y-4 text-white">
+    <div className="space-y-4 text-ink">
       <HazardHeading hazard={hazard} taxonomy={taxonomy} />
       {hazard.sample && (
         <Notice tone="info" title="Sample hazard">
@@ -114,57 +114,57 @@ export default function HazardDetail({ hazard, taxonomy }: { hazard: Detail; tax
       )}
       <Crop hazard={hazard} className="max-h-72" taxonomy={taxonomy} />
 
-      <dl className="grid grid-cols-2 gap-2 text-sm">
-        <div className="well px-3 py-2">
-          <dt className="eyebrow">Clearance height</dt>
-          <dd className="mt-0.5 font-medium">{m?.clearanceM != null ? formatLength(m.clearanceM) : "Not measured"}</dd>
+      <dl className="grid grid-cols-2 overflow-hidden rounded-lg border border-line text-[13px] [&>div:nth-child(odd)]:border-r [&>div]:border-line [&>div:nth-child(n+3)]:border-t">
+        <div className="px-3 py-2">
+          <dt className="label">Clearance height</dt>
+          <dd className="mt-0.5 font-medium text-ink">{m?.clearanceM != null ? formatLength(m.clearanceM) : "Not measured"}</dd>
         </div>
-        <div className="well px-3 py-2">
-          <dt className="eyebrow">Remaining sidewalk width</dt>
-          <dd className="mt-0.5 font-medium">{m?.widthM != null ? formatLength(m.widthM) : "Not measured"}</dd>
+        <div className="px-3 py-2">
+          <dt className="label">Remaining sidewalk width</dt>
+          <dd className="mt-0.5 font-medium text-ink">{m?.widthM != null ? formatLength(m.widthM) : "Not measured"}</dd>
         </div>
-        <div className="well px-3 py-2">
-          <dt className="eyebrow">Confidence</dt>
-          <dd className="mt-0.5 font-medium">{hazard.confidence.toFixed(1)} (cleared below −2)</dd>
+        <div className="px-3 py-2">
+          <dt className="label">Confidence</dt>
+          <dd className="mt-0.5 font-medium text-ink">{hazard.confidence.toFixed(1)} (cleared below −2)</dd>
         </div>
-        <div className="well px-3 py-2">
-          <dt className="eyebrow">Severity</dt>
-          <dd className="mt-0.5 font-medium">{hazard.severity} of 3</dd>
+        <div className="px-3 py-2">
+          <dt className="label">Severity</dt>
+          <dd className="mt-0.5 font-medium text-ink">{hazard.severity} of 3</dd>
         </div>
-        <div className="well px-3 py-2">
-          <dt className="eyebrow">Last seen</dt>
-          <dd className="mt-0.5 font-medium">
+        <div className="px-3 py-2">
+          <dt className="label">Last seen</dt>
+          <dd className="mt-0.5 font-medium text-ink">
             <When iso={hazard.lastSeen} />
           </dd>
         </div>
-        <div className="well px-3 py-2">
-          <dt className="eyebrow">Expires</dt>
-          <dd className="mt-0.5 font-medium">
-            <When iso={hazard.expiresAt} /> <span className="text-muted">({CATEGORY_META[hazard.category].lifespan} without an upvote)</span>
+        <div className="px-3 py-2">
+          <dt className="label">Expires</dt>
+          <dd className="mt-0.5 font-medium text-ink">
+            <When iso={hazard.expiresAt} /> <span className="font-normal text-ink-3">({CATEGORY_META[hazard.category].lifespan} without an upvote)</span>
           </dd>
         </div>
-        <div className="well px-3 py-2">
-          <dt className="eyebrow">First reported</dt>
-          <dd className="mt-0.5 font-medium">{dateTime(hazard.createdAt)}</dd>
+        <div className="px-3 py-2">
+          <dt className="label">First reported</dt>
+          <dd className="mt-0.5 font-medium text-ink">{dateTime(hazard.createdAt)}</dd>
         </div>
-        <div className="well px-3 py-2">
-          <dt className="eyebrow">Spoken in Spanish</dt>
-          <dd lang="es" className="mt-0.5 font-medium">{hazard.spokenLabel_es || "—"}</dd>
+        <div className="px-3 py-2">
+          <dt className="label">Spoken in Spanish</dt>
+          <dd lang="es" className="mt-0.5 font-medium text-ink">{hazard.spokenLabel_es || "—"}</dd>
         </div>
       </dl>
 
       <section aria-labelledby={`pending-${hazard.id}`}>
-        <h3 id={`pending-${hazard.id}`} className="eyebrow mb-1.5">
+        <h3 id={`pending-${hazard.id}`} className="mb-1.5 text-[13px] font-semibold text-heading">
           Pending reclassifications
         </h3>
         {hazard.pendingReclassifications.length === 0 ? (
-          <p className="text-sm text-muted">None. A change applies when {RECLASSIFY_THRESHOLD} people propose it.</p>
+          <p className="text-[13px] text-ink-3">None. A change applies when {RECLASSIFY_THRESHOLD} people propose it.</p>
         ) : (
-          <ul className="space-y-1 text-sm">
+          <ul className="space-y-1 text-[13px]">
             {hazard.pendingReclassifications.map((p, i) => (
               <li key={i}>
                 Change to{" "}
-                <strong>
+                <strong className="font-semibold">
                   {[p.type && `type “${typeDisplayName(p.type, taxonomy)}”`, p.category && CATEGORY_META[p.category].label.toLowerCase(), p.heightBand && HEIGHT_META[p.heightBand].label.toLowerCase()]
                     .filter(Boolean)
                     .join(", ")}
@@ -177,31 +177,31 @@ export default function HazardDetail({ hazard, taxonomy }: { hazard: Detail; tax
       </section>
 
       <section aria-labelledby={`votes-${hazard.id}`}>
-        <h3 id={`votes-${hazard.id}`} className="eyebrow mb-1.5">
+        <h3 id={`votes-${hazard.id}`} className="mb-1.5 text-[13px] font-semibold text-heading">
           Vote history ({hazard.votes.length})
         </h3>
         {hazard.votes.length === 0 ? (
-          <p className="text-sm text-muted">No votes yet.</p>
+          <p className="text-[13px] text-ink-3">No votes yet.</p>
         ) : (
-          <div className="scroll-quiet max-h-64 overflow-auto rounded-xl border border-edge">
-            <table className="w-full text-left text-sm">
-              <thead className="sticky top-0 bg-navy-2 text-xs uppercase tracking-wider text-muted">
+          <div className="scroll-quiet max-h-64 overflow-auto rounded-lg border border-line">
+            <table className="w-full text-left text-[13px]">
+              <thead className="sticky top-0 bg-sunken text-[12px] text-ink-2">
                 <tr>
-                  <th scope="col" className="px-2 py-1">When</th>
-                  <th scope="col" className="px-2 py-1">Vote</th>
-                  <th scope="col" className="px-2 py-1">From</th>
-                  <th scope="col" className="px-2 py-1 text-right">Weight</th>
+                  <th scope="col" className="px-3 py-1.5 font-medium">When</th>
+                  <th scope="col" className="px-3 py-1.5 font-medium">Vote</th>
+                  <th scope="col" className="px-3 py-1.5 font-medium">From</th>
+                  <th scope="col" className="px-3 py-1.5 text-right font-medium">Weight</th>
                 </tr>
               </thead>
               <tbody>
                 {[...hazard.votes].reverse().map((v, i) => (
-                  <tr key={i} className="border-t border-edge">
-                    <td className="px-2 py-1">
+                  <tr key={i} className="border-t border-line">
+                    <td className="px-3 py-1.5 text-ink-2">
                       <When iso={v.at} />
                     </td>
-                    <td className="px-2 py-1 font-semibold">{v.vote === "up" ? "▲ Still there" : "▼ Gone"}</td>
-                    <td className="px-2 py-1 capitalize">{v.source}</td>
-                    <td className="px-2 py-1 text-right tabular-nums">{v.weight.toFixed(2)}</td>
+                    <td className="px-3 py-1.5 font-medium">{v.vote === "up" ? "▲ Still there" : "▼ Gone"}</td>
+                    <td className="px-3 py-1.5 capitalize">{v.source}</td>
+                    <td className="px-3 py-1.5 text-right tabular-nums">{v.weight.toFixed(2)}</td>
                   </tr>
                 ))}
               </tbody>

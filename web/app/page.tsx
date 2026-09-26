@@ -4,13 +4,13 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import HazardDetail, { useHazardDetail } from "@/components/HazardDetail";
 import Map from "@/components/Map";
-import { Legend, LiveDot, Notice, PinTile, SampleBadge, secondaryButton } from "@/components/ui";
+import { Legend, LiveDot, Notice, PageBar, PanelHead, PinTile, SampleBadge, linkClass, primaryButton, secondaryButton } from "@/components/ui";
 import { API_URL, CATEGORY_META, GRAHAM_CENTER, HEIGHT_META, getVotedIds, relativeTime, typeDisplayName } from "@/lib/api";
 import { useLiveHazards, useNow, useTaxonomy, type Connection } from "@/lib/hooks";
 
 const HOUR = 3_600_000;
 
-// Small stroke icons for the metric strip (drawn for this app).
+// Small stroke icons for the metric tiles (drawn for this app).
 const ICONS = {
   hazard: <path d="M12 3.5 2.8 19.5h18.4L12 3.5Zm0 6v4.5m0 2.6v.1" />,
   clock: <path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0-13v4.6l3 1.8" />,
@@ -18,59 +18,55 @@ const ICONS = {
   check: <path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm-4-9.2 2.7 2.7L16.2 9" />,
 };
 
-function Metric({
-  icon,
-  tint,
-  label,
-  value,
-  note,
-}: {
-  icon: keyof typeof ICONS;
-  tint: string;
-  label: string;
-  value: React.ReactNode;
-  note: string;
-}) {
+/** Tinted icon square; the tint is decoration, the label beside it carries the meaning. */
+function IconSquare({ tint, children }: { tint: string; children: React.ReactNode }) {
   return (
-    <div className="glass flex min-w-0 items-center gap-3 px-3.5 py-2.5 sm:py-3">
-      <span
-        className="hidden h-10 w-10 shrink-0 sm:flex items-center justify-center rounded-xl"
-        style={{ background: `color-mix(in srgb, ${tint} 16%, transparent)`, color: tint, border: `1px solid color-mix(in srgb, ${tint} 35%, transparent)` }}
-        aria-hidden="true"
-      >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <span
+      className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-md sm:flex"
+      style={{ background: `color-mix(in srgb, ${tint} 14%, var(--card))`, color: tint }}
+      aria-hidden="true"
+    >
+      {children}
+    </span>
+  );
+}
+
+function Metric({ icon, tint, label, value, note }: { icon: keyof typeof ICONS; tint: string; label: string; value: React.ReactNode; note: string }) {
+  return (
+    <div className="panel flex min-w-0 items-start gap-3 px-3.5 py-3">
+      <IconSquare tint={tint}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
           {ICONS[icon]}
         </svg>
-      </span>
+      </IconSquare>
       <dl className="min-w-0">
-        <dt className="eyebrow truncate">{label}</dt>
-        <dd className="font-display text-[1.75rem] font-bold leading-[1.05] tabular-nums text-white sm:text-[2rem]">{value}</dd>
-        <dd className="text-[11px] leading-snug text-muted sm:truncate">{note}</dd>
+        <dt className="truncate text-[13px] text-ink-2">{label}</dt>
+        <dd className="text-[20px] font-semibold leading-tight tabular-nums text-heading">{value}</dd>
+        <dd className="line-clamp-2 text-[12px] leading-snug text-ink-3">{note}</dd>
       </dl>
     </div>
   );
 }
 
-// One word so the tile never wraps; the note line carries the detail.
 const STREAM_WORD: Record<Connection, string> = { loading: "Connecting", live: "Live", reconnecting: "Paused", down: "Offline" };
 
 function LiveMetric({ connection, lastEventAt }: { connection: Connection; lastEventAt: number | null }) {
   return (
-    <div className="glass col-span-2 flex min-w-0 items-center gap-3 px-3.5 py-2 sm:col-span-1 sm:py-3">
-      <span className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-signal/35 bg-signal/15 sm:flex" aria-hidden="true">
+    <div className="panel col-span-2 flex min-w-0 items-start gap-3 px-3.5 py-3 sm:col-span-1">
+      <IconSquare tint="var(--ok)">
         <LiveDot connection={connection} />
-      </span>
+      </IconSquare>
       <dl className="flex min-w-0 flex-1 items-center gap-2.5 sm:block">
-        <dt className="flex items-center">
+        <dt className="flex items-center gap-2 text-[13px] text-ink-2">
           <span className="sm:hidden">
             <LiveDot connection={connection} />
           </span>
-          <span className="eyebrow sr-only sm:not-sr-only">Stream</span>
+          <span className="sr-only sm:not-sr-only">Stream</span>
         </dt>
-        <dd className="font-display text-2xl font-bold uppercase leading-[1.05] text-white sm:text-[2rem]">
+        <dd className="text-[20px] font-semibold leading-tight text-heading">
           <span role="status">{STREAM_WORD[connection]}</span>
         </dd>
-        <dd className="ml-auto truncate text-[11px] text-muted sm:ml-0">
+        <dd className="ml-auto line-clamp-2 text-[12px] leading-snug text-ink-3 sm:ml-0">
           {connection === "down"
             ? "Can’t reach the server · retrying"
             : lastEventAt
@@ -81,6 +77,8 @@ function LiveMetric({ connection, lastEventAt }: { connection: Connection; lastE
     </div>
   );
 }
+
+const OSM_KEY = "OpenStreetMap layer: crossings (white), curbs (grey), tactile paving (yellow). Data © OpenStreetMap contributors, ODbL.";
 
 export default function MapPage() {
   const { hazards, connection, loaded, error, recentlyAdded, detailVersion, cleared, lastEventAt } = useLiveHazards();
@@ -130,201 +128,191 @@ export default function MapPage() {
   }, [selectedId]);
 
   return (
-    <div className="flex flex-1 flex-col gap-3 p-3 lg:min-h-0 lg:p-4">
-      <h1 className="sr-only">Live hazard map</h1>
-      <section aria-label="Summary" className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <Metric
-          icon="hazard"
-          tint="#ff7900"
-          label="Active hazards"
-          value={show(list.length)}
-          note={loaded ? `${sampleCount} sample · ${list.length - sampleCount} real · 5 km` : "Within 5 km"}
-        />
-        <Metric
-          icon="clock"
-          tint="#13b9f2"
-          label="Last hour"
-          value={show(lastHour.length)}
-          note={loaded ? `Reported or seen again · ${samples(lastHour)} sample` : "Reported or seen again"}
-        />
-        <Metric
-          icon="eye"
-          tint="#5aa7ff"
-          label="Awaiting check"
-          value={show(awaiting.length)}
-          note={loaded ? `Not yet verified here · ${samples(awaiting)} sample` : "Not yet verified from this device"}
-        />
-        <Metric icon="check" tint="#9fb3c8" label="Cleared today" value={show(clearedToday)} note="Seen clearing live on this page" />
-        <LiveMetric connection={connection} lastEventAt={lastEventAt} />
-      </section>
-
-      <div className="flex flex-col gap-3 lg:min-h-0 lg:flex-1 lg:flex-row">
-        <div className="glass relative h-[58vh] min-h-80 overflow-hidden p-0 lg:h-auto lg:flex-1">
-          <Map
-            hazards={list}
-            center={GRAHAM_CENTER}
-            zoom={17}
-            selectedId={selectedId}
-            highlightId={recentlyAdded}
-            onSelect={select}
-            showOsm={showOsm}
-            label="Map of reported hazards around FIU Graham Center"
+    <>
+      <PageBar title="Live map">
+        <Link href="/verify" className={primaryButton}>
+          Verify hazards
+        </Link>
+      </PageBar>
+      <div className="flex flex-1 flex-col gap-4 p-4 lg:min-h-0 lg:px-6 lg:py-5">
+        <p className="text-ink-2">Hazards reported by StepSafe walkers within 5 km of FIU Graham Center. Updates arrive live.</p>
+        <section aria-label="Summary" className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          <Metric
+            icon="hazard"
+            tint="#ff7900"
+            label="Active hazards"
+            value={show(list.length)}
+            note={loaded ? `${sampleCount} sample · ${list.length - sampleCount} real · 5 km` : "Within 5 km"}
           />
-          <div className="glass-float pointer-events-none absolute left-3 top-3 z-[1000] hidden px-3.5 py-2 sm:block">
-            <p className="eyebrow">FIU Graham Center</p>
-            <p className="font-display text-lg font-bold uppercase leading-tight tracking-wide text-white">Live hazard map</p>
-          </div>
-          <label className="glass-float absolute right-3 top-3 z-[1000] flex max-w-[15rem] sm:max-w-[15rem] cursor-pointer items-start gap-2.5 px-3 py-2 text-sm text-white">
-            <input
-              type="checkbox"
-              checked={showOsm}
-              onChange={(e) => setShowOsm(e.target.checked)}
-              className="mt-0.5 h-4 w-4 shrink-0 accent-[#087ff5]"
+          <Metric
+            icon="clock"
+            tint="var(--accent)"
+            label="Last hour"
+            value={show(lastHour.length)}
+            note={loaded ? `Reported or seen again · ${samples(lastHour)} sample` : "Reported or seen again"}
+          />
+          <Metric
+            icon="eye"
+            tint="var(--accent)"
+            label="Awaiting check"
+            value={show(awaiting.length)}
+            note={loaded ? `Not yet verified here · ${samples(awaiting)} sample` : "Not yet verified from this device"}
+          />
+          <Metric icon="check" tint="var(--ink-3)" label="Cleared today" value={show(clearedToday)} note="Seen clearing live on this page" />
+          <LiveMetric connection={connection} lastEventAt={lastEventAt} />
+        </section>
+
+        <div className="flex flex-col gap-4 lg:min-h-0 lg:flex-1 lg:flex-row">
+          <section aria-labelledby="map-heading" className="panel flex flex-col overflow-hidden lg:min-h-0 lg:flex-1">
+            <PanelHead
+              title={<span id="map-heading">Map</span>}
+              sub="FIU Graham Center · pin size shows community confidence"
+              action={
+                <label className="flex cursor-pointer items-center gap-2 text-[13px] font-medium text-ink">
+                  <input type="checkbox" checked={showOsm} onChange={(e) => setShowOsm(e.target.checked)} className="h-4 w-4 accent-[var(--accent)]" />
+                  OpenStreetMap layer
+                </label>
+              }
             />
-            <span>
-              <span className="font-semibold">OpenStreetMap layer</span>
-              <span className="hidden text-xs text-muted sm:block">Crossings (white), curbs (grey), tactile paving (yellow). © OSM contributors, ODbL.</span>
-            </span>
-          </label>
-          <div className="glass-float absolute bottom-3 left-3 z-[1000] hidden px-4 py-3 lg:block">
-            <Legend />
-          </div>
-          {connection === "down" && !loaded && (
-            <div className="absolute inset-0 z-[1100] flex items-center justify-center bg-navy/80 p-4 backdrop-blur-sm">
-              <div className="max-w-md rounded-xl bg-navy-2 shadow-2xl">
-                <Notice tone="warn" title="Can’t reach the StepSafe server">
-                  <p>
-                    Tried <code className="break-all text-white">{API_URL}</code>. {error && `(${error}) `}Retrying every 5 seconds; the map
-                    fills in as soon as it answers.
-                  </p>
-                </Notice>
+            <div className="relative h-[58vh] min-h-80 lg:h-auto lg:flex-1">
+              <Map
+                hazards={list}
+                center={GRAHAM_CENTER}
+                zoom={17}
+                selectedId={selectedId}
+                highlightId={recentlyAdded}
+                onSelect={select}
+                showOsm={showOsm}
+                label="Map of reported hazards around FIU Graham Center"
+              />
+              <div className="float absolute bottom-3 left-3 z-[1000] hidden max-w-sm px-3.5 py-3 lg:block">
+                <Legend />
+                {showOsm && <p className="mt-2 border-t border-line pt-2 text-[12px] text-ink-3">{OSM_KEY}</p>}
               </div>
-            </div>
-          )}
-        </div>
-
-        <aside aria-label="Hazard feed and details" className="glass flex flex-col lg:min-h-0 lg:w-[420px] lg:shrink-0">
-          <p className="sr-only" aria-live="polite">
-            {newest ? `New hazard reported: ${newest.sample ? "sample, " : ""}${newest.label || typeDisplayName(newest.type, taxonomy)}` : ""}
-          </p>
-
-          {(connection === "reconnecting" || (connection === "down" && loaded)) && (
-            <div className="px-4 pt-4">
-              {connection === "down" ? (
-                <Notice tone="warn" title="Lost contact with the server">
-                  Showing the last hazards received. Reconnecting automatically.
-                </Notice>
-              ) : (
-                <Notice tone="info" title="Live updates paused">
-                  The event stream dropped. Reconnecting; the list resyncs when it comes back.
-                </Notice>
-              )}
-            </div>
-          )}
-
-          {selectedId ? (
-            <section aria-labelledby="panel-heading" className="scroll-quiet flex flex-col gap-3 p-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <button type="button" className={secondaryButton} onClick={closePanel}>
-                  ← All hazards
-                </button>
-                <Link href={`/hazard/${encodeURIComponent(selectedId)}`} className="px-2 py-2 text-sm font-semibold text-signal underline underline-offset-4 hover:text-white">
-                  Open full page
-                </Link>
-              </div>
-              <h2 id="panel-heading" ref={panelHeading} tabIndex={-1} className="sr-only">
-                Hazard details
-              </h2>
-              {loaded && !selected && (
-                <Notice tone="info" title="This hazard was cleared or removed">
-                  It is no longer on the live map.
-                </Notice>
-              )}
-              {detailLoading && <p role="status" className="text-muted">Loading hazard details…</p>}
-              {detailError && <Notice tone="warn" title="Couldn’t load this hazard">{detailError}</Notice>}
-              {detail && <HazardDetail hazard={detail} taxonomy={taxonomy} />}
-            </section>
-          ) : (
-            <section aria-labelledby="list-heading" className="flex flex-col lg:min-h-0 lg:flex-1">
-              <div className="flex items-end justify-between gap-2 border-b border-edge px-4 pb-3 pt-4">
-                <div>
-                  <p className="eyebrow">Hazard feed</p>
-                  <h2 id="list-heading" tabIndex={-1} className="font-display text-2xl font-bold uppercase leading-tight tracking-wide text-white">
-                    {loaded ? `${list.length} active ${list.length === 1 ? "hazard" : "hazards"}` : "Active hazards"}
-                  </h2>
-                </div>
-                <Link href="/verify" className="mb-1 text-sm font-semibold text-signal underline underline-offset-4 hover:text-white">
-                  Verify queue →
-                </Link>
-              </div>
-              <details className="border-b border-edge px-4 py-3 lg:hidden">
-                <summary className="cursor-pointer text-sm font-semibold text-white">Map legend</summary>
-                <div className="mt-3">
-                  <Legend />
-                  <p className="mt-2 text-xs text-muted">
-                    OpenStreetMap layer: crossings (white), curbs (grey), tactile paving (yellow). Data © OpenStreetMap contributors, ODbL.
-                  </p>
-                </div>
-              </details>
-
-              <div className="scroll-quiet p-2 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
-                {!loaded && connection !== "down" && (
-                  <p role="status" className="p-3 text-muted">
-                    Loading hazards…
-                  </p>
-                )}
-                {!loaded && connection === "down" && <p className="p-3 text-sm text-muted">Waiting for the server…</p>}
-                {loaded && list.length === 0 && (
-                  <div className="p-2">
-                    <Notice tone="info" title="No active hazards yet">
-                      Nothing has been reported within 5 km of the Graham Center. New reports appear here live, no refresh needed.
+              {connection === "down" && !loaded && (
+                <div className="absolute inset-0 z-[1100] flex items-center justify-center bg-page/85 p-4">
+                  <div className="max-w-md rounded-lg bg-card shadow-[var(--shadow-pop)]">
+                    <Notice tone="warn" title="Can’t reach the StepSafe server">
+                      <p>
+                        Tried <code className="break-all text-ink">{API_URL}</code>. {error && `(${error}) `}Retrying every 5 seconds; the map fills in
+                        as soon as it answers.
+                      </p>
                     </Notice>
                   </div>
+                </div>
+              )}
+            </div>
+          </section>
+
+          <aside aria-label="Hazard feed and details" className="panel flex flex-col overflow-hidden lg:min-h-0 lg:w-[400px] lg:shrink-0">
+            <p className="sr-only" aria-live="polite">
+              {newest ? `New hazard reported: ${newest.sample ? "sample, " : ""}${newest.label || typeDisplayName(newest.type, taxonomy)}` : ""}
+            </p>
+
+            {(connection === "reconnecting" || (connection === "down" && loaded)) && (
+              <div className="border-b border-line p-3">
+                {connection === "down" ? (
+                  <Notice tone="warn" title="Lost contact with the server">
+                    Showing the last hazards received. Reconnecting automatically.
+                  </Notice>
+                ) : (
+                  <Notice tone="info" title="Live updates paused">
+                    The event stream dropped. Reconnecting; the list resyncs when it comes back.
+                  </Notice>
                 )}
-                <ul className="space-y-1">
-                  {list.map((h) => {
-                    const isNew = h.id === recentlyAdded;
-                    return (
-                      <li key={h.id}>
-                        <button
-                          type="button"
-                          data-hazard-id={h.id}
-                          onClick={() => select(h.id)}
-                          className={`flex w-full items-center gap-3 rounded-xl border px-2.5 py-2 text-left transition-colors hover:bg-white/[0.06] ${
-                            isNew ? "border-signal/60 bg-signal/10" : "border-transparent"
-                          }`}
-                        >
-                          <PinTile hazard={h} />
-                          <span className="min-w-0 flex-1">
-                            <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[15px] font-semibold leading-snug text-white">
-                              {h.label || typeDisplayName(h.type, taxonomy)} {h.sample && <SampleBadge />}
-                              {isNew && (
-                                <span className="rounded-full bg-signal px-2 py-px text-[10px] font-bold uppercase tracking-wider text-navy">New</span>
-                              )}
-                            </span>
-                            <span className="block truncate text-xs text-muted">
-                              {CATEGORY_META[h.category].label} · {HEIGHT_META[h.heightBand].label} · seen {relativeTime(h.lastSeen, now)}
-                            </span>
-                          </span>
-                          <span className="flex w-10 shrink-0 flex-col items-end gap-1" aria-label={`confidence ${h.confidence.toFixed(1)}`}>
-                            <span className="font-display text-lg font-bold leading-none tabular-nums text-white">{h.confidence.toFixed(1)}</span>
-                            <span className="h-1 w-full overflow-hidden rounded-full bg-white/10" aria-hidden="true">
-                              <span
-                                className="block h-full rounded-full bg-signal"
-                                style={{ width: `${Math.max(6, Math.min(100, ((h.confidence + 2) / 7) * 100))}%` }}
-                              />
-                            </span>
-                          </span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
               </div>
-            </section>
-          )}
-        </aside>
+            )}
+
+            {selectedId ? (
+              <section aria-labelledby="panel-heading" className="flex flex-col lg:min-h-0 lg:flex-1">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-3 py-2">
+                  <button type="button" className={secondaryButton} onClick={closePanel}>
+                    ← All hazards
+                  </button>
+                  <Link href={`/hazard/${encodeURIComponent(selectedId)}`} className={`${linkClass} px-1 text-[13px]`}>
+                    Open full page
+                  </Link>
+                </div>
+                <h2 id="panel-heading" ref={panelHeading} tabIndex={-1} className="sr-only">
+                  Hazard details
+                </h2>
+                <div className="scroll-quiet flex flex-col gap-3 p-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
+                  {loaded && !selected && (
+                    <Notice tone="info" title="This hazard was cleared or removed">
+                      It is no longer on the live map.
+                    </Notice>
+                  )}
+                  {detailLoading && <p role="status" className="text-ink-3">Loading hazard details…</p>}
+                  {detailError && <Notice tone="warn" title="Couldn’t load this hazard">{detailError}</Notice>}
+                  {detail && <HazardDetail hazard={detail} taxonomy={taxonomy} />}
+                </div>
+              </section>
+            ) : (
+              <section aria-labelledby="list-heading" className="flex flex-col lg:min-h-0 lg:flex-1">
+                <PanelHead id="list-heading" title="Active hazards" count={loaded ? list.length : null} sub="Most recently seen first. Select one for details." />
+                <details className="border-b border-line px-4 py-2.5 lg:hidden">
+                  <summary className="cursor-pointer text-[13px] font-medium text-ink">Map legend</summary>
+                  <div className="mt-3">
+                    <Legend />
+                    <p className="mt-2 text-[12px] text-ink-3">{OSM_KEY}</p>
+                  </div>
+                </details>
+
+                <div className="scroll-quiet lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
+                  {!loaded && connection !== "down" && (
+                    <p role="status" className="p-4 text-ink-3">
+                      Loading hazards…
+                    </p>
+                  )}
+                  {!loaded && connection === "down" && <p className="p-4 text-ink-3">Waiting for the server…</p>}
+                  {loaded && list.length === 0 && (
+                    <div className="p-3">
+                      <Notice tone="info" title="No active hazards yet">
+                        Nothing has been reported within 5 km of the Graham Center. New reports appear here live, no refresh needed.
+                      </Notice>
+                    </div>
+                  )}
+                  <ul className="divide-y divide-line">
+                    {list.map((h) => {
+                      const isNew = h.id === recentlyAdded;
+                      return (
+                        <li key={h.id}>
+                          <button
+                            type="button"
+                            data-hazard-id={h.id}
+                            onClick={() => select(h.id)}
+                            className={`flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-hover ${isNew ? "bg-accent-tint" : ""}`}
+                          >
+                            <PinTile hazard={h} />
+                            <span className="min-w-0 flex-1">
+                              <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 font-medium leading-snug text-ink">
+                                {h.label || typeDisplayName(h.type, taxonomy)} {h.sample && <SampleBadge />}
+                                {isNew && <span className="rounded bg-accent px-1.5 text-[11px] font-semibold leading-[18px] text-card">New</span>}
+                              </span>
+                              <span className="block truncate text-[12px] text-ink-3">
+                                {CATEGORY_META[h.category].label} · {HEIGHT_META[h.heightBand].label} · seen {relativeTime(h.lastSeen, now)}
+                              </span>
+                            </span>
+                            <span className="flex w-10 shrink-0 flex-col items-end gap-1" aria-label={`confidence ${h.confidence.toFixed(1)}`}>
+                              <span className="text-[13px] font-semibold leading-none tabular-nums text-ink">{h.confidence.toFixed(1)}</span>
+                              <span className="h-1 w-full overflow-hidden rounded-full bg-line" aria-hidden="true">
+                                <span
+                                  className="block h-full rounded-full bg-accent"
+                                  style={{ width: `${Math.max(6, Math.min(100, ((h.confidence + 2) / 7) * 100))}%` }}
+                                />
+                              </span>
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              </section>
+            )}
+          </aside>
+        </div>
       </div>
-    </div>
+    </>
   );
 }

@@ -14,14 +14,14 @@ npm run start                                               # serves on :3000 (-
 ```
 
 `NEXT_PUBLIC_API_URL` is inlined at build time, so rebuild when the API host changes.
-Fonts (Poppins for UI, Saira Extra Condensed for headlines and numbers, via `next/font/google`) are downloaded during `npm run build`, so the build machine
+The font (Inter, via `next/font/google`) is downloaded during `npm run build`, so the build machine
 needs internet; the running app does not.
 
 ## Pages
 
 | Route | What it does |
 | --- | --- |
-| `/` | Dashboard: metric strip, live map, glass side rail. The strip is computed client-side from data the page already holds (no extra endpoints): active hazards (sample vs real), last hour (`lastSeen` 0 to 60 min ago, so "reported or seen again"; future timestamps are ignored; summaries carry no `createdAt`), awaiting check (not voted from this device, same rule as `/verify`), cleared today (`status: "cleared"` upserts for hazards on the map, seen by this page since local midnight; plain removes are not counted since TTL expiry and re-seeding send them too; a clear that arrives during a resync is checked against the new snapshot; resets on reload), and stream status with time of the last update. Live map + side panel. Loads `GET /hazards/near` (Graham Center 25.7566,-80.3739, radius 5000 m), then follows `GET /events`. Upserts add/move pins, removes (or `status: "cleared"`) delete them. Every EventSource `open` (first connect and each reconnect) re-fetches `/hazards/near` and replaces the pin set, because events sent while disconnected are lost; events arriving while that request is in flight are buffered and replayed on top of the snapshot, so it cannot undo a newer upsert or remove. If a reconnect starts another fetch before that one finishes, the earlier result is ignored. The badge says "Live" only after the snapshot lands; a failed snapshot with the stream up retries with backoff (1 s to 30 s). An open detail (map panel, `/verify`, `/hazard/[id]`) re-fetches `GET /hazards/:id` on every upsert for that id and after each resync. Closing the panel returns focus to the list row. Keyboard-accessible hazard list next to the map; clicking a pin or list row opens the detail panel. OSM reference layer toggle. |
+| `/` | Dashboard: page bar, metric tiles, map panel, feed/detail panel. The strip is computed client-side from data the page already holds (no extra endpoints): active hazards (sample vs real), last hour (`lastSeen` 0 to 60 min ago, so "reported or seen again"; future timestamps are ignored; summaries carry no `createdAt`), awaiting check (not voted from this device, same rule as `/verify`), cleared today (`status: "cleared"` upserts for hazards on the map, seen by this page since local midnight; plain removes are not counted since TTL expiry and re-seeding send them too; a clear that arrives during a resync is checked against the new snapshot; resets on reload), and stream status with time of the last update. Live map + side panel. Loads `GET /hazards/near` (Graham Center 25.7566,-80.3739, radius 5000 m), then follows `GET /events`. Upserts add/move pins, removes (or `status: "cleared"`) delete them. Every EventSource `open` (first connect and each reconnect) re-fetches `/hazards/near` and replaces the pin set, because events sent while disconnected are lost; events arriving while that request is in flight are buffered and replayed on top of the snapshot, so it cannot undo a newer upsert or remove. If a reconnect starts another fetch before that one finishes, the earlier result is ignored. The badge says "Live" only after the snapshot lands; a failed snapshot with the stream up retries with backoff (1 s to 30 s). An open detail (map panel, `/verify`, `/hazard/[id]`) re-fetches `GET /hazards/:id` on every upsert for that id and after each resync. Closing the panel returns focus to the list row. Keyboard-accessible hazard list next to the map; clicking a pin or list row opens the detail panel. OSM reference layer toggle. |
 | `/verify` | Client-side queue built from the same list: lowest confidence first, skipping ids this device already voted on (stored in `localStorage` key `stepsafe.voted`). One hazard at a time: crop, mini map, type/category/height band, measurements. Upvote / Downvote (`POST /hazards/:id/votes`, `source: "verifier"`), Skip, Reclassify (shows `agreeing` of 3), Report (spam/abuse/other). Shortcuts: `U` up, `D` down, `S` skip, only while focus is on the page body or plain content in the hazard card (never on a link, button or field), only once the hazard's details have loaded, and they can be switched off with the "Keyboard shortcuts" checkbox (WCAG 2.1.4). Vote buttons stay disabled until the details load. Reclassify's type field is a native `<select>` grouped by category (moving/temporary/permanent), built from `GET /taxonomy`; choosing a type pre-fills its default category and height band (still editable) and sends the taxonomy id, never free text. If `/taxonomy` fails to load, an error message shows and type reclassify is disabled; category and height band reclassify keep working. On phones the vote bar sticks to the bottom of the screen. |
 | `/hazard/[id]` | Full detail: crop, clearance and remaining width in feet and metres, confidence, severity, last seen, expiry, Spanish label, pending reclassifications, vote history, location map. |
 
@@ -70,14 +70,39 @@ The OSM dots are distinguished by color only (with tooltips); accepted because i
 
 ## Look
 
-Dark-glass dashboard: brand-navy 135° gradient page, translucent blurred panels (`.glass`, `.glass-float` over the map, `.well` for recessed tiles in `app/globals.css`), metric strip on top, map with floating legend / OSM toggle / zoom, feed and detail in a right rail (stacked on phones). Pins keep their encoding and gain a soft tint halo of their category color. Orange stays reserved for hazards and warnings.
+Flat, neutral SaaS layout (Attio/HubSpot family): a 240 px sidebar (logo, nav, theme toggle,
+profile) that becomes a top bar with tabs under 1024 px; every page opens with a 52 px page bar
+(title left, actions right); content sits in white panels with hairline borders and no shadows
+(only things floating over the map get one). Inter throughout, 12/13/14/15/20 px scale, semibold
+titles in sentence case, tabular numbers. Colors are semantic roles in `app/globals.css`
+(`--page`, `--card`, `--sunken`, `--line`, `--ink*`, `--accent`, `--primary`, ...) defined once
+for light and once for dark; components never use raw hex except the hazard category colors.
+
+**Theme.** Light is the default. The toggle (sidebar, or the sun/moon button on phones) switches
+to dark and stores the choice in `localStorage` key `stepsafe.theme` (wrapped in try/catch; a
+blocked store just lasts for the page). With nothing stored, the page follows
+`prefers-color-scheme`, including live OS changes. An inline script in `app/layout.tsx` sets
+`<html data-theme>` before first paint, so there is no flash. In dark, OSM tiles are dimmed a
+little with a CSS filter; pins and the "Sample" tags keep their light-map styling.
+
+**Deviation from the brand guide.** `brandguide/README.md` says the UI is dark-mode first. The web
+dashboard now defaults to light with an optional dark theme, to match the product style the team
+chose for the demo. Navy `#081624` is kept as the heading and primary-button color, StepSafe blue
+(darkened to `#0A66C8` for text contrast) is the accent, and orange `#FF7900` still appears only
+for hazards and warnings. The brand guide itself is unchanged.
 
 ## Accessibility
 
-Dark navy UI with WCAG AA text contrast (on the glass tone: white 16:1, muted #A9B4C2 7.8:1, signal #13B9F2 7.2:1 for links; primary buttons use navy text on brand blue, 4.7:1; brand blue is never small text on glass). Brand Slate #66717E is only 3.7:1 on navy, so it is
-not used for text there. Skip link, visible 3 px focus rings (navy + white halo on map tiles),
-keyboard-reachable pins (Enter opens) and a parallel list, labelled controls, `aria-live`
-announcements for new hazards and action results, works at 390 px wide.
+WCAG AA text contrast in both themes. Light: body `#1B2330`, meta `#5E6875` (5.7:1 on white,
+5.1:1 on the sidebar grey), links/active nav `#0A66C8` (5.6:1; 4.9:1 on its tint), primary button
+white on navy (16:1), warning text `#8A4200` on its tint (6.8:1). Dark: meta `#969FAB` (6.7:1 on
+`#15181D`), links `#5EA8FF` (7.2:1), primary button navy on `#E7EDF5` (15.5:1), warning text
+`#FFB473`. Form control edges are 3:1 or more against their surface (WCAG 1.4.11). Orange is never
+text on white (2.6:1); warnings carry a text title and an icon. Inline links are underlined.
+Skip link, visible 2 px focus rings (navy + white halo on map tiles), keyboard-reachable pins
+(Enter opens) and a parallel list, labelled controls, `aria-live` announcements for new hazards
+and action results, metric tiles as `<dl>`, the theme toggle is a button with `aria-pressed`,
+works at 390 px wide.
 
 ## Known gaps
 

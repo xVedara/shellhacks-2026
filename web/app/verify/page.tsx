@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Crop, HazardHeading, useHazardDetail } from "@/components/HazardDetail";
 import Map from "@/components/Map";
-import { ConnectionBadge, Notice, secondaryButton, primaryButton } from "@/components/ui";
+import { ConnectionBadge, Notice, PageBar, linkClass, primaryButton, secondaryButton } from "@/components/ui";
 import {
   API_URL,
   ApiError,
@@ -29,7 +29,7 @@ import { announceAction, useLiveHazards, useTaxonomy } from "@/lib/hooks";
 type Panel = null | "reclassify" | "report";
 
 const voteButton =
-  "flex flex-col items-center justify-center gap-0.5 rounded-xl border px-1 py-2.5 font-semibold leading-tight transition-colors disabled:cursor-not-allowed disabled:opacity-50 md:px-4 md:py-3";
+  "flex flex-col items-center justify-center gap-0.5 rounded-md border px-1 py-2 text-[14px] font-medium leading-tight transition-colors disabled:cursor-not-allowed disabled:opacity-50 md:px-4 md:py-2.5";
 
 export default function VerifyPage() {
   const { hazards, connection, loaded, error, detailVersion } = useLiveHazards();
@@ -119,55 +119,52 @@ export default function VerifyPage() {
   const checked = all.filter((h) => voted.has(h.id)).length;
 
   return (
-    <div className="mx-auto w-full max-w-6xl p-3 lg:p-6">
-      <div className="mb-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
-        <div>
-          <p className="eyebrow">Remote volunteers</p>
-          <h1 className="font-display text-4xl font-bold uppercase leading-none tracking-wide text-white">Verify queue</h1>
-          <p className="mt-1.5 text-sm text-muted">
-            Least-confident hazards first. Is it still there?
-            {shortcutsOn && (
-              <>
-                {" "}Shortcuts: <kbd className="kbd">U</kbd> upvote, <kbd className="kbd">D</kbd> downvote, <kbd className="kbd">S</kbd> skip
-                (when no button or link is focused).
-              </>
-            )}
-          </p>
-        </div>
-        <div className="glass flex flex-wrap items-center gap-x-5 gap-y-3 px-4 py-3">
-          {loaded && (
-            <div className="min-w-40">
-              <p className="text-sm font-semibold text-white">
-                <span className="font-display text-2xl tabular-nums">{queue.length}</span> left to review
-              </p>
-              {all.length > 0 && (
-                <div
-                  className="mt-1 h-1.5 overflow-hidden rounded-full bg-white/10"
-                  role="progressbar"
-                  aria-label="Hazards checked from this device"
-                  aria-valuemin={0}
-                  aria-valuemax={all.length}
-                  aria-valuenow={checked}
-                >
-                  <div className="h-full rounded-full bg-signal" style={{ width: `${(checked / all.length) * 100}%` }} />
-                </div>
-              )}
-              <p className="mt-1 text-xs text-muted">
-                {checked} of {all.length} checked from this device
-              </p>
-            </div>
+    <>
+      <PageBar title="Verify queue">
+        <label className="inline-flex cursor-pointer items-center gap-2 text-[13px] font-medium text-ink">
+          <input
+            type="checkbox"
+            checked={shortcutsOn}
+            onChange={(e) => setShortcutsOn(e.target.checked)}
+            className="h-4 w-4 accent-[var(--accent)]"
+          />
+          Keyboard shortcuts
+        </label>
+        <ConnectionBadge connection={connection} />
+      </PageBar>
+    <div className="w-full max-w-[1200px] p-4 lg:px-6 lg:py-5">
+      <div className="mb-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+        <p className="text-ink-2">
+          Least-confident hazards first. Is it still there?
+          {shortcutsOn && (
+            <>
+              {" "}Shortcuts: <kbd className="kbd">U</kbd> upvote, <kbd className="kbd">D</kbd> downvote, <kbd className="kbd">S</kbd> skip
+              (when no button or link is focused).
+            </>
           )}
-          <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-white">
-            <input
-              type="checkbox"
-              checked={shortcutsOn}
-              onChange={(e) => setShortcutsOn(e.target.checked)}
-              className="h-4 w-4 accent-[#087ff5]"
-            />
-            Keyboard shortcuts
-          </label>
-          <ConnectionBadge connection={connection} />
-        </div>
+        </p>
+        {loaded && (
+          <div className="panel min-w-56 px-3.5 py-3">
+            <p className="text-[13px] text-ink-2">
+              <span className="text-[20px] font-semibold tabular-nums text-heading">{queue.length}</span> left to review
+            </p>
+            {all.length > 0 && (
+              <div
+                className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-line"
+                role="progressbar"
+                aria-label="Hazards checked from this device"
+                aria-valuemin={0}
+                aria-valuemax={all.length}
+                aria-valuenow={checked}
+              >
+                <div className="h-full rounded-full bg-accent" style={{ width: `${(checked / all.length) * 100}%` }} />
+              </div>
+            )}
+            <p className="mt-1 text-[12px] text-ink-3">
+              {checked} of {all.length} checked from this device
+            </p>
+          </div>
+        )}
       </div>
 
       <div aria-live="polite" className="mb-4 empty:hidden">
@@ -175,13 +172,13 @@ export default function VerifyPage() {
       </div>
 
       {!loaded && connection !== "down" && (
-        <p role="status" className="text-muted">
+        <p role="status" className="text-ink-3">
           Loading hazards…
         </p>
       )}
       {!loaded && connection === "down" && (
         <Notice tone="warn" title="Can’t reach the StepSafe server">
-          Tried <code className="break-all text-white">{API_URL}</code>. {error && `(${error}) `}Retrying every 5 seconds.
+          Tried <code className="break-all text-ink">{API_URL}</code>. {error && `(${error}) `}Retrying every 5 seconds.
         </Notice>
       )}
       {loaded && all.length === 0 && (
@@ -190,7 +187,7 @@ export default function VerifyPage() {
         </Notice>
       )}
       {loaded && all.length > 0 && !current && (
-        <div className="glass p-6">
+        <div className="panel p-4">
           <Notice tone="info" title={skippedLeft ? `You skipped the remaining ${skippedLeft}.` : "You’re all caught up."}>
             {skippedLeft ? (
               <button type="button" className={`${secondaryButton} mt-2`} onClick={() => setSkipped(new Set())}>
@@ -199,7 +196,7 @@ export default function VerifyPage() {
             ) : (
               <p>
                 This device has voted on every active hazard. New reports appear here live.{" "}
-                <Link href="/" className="font-semibold text-signal underline underline-offset-4">
+                <Link href="/" className={linkClass}>
                   Back to the map
                 </Link>
               </p>
@@ -212,10 +209,10 @@ export default function VerifyPage() {
         <article
           id="verify-card"
           aria-labelledby="verify-heading"
-          className="glass grid gap-4 p-4 md:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] md:grid-rows-[auto_auto_1fr] md:gap-x-6 md:p-6"
+          className="panel grid gap-4 p-4 md:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] md:grid-rows-[auto_auto_1fr] md:gap-x-6 md:p-5"
         >
           <div className="space-y-4 md:row-span-3">
-            {detailLoading && <p role="status" className="text-muted">Loading photo and details…</p>}
+            {detailLoading && <p role="status" className="text-ink-3">Loading photo and details…</p>}
             {detailError && <Notice tone="warn" title="Couldn’t load details">{detailError}</Notice>}
             {detail && detail.id === current.id && (
               <>
@@ -233,7 +230,7 @@ export default function VerifyPage() {
           </div>
 
           <div className="space-y-3">
-            <div className="h-56 overflow-hidden rounded-xl border border-edge md:h-64">
+            <div className="h-56 overflow-hidden rounded-lg border border-line md:h-64">
               <Map
                 hazards={[current]}
                 center={[current.lat, current.lng]}
@@ -243,41 +240,41 @@ export default function VerifyPage() {
                 label={`Location of the hazard under review`}
               />
             </div>
-            <dl className="grid grid-cols-3 gap-2 text-sm text-white">
-              <div className="well px-3 py-2">
-                <dt className="eyebrow">Confidence</dt>
-                <dd className="font-display text-xl font-bold tabular-nums">{current.confidence.toFixed(1)}</dd>
+            <dl className="grid grid-cols-3 overflow-hidden rounded-lg border border-line text-[13px] text-ink [&>div+div]:border-l [&>div]:border-line">
+              <div className="px-3 py-2">
+                <dt className="label">Confidence</dt>
+                <dd className="text-[16px] font-semibold tabular-nums text-heading">{current.confidence.toFixed(1)}</dd>
               </div>
-              <div className="well px-3 py-2">
-                <dt className="eyebrow">Clearance</dt>
+              <div className="px-3 py-2">
+                <dt className="label">Clearance</dt>
                 <dd className="mt-0.5 font-medium">{measured(detail?.measurements?.clearanceM)}</dd>
               </div>
-              <div className="well px-3 py-2">
-                <dt className="eyebrow">Width left</dt>
+              <div className="px-3 py-2">
+                <dt className="label">Width left</dt>
                 <dd className="mt-0.5 font-medium">{measured(detail?.measurements?.widthM)}</dd>
               </div>
             </dl>
             <Link
               href={`/hazard/${encodeURIComponent(current.id)}`}
-              className="inline-block text-sm font-semibold text-signal underline underline-offset-4 hover:text-white"
+              className={`${linkClass} inline-block text-[13px]`}
             >
               Full details and vote history
             </Link>
           </div>
 
           {/* Direct child of the article so it can stick to the bottom of a phone screen. */}
-          <div className="sticky bottom-0 z-[1100] -mx-4 grid grid-cols-3 gap-2 border-t border-edge bg-navy-2/95 p-3 backdrop-blur md:static md:mx-0 md:border-0 md:bg-transparent md:p-0">
-            <button type="button" disabled={busy || !ready} aria-keyshortcuts={shortcutsOn ? "U" : undefined} onClick={() => vote("up")} className={`${voteButton} border-blue bg-blue text-navy hover:bg-[#3597f7]`}>
+          <div className="sticky bottom-0 z-[1100] -mx-4 grid grid-cols-3 gap-2 border-t border-line bg-card p-3 md:static md:mx-0 md:border-0 md:bg-transparent md:p-0">
+            <button type="button" disabled={busy || !ready} aria-keyshortcuts={shortcutsOn ? "U" : undefined} onClick={() => vote("up")} className={`${voteButton} border-primary bg-primary text-primary-ink hover:opacity-90`}>
               <span>▲ Still there</span>
-              <span className="text-xs font-medium">Upvote{shortcutsOn && <span className="hidden md:inline"> · U</span>}</span>
+              <span className="text-[12px] font-normal">Upvote{shortcutsOn && <span className="hidden md:inline"> · U</span>}</span>
             </button>
-            <button type="button" disabled={busy || !ready} aria-keyshortcuts={shortcutsOn ? "D" : undefined} onClick={() => vote("down")} className={`${voteButton} border-white/70 bg-well text-white hover:bg-white/10`}>
+            <button type="button" disabled={busy || !ready} aria-keyshortcuts={shortcutsOn ? "D" : undefined} onClick={() => vote("down")} className={`${voteButton} border-field bg-card text-ink hover:bg-hover`}>
               <span>▼ Gone</span>
-              <span className="text-xs font-medium text-muted">Not a hazard{shortcutsOn && <span className="hidden md:inline"> · D</span>}</span>
+              <span className="text-[12px] font-normal text-ink-3">Not a hazard{shortcutsOn && <span className="hidden md:inline"> · D</span>}</span>
             </button>
-            <button type="button" disabled={busy} aria-keyshortcuts={shortcutsOn ? "S" : undefined} onClick={skip} className={`${voteButton} border-edge bg-well text-white hover:bg-white/10`}>
+            <button type="button" disabled={busy} aria-keyshortcuts={shortcutsOn ? "S" : undefined} onClick={skip} className={`${voteButton} border-line bg-card text-ink hover:bg-hover`}>
               <span>Skip</span>
-              <span className="text-xs font-medium text-muted">Decide later{shortcutsOn && <span className="hidden md:inline"> · S</span>}</span>
+              <span className="text-[12px] font-normal text-ink-3">Decide later{shortcutsOn && <span className="hidden md:inline"> · S</span>}</span>
             </button>
           </div>
 
@@ -318,6 +315,7 @@ export default function VerifyPage() {
         </article>
       )}
     </div>
+    </>
   );
 }
 
@@ -393,19 +391,19 @@ function ReclassifyForm({
     }
   };
 
-  const field = "mt-1 block w-full rounded-xl border border-line bg-navy px-3 py-2 text-white";
+  const field = "mt-1 block h-8 w-full rounded-md border border-field bg-card px-2 text-[13px] font-normal text-ink";
   return (
-    <form id="reclassify-panel" onSubmit={submit} className="well space-y-3 p-4">
+    <form id="reclassify-panel" onSubmit={submit} className="space-y-3 rounded-lg border border-line bg-sunken p-4">
       <fieldset className="space-y-3" disabled={busy}>
-        <legend className="font-semibold text-white">Propose a correction (change only what’s wrong)</legend>
+        <legend className="font-semibold text-heading">Propose a correction (change only what’s wrong)</legend>
         <div>
-          <label htmlFor="reclassify-type" className="block text-sm font-semibold text-white">
-            Type <span className="font-normal text-muted">(now “{typeDisplayName(current.type, taxonomy)}”)</span>
+          <label htmlFor="reclassify-type" className="block text-[13px] font-medium text-ink">
+            Type <span className="font-normal text-ink-3">(now “{typeDisplayName(current.type, taxonomy)}”)</span>
           </label>
           {taxonomyError ? (
-            <p role="alert" className="mt-1 font-normal text-alert">
+            <p role="alert" className="mt-1 font-normal text-warn-ink">
               Couldn’t load hazard types ({taxonomyError}). Type can’t be changed right now; category and height band still can.{" "}
-              <button type="button" onClick={taxonomyRetry} className="font-semibold text-white underline underline-offset-2">
+              <button type="button" onClick={taxonomyRetry} className="font-medium text-ink underline underline-offset-2">
                 Retry
               </button>
             </p>
@@ -430,14 +428,14 @@ function ReclassifyForm({
                   </optgroup>
                 ))}
               </select>
-              <span id="type-hint" className="mt-1 block font-normal text-muted">
+              <span id="type-hint" className="mt-1 block text-[12px] font-normal text-ink-3">
                 Choosing a type also sets its usual category and height band below.
               </span>
             </>
           )}
         </div>
-        <label className="block text-sm font-semibold text-white">
-          Category <span className="font-normal text-muted">(now {CATEGORY_META[current.category].label.toLowerCase()})</span>
+        <label className="block text-[13px] font-medium text-ink">
+          Category <span className="font-normal text-ink-3">(now {CATEGORY_META[current.category].label.toLowerCase()})</span>
           <select value={category} onChange={(e) => onCategoryChange(e.target.value as Category | "")} className={field}>
             <option value="">No change</option>
             {CATEGORIES.map((c) => (
@@ -447,8 +445,8 @@ function ReclassifyForm({
             ))}
           </select>
         </label>
-        <label className="block text-sm font-semibold text-white">
-          Height band <span className="font-normal text-muted">(now {HEIGHT_META[current.heightBand].label.toLowerCase()})</span>
+        <label className="block text-[13px] font-medium text-ink">
+          Height band <span className="font-normal text-ink-3">(now {HEIGHT_META[current.heightBand].label.toLowerCase()})</span>
           <select value={heightBand} onChange={(e) => onHeightBandChange(e.target.value as HeightBand | "")} className={field}>
             <option value="">No change</option>
             {HEIGHT_BANDS.map((b) => (
@@ -486,9 +484,9 @@ function ReportForm({ hazardId }: { hazardId: string }) {
   };
 
   return (
-    <form id="report-panel" onSubmit={submit} className="well space-y-3 p-4">
+    <form id="report-panel" onSubmit={submit} className="space-y-3 rounded-lg border border-line bg-sunken p-4">
       <fieldset className="space-y-2" disabled={busy || result?.tone === "info"}>
-        <legend className="font-semibold text-white">Report this hazard</legend>
+        <legend className="font-semibold text-heading">Report this hazard</legend>
         {(
           [
             ["spam", "Spam (fake or junk report)"],
@@ -496,8 +494,8 @@ function ReportForm({ hazardId }: { hazardId: string }) {
             ["other", "Other problem"],
           ] as const
         ).map(([value, text]) => (
-          <label key={value} className="flex items-center gap-2 text-white">
-            <input type="radio" name="reason" value={value} checked={reason === value} onChange={() => setReason(value)} className="h-5 w-5 accent-[#087ff5]" />
+          <label key={value} className="flex items-center gap-2 text-[13px] text-ink">
+            <input type="radio" name="reason" value={value} checked={reason === value} onChange={() => setReason(value)} className="h-4 w-4 accent-[var(--accent)]" />
             {text}
           </label>
         ))}
