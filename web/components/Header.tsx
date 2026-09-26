@@ -140,7 +140,7 @@ export default function Header() {
                   aria-current={current ? "page" : undefined}
                   className={`flex h-9 items-center justify-center gap-2.5 border-b-2 px-2.5 text-[14px] font-medium lg:h-8 lg:justify-start lg:rounded-md lg:border-b-0 ${
                     current
-                      ? "border-accent text-accent lg:bg-accent-tint"
+                      ? "border-accent text-accent lg:bg-accent-tint lg:font-semibold lg:shadow-[inset_2px_0_0_var(--accent)]"
                       : "border-transparent text-ink-2 hover:bg-hover hover:text-ink"
                   }`}
                 >

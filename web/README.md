@@ -70,10 +70,10 @@ The OSM dots are distinguished by color only (with tooltips); accepted because i
 
 ## Look
 
-Flat, neutral SaaS layout (Attio/HubSpot family): a 240 px sidebar (logo, nav, theme toggle,
-profile) that becomes a top bar with tabs under 1024 px; every page opens with a 52 px page bar
-(title left, actions right); content sits in white panels with hairline borders and no shadows
-(only things floating over the map get one). Inter throughout, 12/13/14/15/20 px scale, semibold
+A quiet work-tool layout: grey sidebar on the left (logo, the two pages, theme switch, your
+profile), folding into a top bar with tabs on phones. Each page starts with a strip carrying its
+title and one or two actions. Everything else lives in plain white cards outlined by a thin grey
+line; the only drop shadows belong to controls floating on the map (legend, zoom). Inter throughout, 12/13/14/15/20 px scale, semibold
 titles in sentence case, tabular numbers. Colors are semantic roles in `app/globals.css`
 (`--page`, `--card`, `--sunken`, `--line`, `--ink*`, `--accent`, `--primary`, ...) defined once
 for light and once for dark; components never use raw hex except the hazard category colors.

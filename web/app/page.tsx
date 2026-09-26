@@ -191,7 +191,7 @@ export default function MapPage() {
               </div>
               {connection === "down" && !loaded && (
                 <div className="absolute inset-0 z-[1100] flex items-center justify-center bg-page/85 p-4">
-                  <div className="max-w-md rounded-lg bg-card shadow-[var(--shadow-pop)]">
+                  <div className="max-w-md rounded-lg bg-card shadow-[var(--float-shadow)]">
                     <Notice tone="warn" title="Can’t reach the StepSafe server">
                       <p>
                         Tried <code className="break-all text-ink">{API_URL}</code>. {error && `(${error}) `}Retrying every 5 seconds; the map fills in
@@ -281,7 +281,7 @@ export default function MapPage() {
                             type="button"
                             data-hazard-id={h.id}
                             onClick={() => select(h.id)}
-                            className={`flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-hover ${isNew ? "bg-accent-tint" : ""}`}
+                            className={`flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-hover focus-visible:outline-offset-[-2px] ${isNew ? "bg-accent-tint" : ""}`}
                           >
                             <PinTile hazard={h} />
                             <span className="min-w-0 flex-1">
