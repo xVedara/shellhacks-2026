@@ -44,6 +44,8 @@ targets:
           NSExceptionDomains:
             192.168.81.233:
               NSExceptionAllowsInsecureHTTPLoads: true
+            100.90.192.75:
+              NSExceptionAllowsInsecureHTTPLoads: true
     scheme:
       testTargets:
         - StepSafeTests
