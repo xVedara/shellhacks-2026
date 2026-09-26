@@ -177,7 +177,7 @@ const TAXONOMY_RETRY_MS = [2000, 5000, 15000];
 
 /** The fixed hazard-type list, fetched once per session (memoized in `getTaxonomy`). On failure,
  * retries with backoff (2 s, 5 s, then every 15 s); `retry()` also retries immediately (for a
- * "Retry" button). */
+ * "Retry" button). A later success clears `error` so the picker can come back. */
 export function useTaxonomy() {
   const [taxonomy, setTaxonomy] = useState<HazardType[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -186,7 +186,11 @@ export function useTaxonomy() {
     let live = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     getTaxonomy().then(
-      (t) => live && setTaxonomy(t),
+      (t) => {
+        if (!live) return;
+        setTaxonomy(t);
+        setError(null);
+      },
       (e) => {
         if (!live) return;
         setError(e instanceof Error ? e.message : String(e));
