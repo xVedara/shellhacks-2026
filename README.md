@@ -63,7 +63,7 @@ scripts/dev-up.sh stop
 
 `scripts/dev-up.sh` starts MongoDB, seeds demo hazards, and starts the API and the web map. `scripts/dev-up.sh stop` stops the processes that script started.
 
-The script prints the web map URL, the API URL, and the server URL for the phone. Put that URL in the Server URL field in the Walker tab debug panel. The phone and the Mac need the same Wi-Fi. [`docs/DEMO.md`](docs/DEMO.md) has the pre-demo checklist and the live demo script. [`server/README.md`](server/README.md) lists `MONGODB_URI`, `GEMINI_API_KEY`, and `ELEVENLABS_API_KEY`.
+The phone talks to the live API at `https://api.stepsafe.miami` by default. To test against a local `dev-up.sh` stack, enter the printed server URL in the Server URL field in the Walker tab debug panel. The phone and the Mac then need the same network. [`docs/DEMO.md`](docs/DEMO.md) has the pre-demo checklist and the live demo script. [`server/README.md`](server/README.md) lists `MONGODB_URI`, `GEMINI_API_KEY`, and `ELEVENLABS_API_KEY`.
 
 ## License
 
