@@ -132,11 +132,22 @@ function writeStorage(key: string, value: string) {
   }
 }
 
+const DEVICE_ID_RE = /^[A-Za-z0-9._:-]{1,128}$/;
+
+/** 32 random hex chars + "-web". getRandomValues works over plain HTTP; randomUUID does not. */
+export function newDeviceId(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("") + "-web";
+}
+
 export function getDeviceId(): string {
   if (memoryDeviceId) return memoryDeviceId;
-  memoryDeviceId = readStorage("stepsafe.deviceId");
-  if (!memoryDeviceId) {
-    memoryDeviceId = "web-" + crypto.randomUUID();
+  const stored = readStorage("stepsafe.deviceId");
+  // Early builds stored "web-<uuid>", which the server shows as "Neighbor-web-"; replace those.
+  if (stored && DEVICE_ID_RE.test(stored) && !stored.startsWith("web-")) {
+    memoryDeviceId = stored;
+  } else {
+    memoryDeviceId = newDeviceId();
     writeStorage("stepsafe.deviceId", memoryDeviceId);
   }
   return memoryDeviceId;

@@ -4,7 +4,7 @@
 // next/dynamic with ssr:false (see components/Map.tsx).
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CircleMarker, MapContainer, Marker, Polyline, TileLayer, Tooltip, useMap } from "react-leaflet";
 import type { HazardSummary } from "@/lib/api";
 import { hazardAccessibleName, markerSize, markerSvg } from "@/lib/marker";
@@ -115,6 +115,54 @@ function OsmLayer() {
   );
 }
 
+function HazardMarker({
+  hazard: h,
+  selected,
+  highlighted,
+  compact,
+  onSelect,
+}: {
+  hazard: HazardSummary;
+  selected: boolean;
+  highlighted: boolean;
+  compact?: boolean;
+  onSelect?: (id: string) => void;
+}) {
+  const ref = useRef<L.Marker>(null);
+  const name = hazardAccessibleName(h);
+  const icon = useMemo(() => hazardIcon(h, selected, highlighted), [h, selected, highlighted]);
+
+  // react-leaflet never updates `title` after creation, so keep the accessible name current
+  // ourselves (options.title too, because Leaflet re-applies it whenever the icon is swapped).
+  useEffect(() => {
+    const marker = ref.current;
+    if (!marker) return;
+    marker.options.title = name;
+    const el = marker.getElement();
+    el?.setAttribute("title", name);
+    el?.setAttribute("aria-label", name);
+  }, [name, icon]);
+
+  return (
+    <Marker
+      ref={ref}
+      position={[h.lat, h.lng]}
+      icon={icon}
+      title={name}
+      keyboard={!compact}
+      interactive={!compact}
+      zIndexOffset={selected ? 1000 : 0}
+      eventHandlers={{
+        click: () => onSelect?.(h.id),
+        keypress: (e) => {
+          const key = (e.originalEvent as KeyboardEvent).key;
+          if (key === "Enter" || key === " ") onSelect?.(h.id);
+        },
+      }}
+    />
+  );
+}
+
 export default function LeafletMap({
   hazards,
   center,
@@ -126,33 +174,6 @@ export default function LeafletMap({
   compact,
   label,
 }: MapProps) {
-  const markers = useMemo(
-    () =>
-      hazards.map((h) => (
-        <Marker
-          key={h.id}
-          position={[h.lat, h.lng]}
-          icon={hazardIcon(h, h.id === selectedId, h.id === highlightId)}
-          title={hazardAccessibleName(h)}
-          keyboard={!compact}
-          interactive={!compact}
-          zIndexOffset={h.id === selectedId ? 1000 : 0}
-          eventHandlers={{
-            click: () => onSelect?.(h.id),
-            keypress: (e) => {
-              const key = (e.originalEvent as KeyboardEvent).key;
-              if (key === "Enter" || key === " ") onSelect?.(h.id);
-            },
-            add: (e) => {
-              const el = (e.target as L.Marker).getElement();
-              el?.setAttribute("aria-label", hazardAccessibleName(h));
-            },
-          }}
-        />
-      )),
-    [hazards, selectedId, highlightId, onSelect, compact],
-  );
-
   return (
     <div role="region" aria-label={label} className="h-full w-full">
       <MapContainer
@@ -173,7 +194,16 @@ export default function LeafletMap({
         />
         {compact ? <Recenter center={center} zoom={zoom} /> : <PanToSelected hazards={hazards} selectedId={selectedId} />}
         {showOsm && <OsmLayer />}
-        {markers}
+        {hazards.map((h) => (
+          <HazardMarker
+            key={h.id}
+            hazard={h}
+            selected={h.id === selectedId}
+            highlighted={h.id === highlightId}
+            compact={compact}
+            onSelect={onSelect}
+          />
+        ))}
       </MapContainer>
     </div>
   );

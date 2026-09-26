@@ -9,7 +9,7 @@ import { API_URL, CATEGORY_META, GRAHAM_CENTER, HEIGHT_META, relativeTime } from
 import { useLiveHazards } from "@/lib/hooks";
 
 export default function MapPage() {
-  const { hazards, connection, loaded, error, recentlyAdded } = useLiveHazards();
+  const { hazards, connection, loaded, error, recentlyAdded, detailVersion } = useLiveHazards();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showOsm, setShowOsm] = useState(false);
   const panelHeading = useRef<HTMLHeadingElement>(null);
@@ -19,15 +19,24 @@ export default function MapPage() {
     [hazards],
   );
   const selected = selectedId ? hazards.get(selectedId) : undefined;
-  const { detail, error: detailError, loading: detailLoading } = useHazardDetail(
-    selectedId,
-    selected ? `${selected.lastSeen}|${selected.confidence}|${selected.type}|${selected.category}|${selected.heightBand}` : undefined,
-  );
+  const { detail, error: detailError, loading: detailLoading } = useHazardDetail(selectedId, detailVersion(selectedId));
   const newest = recentlyAdded ? hazards.get(recentlyAdded) : undefined;
 
   const select = useCallback((id: string) => setSelectedId(id), []);
+  const returnFocusTo = useRef<string | null>(null);
+  const closePanel = () => {
+    returnFocusTo.current = selectedId;
+    setSelectedId(null);
+  };
   useEffect(() => {
-    if (selectedId) panelHeading.current?.focus();
+    if (selectedId) {
+      panelHeading.current?.focus();
+    } else if (returnFocusTo.current) {
+      // Back to the list row for the hazard that was open (falls back to the list heading).
+      const row = document.querySelector<HTMLElement>(`[data-hazard-id="${CSS.escape(returnFocusTo.current)}"]`);
+      (row ?? document.getElementById("list-heading"))?.focus();
+      returnFocusTo.current = null;
+    }
   }, [selectedId]);
 
   return (
@@ -84,7 +93,7 @@ export default function MapPage() {
         {selectedId ? (
           <section aria-labelledby="panel-heading" className="flex flex-col gap-3">
             <div className="flex flex-wrap items-center gap-2">
-              <button type="button" className={`${secondaryButton}`} onClick={() => setSelectedId(null)}>
+              <button type="button" className={`${secondaryButton}`} onClick={closePanel}>
                 ← All hazards
               </button>
               <Link href={`/hazard/${encodeURIComponent(selectedId)}`} className="px-2 py-2 font-semibold text-blue underline underline-offset-4">
@@ -123,7 +132,7 @@ export default function MapPage() {
             </label>
 
             <section aria-labelledby="list-heading">
-              <h2 id="list-heading" className="mb-2 font-semibold text-white">
+              <h2 id="list-heading" tabIndex={-1} className="mb-2 font-semibold text-white">
                 {loaded ? `${list.length} active ${list.length === 1 ? "hazard" : "hazards"} within 5 km` : "Active hazards"}
               </h2>
               {!loaded && connection !== "down" && <p role="status">Loading hazards…</p>}
@@ -138,6 +147,7 @@ export default function MapPage() {
                   <li key={h.id}>
                     <button
                       type="button"
+                      data-hazard-id={h.id}
                       onClick={() => select(h.id)}
                       className={`flex w-full items-center gap-3 px-1 py-2 text-left hover:bg-navy-2 ${h.id === recentlyAdded ? "bg-navy-2" : ""}`}
                     >

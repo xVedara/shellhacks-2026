@@ -26,17 +26,20 @@ const COMMON_TYPES = ["scooter", "bin", "bike", "construction", "scaffolding", "
 
 type Panel = null | "reclassify" | "report";
 
+const TYPE_RE = /^[a-z0-9 -]{1,40}$/;
+
 const voteButton =
   "flex flex-col items-center justify-center rounded-lg border-2 px-1 py-2 font-semibold leading-tight disabled:cursor-not-allowed disabled:opacity-50 md:px-4";
 
 export default function VerifyPage() {
-  const { hazards, connection, loaded, error } = useLiveHazards();
+  const { hazards, connection, loaded, error, detailVersion } = useLiveHazards();
   const [voted, setVoted] = useState<Set<string>>(() => (typeof window === "undefined" ? new Set() : getVotedIds()));
   const [skipped, setSkipped] = useState<Set<string>>(new Set());
   const [pinnedId, setPinnedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ tone: "warn" | "info"; text: string } | null>(null);
   const [panel, setPanel] = useState<Panel>(null);
+  const [shortcutsOn, setShortcutsOn] = useState(true);
 
   const all = useMemo(() => [...hazards.values()], [hazards]);
   const queue = useMemo(
@@ -55,7 +58,9 @@ export default function VerifyPage() {
     setPanel(null);
   }
   const current = currentId ? hazards.get(currentId) : undefined;
-  const { detail, error: detailError, loading: detailLoading } = useHazardDetail(currentId);
+  const { detail, error: detailError, loading: detailLoading } = useHazardDetail(currentId, detailVersion(currentId));
+  // Nothing can be voted on until its photo and details are on screen.
+  const ready = !!detail && detail.id === currentId;
 
   const skip = useCallback(() => {
     if (!currentId) return;
@@ -65,7 +70,7 @@ export default function VerifyPage() {
 
   const vote = useCallback(
     async (dir: "up" | "down") => {
-      if (!currentId || busy) return;
+      if (!currentId || busy || !ready) return;
       setBusy(true);
       setMessage(null);
       try {
@@ -84,14 +89,18 @@ export default function VerifyPage() {
         setBusy(false);
       }
     },
-    [currentId, busy],
+    [currentId, busy, ready],
   );
 
   useEffect(() => {
+    if (!shortcutsOn || !ready) return;
+    // WCAG 2.1.4: single-key shortcuts only when focus is on the page body or plain content
+    // inside the hazard card, never on a link, button or form field, and they can be turned off.
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
       const el = e.target as HTMLElement;
-      if (el.closest("input, textarea, select, [contenteditable=true]")) return;
+      const onPage = el === document.body || !!el.closest?.("#verify-card");
+      if (!onPage || el.closest("a, button, input, textarea, select, summary, label, [contenteditable=true], [role=button], [tabindex]:not(#verify-card)")) return;
       const key = e.key.toLowerCase();
       if (key === "u") vote("up");
       else if (key === "d") vote("down");
@@ -101,7 +110,7 @@ export default function VerifyPage() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [vote, skip]);
+  }, [vote, skip, shortcutsOn, ready]);
 
   const skippedLeft = all.filter((h) => skipped.has(h.id) && !voted.has(h.id)).length;
 
@@ -111,9 +120,23 @@ export default function VerifyPage() {
         <div>
           <h1 className="text-2xl font-bold text-white">Verify queue</h1>
           <p className="text-sm text-muted">
-            Least-confident hazards first. Shortcuts: <kbd className="kbd">U</kbd> upvote, <kbd className="kbd">D</kbd> downvote,{" "}
-            <kbd className="kbd">S</kbd> skip.
+            Least-confident hazards first.
+            {shortcutsOn && (
+              <>
+                {" "}Shortcuts: <kbd className="kbd">U</kbd> upvote, <kbd className="kbd">D</kbd> downvote, <kbd className="kbd">S</kbd> skip
+                (when no button or link is focused).
+              </>
+            )}
           </p>
+          <label className="mt-1 inline-flex cursor-pointer items-center gap-2 text-sm text-white">
+            <input
+              type="checkbox"
+              checked={shortcutsOn}
+              onChange={(e) => setShortcutsOn(e.target.checked)}
+              className="h-4 w-4 accent-[#087ff5]"
+            />
+            Keyboard shortcuts
+          </label>
         </div>
         <div className="flex items-center gap-3">
           {loaded && <span className="text-sm font-semibold text-white">{queue.length} left to review</span>}
@@ -152,6 +175,7 @@ export default function VerifyPage() {
 
       {current && (
         <article
+          id="verify-card"
           aria-labelledby="verify-heading"
           className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:grid-rows-[auto_auto_1fr] md:gap-x-6"
         >
@@ -210,17 +234,17 @@ export default function VerifyPage() {
 
           {/* Direct child of the article so it can stick to the bottom of a phone screen. */}
           <div className="sticky bottom-0 z-[1100] -mx-4 grid grid-cols-3 gap-2 border-t-2 border-line bg-navy p-3 md:static md:mx-0 md:border-0 md:p-0">
-              <button type="button" disabled={busy} aria-keyshortcuts="U" onClick={() => vote("up")} className={`${voteButton} border-blue bg-blue text-navy hover:bg-[#3597f7]`}>
+              <button type="button" disabled={busy || !ready} aria-keyshortcuts={shortcutsOn ? "U" : undefined} onClick={() => vote("up")} className={`${voteButton} border-blue bg-blue text-navy hover:bg-[#3597f7]`}>
                 <span>▲ Still there</span>
-                <span className="text-sm font-normal">Upvote<span className="hidden md:inline"> · U</span></span>
+                <span className="text-sm font-normal">Upvote{shortcutsOn && <span className="hidden md:inline"> · U</span>}</span>
               </button>
-              <button type="button" disabled={busy} aria-keyshortcuts="D" onClick={() => vote("down")} className={`${voteButton} border-white bg-navy-2 text-white hover:border-blue`}>
+              <button type="button" disabled={busy || !ready} aria-keyshortcuts={shortcutsOn ? "D" : undefined} onClick={() => vote("down")} className={`${voteButton} border-white bg-navy-2 text-white hover:border-blue`}>
                 <span>▼ Gone</span>
-                <span className="text-sm font-normal">Not a hazard<span className="hidden md:inline"> · D</span></span>
+                <span className="text-sm font-normal">Not a hazard{shortcutsOn && <span className="hidden md:inline"> · D</span>}</span>
               </button>
-              <button type="button" disabled={busy} aria-keyshortcuts="S" onClick={skip} className={`${voteButton} border-line bg-navy-2 text-white hover:border-blue`}>
+              <button type="button" disabled={busy} aria-keyshortcuts={shortcutsOn ? "S" : undefined} onClick={skip} className={`${voteButton} border-line bg-navy-2 text-white hover:border-blue`}>
                 <span>Skip</span>
-                <span className="text-sm font-normal">Decide later<span className="hidden md:inline"> · S</span></span>
+                <span className="text-sm font-normal">Decide later{shortcutsOn && <span className="hidden md:inline"> · S</span>}</span>
               </button>
           </div>
 
@@ -268,8 +292,11 @@ function ReclassifyForm({
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ tone: "info" | "warn"; text: string } | null>(null);
 
+  // The server accepts types matching ^[a-z0-9 -]+$ (max 40), so normalize before sending.
+  const normalizedType = type.trim().toLowerCase().replace(/\s+/g, " ");
+  const typeInvalid = normalizedType !== "" && !TYPE_RE.test(normalizedType);
   const change = {
-    ...(type.trim() && type.trim() !== current.type ? { type: type.trim() } : {}),
+    ...(normalizedType && normalizedType !== current.type ? { type: normalizedType } : {}),
     ...(category && category !== current.category ? { category } : {}),
     ...(heightBand && heightBand !== current.heightBand ? { heightBand } : {}),
   };
@@ -277,7 +304,7 @@ function ReclassifyForm({
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (empty) return;
+    if (empty || typeInvalid) return;
     setBusy(true);
     try {
       const res = await api.reclassify(hazardId, change);
@@ -302,7 +329,21 @@ function ReclassifyForm({
         <legend className="font-semibold text-white">Propose a correction (change only what’s wrong)</legend>
         <label className="block text-sm font-semibold text-white">
           Type <span className="font-normal text-muted">(now “{current.type}”)</span>
-          <input list="type-options" value={type} onChange={(e) => setType(e.target.value)} placeholder="e.g. scooter" className={field} />
+          <input
+            list="type-options"
+            value={type}
+            onChange={(e) => setType(e.target.value)}
+            placeholder="e.g. scooter"
+            maxLength={40}
+            pattern="[A-Za-z0-9 \-]+"
+            title="Letters, numbers, spaces and hyphens only"
+            aria-describedby="type-hint"
+            aria-invalid={typeInvalid || undefined}
+            className={field}
+          />
+          <span id="type-hint" className={`mt-1 block font-normal ${typeInvalid ? "text-alert" : "text-muted"}`}>
+            Letters, numbers, spaces and hyphens, up to 40 characters.
+          </span>
           <datalist id="type-options">
             {COMMON_TYPES.map((t) => (
               <option key={t} value={t} />
@@ -331,7 +372,7 @@ function ReclassifyForm({
             ))}
           </select>
         </label>
-        <button type="submit" disabled={empty || busy} className={`${primaryButton}`}>
+        <button type="submit" disabled={empty || busy || typeInvalid} className={`${primaryButton}`}>
           {busy ? "Sending…" : "Submit correction"}
         </button>
       </fieldset>

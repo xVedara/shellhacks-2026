@@ -21,14 +21,14 @@ needs internet; the running app does not.
 
 | Route | What it does |
 | --- | --- |
-| `/` | Live map + side panel. Loads `GET /hazards/near` (Graham Center 25.7566,-80.3739, radius 5000 m), then follows `GET /events`. Upserts add/move pins, removes (or `status: "cleared"`) delete them. Every EventSource `open` (first connect and each reconnect) re-fetches `/hazards/near` and replaces the pin set, because events sent while disconnected are lost. Keyboard-accessible hazard list next to the map; clicking a pin or list row opens the detail panel. OSM reference layer toggle. |
-| `/verify` | Client-side queue built from the same list: lowest confidence first, skipping ids this device already voted on (stored in `localStorage` key `stepsafe.voted`). One hazard at a time: crop, mini map, type/category/height band, measurements. Upvote / Downvote (`POST /hazards/:id/votes`, `source: "verifier"`), Skip, Reclassify (shows `agreeing` of 3), Report (spam/abuse/other). Shortcuts: `U` up, `D` down, `S` skip. On phones the vote bar sticks to the bottom of the screen. |
+| `/` | Live map + side panel. Loads `GET /hazards/near` (Graham Center 25.7566,-80.3739, radius 5000 m), then follows `GET /events`. Upserts add/move pins, removes (or `status: "cleared"`) delete them. Every EventSource `open` (first connect and each reconnect) re-fetches `/hazards/near` and replaces the pin set, because events sent while disconnected are lost; events arriving while that request is in flight are buffered and replayed on top of the snapshot, so it cannot undo a newer upsert or remove. The badge says "Live" only after the snapshot lands; a failed snapshot with the stream up retries with backoff (1 s to 30 s). An open detail (map panel, `/verify`, `/hazard/[id]`) re-fetches `GET /hazards/:id` on every upsert for that id and after each resync. Closing the panel returns focus to the list row. Keyboard-accessible hazard list next to the map; clicking a pin or list row opens the detail panel. OSM reference layer toggle. |
+| `/verify` | Client-side queue built from the same list: lowest confidence first, skipping ids this device already voted on (stored in `localStorage` key `stepsafe.voted`). One hazard at a time: crop, mini map, type/category/height band, measurements. Upvote / Downvote (`POST /hazards/:id/votes`, `source: "verifier"`), Skip, Reclassify (shows `agreeing` of 3), Report (spam/abuse/other). Shortcuts: `U` up, `D` down, `S` skip, only while focus is on the page body or plain content in the hazard card (never on a link, button or field), only once the hazard's details have loaded, and they can be switched off with the "Keyboard shortcuts" checkbox (WCAG 2.1.4). Vote buttons stay disabled until the details load. Reclassify lowercases and trims the type; allowed: letters, numbers, spaces, hyphens, max 40. On phones the vote bar sticks to the bottom of the screen. |
 | `/hazard/[id]` | Full detail: crop, clearance and remaining width in feet and metres, confidence, severity, last seen, expiry, Spanish label, pending reclassifications, vote history, location map. |
 
 Header shows `displayName` and karma from `GET /users/:deviceId`; retries every 10 s while the
 server is unreachable and refreshes after each vote or reclassification.
 
-Identity: a random `web-<uuid>` device id in `localStorage` (`stepsafe.deviceId`). All storage access
+Identity: a random `<32 hex>-web` device id in `localStorage` (`stepsafe.deviceId`), made with `crypto.getRandomValues` so it also works over plain HTTP on a LAN (`randomUUID` needs a secure context). Ids must match `^[A-Za-z0-9._:-]{1,128}$`; legacy `web-…` ids are replaced because the server names users from the first 4 characters. `app/error.tsx` shows a message instead of a blank page if a page throws. All storage access
 is wrapped in try/catch with an in-memory fallback (private windows still work for the session).
 
 ## Map encoding
@@ -54,6 +54,7 @@ removed while open, 404 and 429 (`rate_limited`) messages on actions.
 Graham Center and writes `public/osm-graham.json` (committed, about 110 KB, 891 features on
 2026-09-26), so the demo never depends on Overpass. Rerun with `node scripts/fetch-osm.mjs`.
 Data © OpenStreetMap contributors, ODbL 1.0; tiles from tile.openstreetmap.org with attribution.
+The OSM dots are distinguished by color only (with tooltips); accepted because it is an optional reference layer for sighted verifiers, and hazards themselves never rely on color alone.
 
 ## Accessibility
 
@@ -62,6 +63,12 @@ navy; primary buttons use navy text on blue). Brand Slate #66717E is only 3.7:1 
 not used for text there. Skip link, visible 3 px focus rings (navy + white halo on map tiles),
 keyboard-reachable pins (Enter opens) and a parallel list, labelled controls, `aria-live`
 announcements for new hazards and action results, works at 390 px wide.
+
+## Known gaps
+
+- The `/events` stream carries hazards outside the 5 km area and the map adds them (fine for the local demo).
+- Profile refreshes (`/users/:deviceId`) can resolve out of order; the header may briefly show an older karma.
+- Two overlapping resyncs (a reconnect while a retry is in flight) share one event buffer; live events are still applied, the later snapshot wins.
 
 ## Assumptions about the API
 

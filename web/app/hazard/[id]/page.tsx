@@ -5,10 +5,14 @@ import { useParams } from "next/navigation";
 import HazardDetail, { useHazardDetail } from "@/components/HazardDetail";
 import Map from "@/components/Map";
 import { Notice } from "@/components/ui";
+import { useLiveHazards } from "@/lib/hooks";
 
 export default function HazardPage() {
   const { id } = useParams<{ id: string }>();
-  const { detail, error, loading } = useHazardDetail(decodeURIComponent(id));
+  const hazardId = decodeURIComponent(id);
+  // Subscribed only so the detail re-fetches when this hazard changes on the server.
+  const { detailVersion } = useLiveHazards();
+  const { detail, error, loading } = useHazardDetail(hazardId, detailVersion(hazardId));
 
   return (
     <div className="mx-auto w-full max-w-5xl p-4">
