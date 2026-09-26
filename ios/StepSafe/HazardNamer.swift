@@ -80,6 +80,7 @@ final class HazardNamer: @unchecked Sendable { // main-confined state; tasks hop
     private let log = Logger(subsystem: "net.babigian.stepsafe", category: "namer")
     private let encodeQueue = DispatchQueue(label: "net.babigian.stepsafe.namer", qos: .utility)
     private var gate = ReportGate() // main
+    private var stillness = StillnessGate() // main
     private var latest: [HazardKind: Detection] = [:] // main
     private var tasks: [UUID: Task<Void, Never>] = [:] // main
     private let pending = OSAllocatedUnfairLock<[Request]>(initialState: [])
@@ -119,6 +120,7 @@ final class HazardNamer: @unchecked Sendable { // main-confined state; tasks hop
         walking.withLock { $0 = false }
         epoch.withLock { $0 += 1 }
         pending.withLock { $0 = [] }
+        stillness.reset()
         tasks.values.forEach { $0.cancel() }
         tasks = [:]
     }
@@ -126,6 +128,7 @@ final class HazardNamer: @unchecked Sendable { // main-confined state; tasks hop
     /// After every analysis output. `pins` = MapSync's latest /near rows.
     func update(_ confirmed: [HazardKind: Detection], floorY: Float?, pins: [NearHazard]) {
         latest = confirmed
+        let still = stillness.update(confirmed)
         for d in confirmed.values where gate.isNew(d, now: now) {
             guard let fix = localizer.locate(d.point) else { continue } // no GPS yet: retry next output
             if let pin = ReportGate.knownPin(band: d.kind.band, at: fix, in: pins) {
@@ -138,6 +141,7 @@ final class HazardNamer: @unchecked Sendable { // main-confined state; tasks hop
                 speak?(Spoken.named(name, d, lang: lang)) { }
                 continue
             }
+            guard still.contains(d.kind) else { continue } // moving, or not still for long enough yet: no POST
             gate.mark(d) // in flight until the POST succeeds or its retries fail
             let clearance = d.kind == .headHeight ? floorY.map { Double(d.point.y - $0) } : nil
             let req = Request(detection: d, fix: fix, heading: localizer.heading, clearanceM: clearance,
@@ -148,6 +152,7 @@ final class HazardNamer: @unchecked Sendable { // main-confined state; tasks hop
 
     func reset() {
         gate.reset()
+        stillness.reset()
         latest = [:]
         epoch.withLock { $0 += 1 }
         pending.withLock { $0 = [] }
@@ -235,7 +240,7 @@ final class HazardNamer: @unchecked Sendable { // main-confined state; tasks hop
     private func reported(_ req: Request, _ r: APIClient.ReportResult, _ ep: Int, _ id: UUID) {
         tasks[id] = nil
         onReported?(r.id)
-        onResult?("\(r.merged ? "Merged" : "New"): \(r.label)")
+        onResult?("\(r.merged ? "Merged" : r.id.isEmpty ? "Not pinned" : "New"): \(r.label)") // empty id: person/dog
         guard epoch.withLock({ $0 }) == ep else { return }
         gate.succeeded(req.detection)
         guard r.label != "unknown obstacle" else { return }

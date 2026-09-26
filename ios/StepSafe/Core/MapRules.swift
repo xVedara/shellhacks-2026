@@ -37,6 +37,10 @@ enum MapTuning {
     /// GPS jitter allowed before a distance sample counts as moving away (non-monotonic).
     static let passiveMonotonicSlackM = 0.05
     // Reports
+    /// Only a still hazard is reported: its world point stays within stillRadiusM (horizontal) of where it
+    /// settled for stillSeconds of fresh frames. A walking person (1.2 m/s) or a rolling bike never qualifies.
+    static let stillRadiusM: Float = 0.3
+    static let stillSeconds: Double = 1.0
     static let reportRetries = 2
     static let reportCooldownSeconds: Double = 60
     /// Privacy: the final crop is at most this share of the image width and of its height.
@@ -167,6 +171,31 @@ struct ReportGate {
             && Geo.distance($0.fix, fix) <= MapTuning.knownPinRadiusM }
             .min { Geo.distance($0.fix, fix) < Geo.distance($1.fix, fix) }
     }
+}
+
+/// Moving things are not map pins (Ara 2026-09-26: "make sure people and vehicles that are moving do not get
+/// added to the database"). One anchor per kind: the point where the confirmed detection settled and the frame
+/// time it settled at. Moving past stillRadiusM re-anchors, and a kind that stops being confirmed drops its
+/// anchor, so a passer-by leaves no trail of half-still identities. Times are Detection.seenAt, so a point
+/// HazardTracker holds through a dropout does not count as still.
+struct StillnessGate {
+    private var anchors: [HazardKind: (point: SIMD3<Float>, since: Double)] = [:]
+
+    /// Feed every analysis output's confirmed map hazards; returns the kinds that have stayed put long enough.
+    mutating func update(_ confirmed: [HazardKind: Detection]) -> Set<HazardKind> {
+        anchors = anchors.filter { confirmed[$0.key] != nil }
+        var still: Set<HazardKind> = []
+        for (kind, d) in confirmed {
+            if let a = anchors[kind], simd_distance(SIMD2(a.point.x, a.point.z), SIMD2(d.point.x, d.point.z)) <= MapTuning.stillRadiusM {
+                if d.seenAt - a.since >= MapTuning.stillSeconds { still.insert(kind) }
+            } else {
+                anchors[kind] = (d.point, d.seenAt)
+            }
+        }
+        return still
+    }
+
+    mutating func reset() { anchors = [:] }
 }
 
 /// Heads-up announcements (priority 4), once per pin per 5 minutes.

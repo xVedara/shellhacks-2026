@@ -106,6 +106,24 @@ describe('POST /hazards', () => {
     expect(await db.collection('hazards').countDocuments()).toBe(1);
   });
 
+  it('never pins a person or a dog: 200, empty id, nothing stored', async () => {
+    for (const type of ['person', 'dog']) {
+      naming = { type, category: 'moving', heightBand: 'ground', severity: 2 };
+      const { status, body } = await create();
+      expect(status).toBe(200);
+      expect(body).toEqual({ id: '', label: type, merged: false, pinned: false });
+    }
+    for (const c of ['hazards', 'votes', 'users']) expect(await db.collection(c).countDocuments()).toBe(0);
+  });
+
+  it('still pins a parked e-scooter', async () => {
+    naming = SCOOTER;
+    const { body } = await create();
+    expect(body).toMatchObject({ label: 'e-scooter', merged: false });
+    expect(body.id).not.toBe('');
+    expect(await db.collection('hazards').countDocuments({ type: 'e-scooter' })).toBe(1);
+  });
+
   it('does not merge at 15 m or across height bands', async () => {
     const first = await create();
     const far = await create({ lat: north(15), deviceId: 'dev-B' });

@@ -17,7 +17,7 @@ import {
   type LockableField,
 } from './db.ts';
 import type { Namer } from './gemini.ts';
-import { isTypeId, labelsFor, OBSTACLE, TAXONOMY, taxonomyEntry, TYPE_IDS } from './taxonomy.ts';
+import { isTypeId, labelsFor, NEVER_PINNED, OBSTACLE, TAXONOMY, taxonomyEntry, TYPE_IDS } from './taxonomy.ts';
 import { normalizeTtsText, TTS_LANGS, TtsBudgetError, type Tts, type TtsLang } from './tts.ts';
 
 declare module 'fastify' {
@@ -410,6 +410,10 @@ export function buildApp({
       // spoken labels come only from the taxonomy, for the phone's band; never from model text
       const type = naming ? taxonomyEntry(naming.type).id : OBSTACLE; // failure: "obstacle" + needsNaming
       const labels = labelsFor(type, b.heightBand);
+      // A person or dog is never pinned and never upvotes a pin nearby. 200 with the usual {id, label, merged}
+      // (id empty, nothing stored) so the phone marks the report done and does not retry. The early merge above
+      // skips naming (PLAN.md 8), so it cannot know the crop was a person; the phone's stillness gate covers that.
+      if (NEVER_PINNED.has(type)) return { id: '', label: labels.spokenLabel_en, merged: false, pinned: false };
       return serialized(async () => {
         const late = await tryMerge(); // another report may have landed while Gemini ran
         if (late) return late;

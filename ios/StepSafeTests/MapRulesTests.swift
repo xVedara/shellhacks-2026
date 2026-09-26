@@ -92,6 +92,61 @@ final class MapRulesTests: XCTestCase {
         XCTAssertEqual(s.next(pins, walker: home, heading: 0, now: 300)?.pin.id, "a")
     }
 
+    // MARK: Stillness gate: moving things are not map pins
+
+    /// Feeds `seconds` of 12 Hz ground detections at `position(t)`; the first time the gate lets it through.
+    func firstStill(_ seconds: Double, _ position: (Double) -> SIMD3<Float>) -> Double? {
+        var g = StillnessGate()
+        for i in 0...Int(seconds * 12) {
+            let t = Double(i) / 12
+            var d = detection(.ground, position(t))
+            d.seenAt = t
+            if g.update([.ground: d]).contains(.ground) { return t }
+        }
+        return nil
+    }
+
+    func testStillHazardReportsAfterAboutOneSecond() {
+        XCTAssertEqual(firstStill(3) { _ in SIMD3(0, 0.5, -2) }!, 1, accuracy: 0.09)
+    }
+
+    func testMovingThingNeverReports() {
+        XCTAssertNil(firstStill(10) { t in SIMD3(Float(1.2 * t), 0.5, -2) }) // walking across the lane
+        XCTAssertNil(firstStill(10) { t in SIMD3(0, 0.5, Float(-8 + 1.2 * t)) }) // walking toward the walker
+        XCTAssertNil(firstStill(10) { t in SIMD3(Float(0.4 * t), 0.5, -2) }) // shuffling, or a pushed cart
+    }
+
+    func testJitterUnderStillRadiusCountsAsStill() {
+        // Up to 0.29 m horizontally (height ignored) from where it settled: depth noise, nearest point shifting.
+        let jitter: [SIMD3<Float>] = [.zero, SIMD3(0.2, 0.3, -0.2), SIMD3(-0.25, 0, 0.1), SIMD3(0, -0.2, 0.29), SIMD3(0.1, 0, -0.1)]
+        let t = firstStill(3) { t in SIMD3(0, 0.5, -2) + jitter[Int((t * 12).rounded()) % jitter.count] }
+        XCTAssertEqual(t!, 1, accuracy: 0.09)
+    }
+
+    func testPointHeldAfterMovingNeverCountsAsStill() {
+        // HazardTracker stamps each fresh frame and holds the last detection (old stamp) through a dropout.
+        var tracker = HazardTracker()
+        _ = tracker.update([.ground: detection(.ground, .zero)], time: 0)
+        XCTAssertEqual(tracker.update([.ground: detection(.ground, .zero)], time: 0.5)[.ground]?.seenAt, 0.5)
+        XCTAssertEqual(tracker.update([:], time: 0.9)[.ground]?.seenAt, 0.5)
+
+        var g = StillnessGate()
+        var d = detection(.ground, .zero)
+        for i in 0..<12 { // 1 s walking across at 1.2 m/s
+            d.point = SIMD3(Float(0.1 * Double(i)), 0.5, -2)
+            d.seenAt = Double(i) / 12
+            XCTAssertTrue(g.update([.ground: d]).isEmpty)
+        }
+        for _ in 0..<12 { XCTAssertTrue(g.update([.ground: d]).isEmpty) } // left the lane: held point, old stamp
+        XCTAssertTrue(g.update([:]).isEmpty) // cleared: anchor dropped, no trail
+        d.seenAt = 5
+        XCTAssertTrue(g.update([.ground: d]).isEmpty) // something still where it passed: timed from scratch
+        d.seenAt = 5.9
+        XCTAssertTrue(g.update([.ground: d]).isEmpty)
+        d.seenAt = 6
+        XCTAssertEqual(g.update([.ground: d]), [.ground])
+    }
+
     // MARK: Report once per identity, skip if known, retries
 
     func testReportOncePerIdentity() {

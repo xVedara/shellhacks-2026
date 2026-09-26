@@ -98,6 +98,9 @@ export const taxonomyEntry = (id: unknown): HazardType =>
   BY_ID.get(typeof id === 'string' ? id.trim().toLowerCase().replace(/\s+/g, '-') : '') ?? BY_ID.get(OBSTACLE)!;
 export const isTypeId = (id: unknown): id is string => typeof id === 'string' && BY_ID.has(id);
 
+/** People and animals walk away: POST /hazards never pins them (Ara 2026-09-26). */
+export const NEVER_PINNED: ReadonlySet<string> = new Set(['person', 'dog']);
+
 /** Types that are themselves a drop; only these are named after "drop-off:". */
 export const DROP_TYPES: ReadonlySet<string> = new Set([
   ...TAXONOMY.filter((e) => e.defaultHeightBand === 'dropoff').map((e) => e.id), // hatch, trench, manhole, pothole, curb, ...

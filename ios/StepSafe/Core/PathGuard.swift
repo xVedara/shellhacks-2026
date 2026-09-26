@@ -47,6 +47,9 @@ struct Detection {
     /// The drop-off already got its haptic while the closing words played (AlertPolicy.dropOffToCue): its
     /// follow-on plays the drop-off tone first (right after the closing words) and no second haptic.
     var preCued = false
+    /// ARFrame time of the depth frame this point came from (HazardTracker). A held detection keeps its old
+    /// time, so StillnessGate never counts a frozen point as standing still.
+    var seenAt: Double = 0
 
     struct Closing: Equatable {
         var speed: Float
@@ -273,6 +276,8 @@ struct HazardTracker {
                 let start = firstHit[kind] ?? time
                 firstHit[kind] = start
                 lastHit[kind] = time
+                var d = d
+                d.seenAt = time
                 if confirmed[kind] != nil || time - start >= Tuning.confirmSeconds { confirmed[kind] = d }
             } else {
                 firstHit[kind] = nil
