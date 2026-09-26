@@ -62,15 +62,7 @@ for (const [field, rest] of markerPropChanges) {
   });
 }
 
-test("confidence, selection, and highlight each force a redraw", () => {
-  assert.equal(sameHazardMarker(props(), props({ confidence: 3 })), false);
-  assert.equal(sameHazardMarker(props(), props({}, { selected: true })), false);
-  assert.equal(sameHazardMarker(props(), props({}, { highlighted: true })), false);
-});
-
-test("a moved pin or a new click handler forces a redraw", () => {
-  assert.equal(sameHazardMarker(props(), props({ lat: 25.76 })), false);
+test("the same click handler still skips a redraw", () => {
   const onSelect = () => {};
   assert.equal(sameHazardMarker(props({}, { onSelect }), props({}, { onSelect })), true);
-  assert.equal(sameHazardMarker(props({}, { onSelect }), props({}, { onSelect: () => {} })), false);
 });
