@@ -173,21 +173,33 @@ export function useIdentity() {
   return { deviceId, user, status };
 }
 
-/** The fixed hazard-type list, fetched once per session (memoized in `getTaxonomy`). */
+const TAXONOMY_RETRY_MS = [2000, 5000, 15000];
+
+/** The fixed hazard-type list, fetched once per session (memoized in `getTaxonomy`). On failure,
+ * retries with backoff (2 s, 5 s, then every 15 s); `retry()` also retries immediately (for a
+ * "Retry" button). */
 export function useTaxonomy() {
   const [taxonomy, setTaxonomy] = useState<HazardType[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let live = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     getTaxonomy().then(
       (t) => live && setTaxonomy(t),
-      (e) => live && setError(e instanceof Error ? e.message : String(e)),
+      (e) => {
+        if (!live) return;
+        setError(e instanceof Error ? e.message : String(e));
+        const delay = TAXONOMY_RETRY_MS[Math.min(attempt, TAXONOMY_RETRY_MS.length - 1)];
+        timer = setTimeout(() => live && setAttempt((a) => a + 1), delay);
+      },
     );
     return () => {
       live = false;
+      clearTimeout(timer);
     };
-  }, []);
-  return { taxonomy, error, loading: !taxonomy && !error };
+  }, [attempt]);
+  return { taxonomy, error, loading: !taxonomy && !error, retry: () => setAttempt((a) => a + 1) };
 }
 
 /** Tell the header to refresh karma after this device acts. */

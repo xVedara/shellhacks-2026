@@ -18,9 +18,11 @@ import {
   getVotedIds,
   rememberVote,
   typeDisplayName,
+  applyTypePick,
   type Category,
   type HazardType,
   type HeightBand,
+  type ReclassifyPickState,
 } from "@/lib/api";
 import { announceAction, useLiveHazards, useTaxonomy } from "@/lib/hooks";
 
@@ -31,7 +33,7 @@ const voteButton =
 
 export default function VerifyPage() {
   const { hazards, connection, loaded, error, detailVersion } = useLiveHazards();
-  const { taxonomy, error: taxonomyError } = useTaxonomy();
+  const { taxonomy, error: taxonomyError, retry: retryTaxonomy } = useTaxonomy();
   const [voted, setVoted] = useState<Set<string>>(() => (typeof window === "undefined" ? new Set() : getVotedIds()));
   const [skipped, setSkipped] = useState<Set<string>>(new Set());
   const [pinnedId, setPinnedId] = useState<string | null>(null);
@@ -302,7 +304,14 @@ export default function VerifyPage() {
             </div>
 
             {panel === "reclassify" && (
-              <ReclassifyForm key={current.id} hazardId={current.id} current={current} taxonomy={taxonomy} taxonomyError={taxonomyError} />
+              <ReclassifyForm
+                key={current.id}
+                hazardId={current.id}
+                current={current}
+                taxonomy={taxonomy}
+                taxonomyError={taxonomyError}
+                taxonomyRetry={retryTaxonomy}
+              />
             )}
             {panel === "report" && <ReportForm key={current.id} hazardId={current.id} />}
           </div>
@@ -317,15 +326,18 @@ function ReclassifyForm({
   current,
   taxonomy,
   taxonomyError,
+  taxonomyRetry,
 }: {
   hazardId: string;
   current: { type: string; category: Category; heightBand: HeightBand };
   taxonomy: HazardType[] | null;
   taxonomyError: string | null;
+  taxonomyRetry: () => void;
 }) {
   const [type, setType] = useState("");
   const [category, setCategory] = useState<Category | "">("");
   const [heightBand, setHeightBand] = useState<HeightBand | "">("");
+  const [autoFilled, setAutoFilled] = useState<ReclassifyPickState["autoFilled"]>({ category: false, heightBand: false });
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ tone: "info" | "warn"; text: string } | null>(null);
 
@@ -334,14 +346,24 @@ function ReclassifyForm({
     [taxonomy],
   );
 
-  // Picking a type pre-fills its default category and height band; the volunteer can still edit them.
+  // Picking a type pre-fills its default category/height band only while they're still "No
+  // change" (never overwrites a value the volunteer set themselves); picking "No change" for type
+  // clears only the fields it had auto-filled. See applyTypePick.
   const onTypeChange = (id: string) => {
     setType(id);
     const entry = taxonomy?.find((t) => t.id === id);
-    if (entry) {
-      setCategory(entry.category);
-      setHeightBand(entry.defaultHeightBand);
-    }
+    const next = applyTypePick(id, entry, { category, heightBand, autoFilled });
+    setCategory(next.category);
+    setHeightBand(next.heightBand);
+    setAutoFilled(next.autoFilled);
+  };
+  const onCategoryChange = (value: Category | "") => {
+    setCategory(value);
+    setAutoFilled((a) => ({ ...a, category: false }));
+  };
+  const onHeightBandChange = (value: HeightBand | "") => {
+    setHeightBand(value);
+    setAutoFilled((a) => ({ ...a, heightBand: false }));
   };
 
   const change = {
@@ -376,39 +398,47 @@ function ReclassifyForm({
     <form id="reclassify-panel" onSubmit={submit} className="well space-y-3 p-4">
       <fieldset className="space-y-3" disabled={busy}>
         <legend className="font-semibold text-white">Propose a correction (change only what’s wrong)</legend>
-        <label className="block text-sm font-semibold text-white">
-          Type <span className="font-normal text-muted">(now “{typeDisplayName(current.type, taxonomy)}”)</span>
+        <div>
+          <label htmlFor="reclassify-type" className="block text-sm font-semibold text-white">
+            Type <span className="font-normal text-muted">(now “{typeDisplayName(current.type, taxonomy)}”)</span>
+          </label>
           {taxonomyError ? (
-            <p role="alert" className={`mt-1 font-normal text-alert`}>
-              Couldn’t load hazard types ({taxonomyError}). Type can’t be changed right now; category and height band still can.
+            <p role="alert" className="mt-1 font-normal text-alert">
+              Couldn’t load hazard types ({taxonomyError}). Type can’t be changed right now; category and height band still can.{" "}
+              <button type="button" onClick={taxonomyRetry} className="font-semibold text-white underline underline-offset-2">
+                Retry
+              </button>
             </p>
           ) : (
-            <select
-              value={type}
-              onChange={(e) => onTypeChange(e.target.value)}
-              disabled={!taxonomy}
-              aria-describedby="type-hint"
-              className={field}
-            >
-              <option value="">{taxonomy ? "No change" : "Loading…"}</option>
-              {grouped.map(({ category: c, options }) => (
-                <optgroup key={c} label={CATEGORY_META[c].label}>
-                  {options.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.en}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
+            <>
+              <select
+                id="reclassify-type"
+                value={type}
+                onChange={(e) => onTypeChange(e.target.value)}
+                disabled={!taxonomy}
+                aria-describedby="type-hint"
+                className={field}
+              >
+                <option value="">{taxonomy ? "No change" : "Loading…"}</option>
+                {grouped.map(({ category: c, options }) => (
+                  <optgroup key={c} label={CATEGORY_META[c].label}>
+                    {options.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.en}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+              <span id="type-hint" className="mt-1 block font-normal text-muted">
+                Choosing a type also sets its usual category and height band below.
+              </span>
+            </>
           )}
-          <span id="type-hint" className="mt-1 block font-normal text-muted">
-            Choosing a type also sets its usual category and height band below.
-          </span>
-        </label>
+        </div>
         <label className="block text-sm font-semibold text-white">
           Category <span className="font-normal text-muted">(now {CATEGORY_META[current.category].label.toLowerCase()})</span>
-          <select value={category} onChange={(e) => setCategory(e.target.value as Category | "")} className={field}>
+          <select value={category} onChange={(e) => onCategoryChange(e.target.value as Category | "")} className={field}>
             <option value="">No change</option>
             {CATEGORIES.map((c) => (
               <option key={c} value={c}>
@@ -419,7 +449,7 @@ function ReclassifyForm({
         </label>
         <label className="block text-sm font-semibold text-white">
           Height band <span className="font-normal text-muted">(now {HEIGHT_META[current.heightBand].label.toLowerCase()})</span>
-          <select value={heightBand} onChange={(e) => setHeightBand(e.target.value as HeightBand | "")} className={field}>
+          <select value={heightBand} onChange={(e) => onHeightBandChange(e.target.value as HeightBand | "")} className={field}>
             <option value="">No change</option>
             {HEIGHT_BANDS.map((b) => (
               <option key={b} value={b}>

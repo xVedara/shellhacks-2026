@@ -123,14 +123,28 @@ export const api = {
 
 let taxonomyPromise: Promise<HazardType[]> | null = null;
 
+/** True when `body` looks enough like `HazardType[]` to trust: an array of objects each with a
+ * string `id` (the field everything else keys off). Doesn't check `en`/`es`/`category`/
+ * `defaultHeightBand` — a malformed one of those would just show oddly, not break lookups. */
+export function isTaxonomyArray(body: unknown): body is HazardType[] {
+  return Array.isArray(body) && body.every((t) => t !== null && typeof t === "object" && typeof (t as { id?: unknown }).id === "string");
+}
+
 /** The fixed hazard-type list from GET /taxonomy. Cached in memory for the session; a failed fetch
- * clears the cache so the next call retries instead of being stuck failed forever. */
+ * (network/HTTP error or a malformed body) clears the cache so the next call retries instead of
+ * being stuck failed forever. */
 export function getTaxonomy(): Promise<HazardType[]> {
   if (!taxonomyPromise) {
-    taxonomyPromise = api.taxonomy().catch((e) => {
-      taxonomyPromise = null;
-      throw e;
-    });
+    taxonomyPromise = api
+      .taxonomy()
+      .then((body) => {
+        if (!isTaxonomyArray(body)) throw new ApiError(0, "bad_response", "The server sent a malformed taxonomy list.");
+        return body;
+      })
+      .catch((e) => {
+        taxonomyPromise = null;
+        throw e;
+      });
   }
   return taxonomyPromise;
 }
@@ -139,6 +153,35 @@ export function getTaxonomy(): Promise<HazardType[]> {
  * it's unknown or the taxonomy hasn't loaded (legacy free-text types keep their original text). */
 export function typeDisplayName(id: string, taxonomy: readonly HazardType[] | null | undefined): string {
   return taxonomy?.find((t) => t.id === id)?.en ?? id;
+}
+
+export type ReclassifyPickState = {
+  category: Category | "";
+  heightBand: HeightBand | "";
+  autoFilled: { category: boolean; heightBand: boolean };
+};
+
+/** Reclassify form's "pick a type" logic: picking a type pre-fills category/heightBand only while
+ * they're still "No change" (never overwrites a value the volunteer set themselves), and tracks
+ * which of them it filled. Picking "No change" for type clears only the fields it auto-filled.
+ * Pure so it's unit-testable without mounting the form. */
+export function applyTypePick(id: string, entry: HazardType | undefined, state: ReclassifyPickState): ReclassifyPickState {
+  if (id === "") {
+    return {
+      category: state.autoFilled.category ? "" : state.category,
+      heightBand: state.autoFilled.heightBand ? "" : state.heightBand,
+      autoFilled: { category: false, heightBand: false },
+    };
+  }
+  if (!entry) return state;
+  return {
+    category: state.category === "" ? entry.category : state.category,
+    heightBand: state.heightBand === "" ? entry.defaultHeightBand : state.heightBand,
+    autoFilled: {
+      category: state.autoFilled.category || state.category === "",
+      heightBand: state.autoFilled.heightBand || state.heightBand === "",
+    },
+  };
 }
 
 // --- local identity and vote memory (localStorage can throw or be empty; never rely on it) ---
