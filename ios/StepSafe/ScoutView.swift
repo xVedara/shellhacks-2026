@@ -259,7 +259,7 @@ struct ScoutView: View {
     private var nearbyList: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Nearby, 200 m").font(.headline).foregroundStyle(.white)
+                Text("Nearby, 650 ft").font(.headline).foregroundStyle(.white)
                 Spacer()
                 Button { scout.refresh() } label: { Image(systemName: "arrow.clockwise").frame(width: 44, height: 44) }
                     .accessibilityLabel("Refresh nearby hazards")
@@ -270,7 +270,7 @@ struct ScoutView: View {
                 HStack(spacing: 8) {
                     VStack(alignment: .leading) {
                         Text(scout.name(pin) + (pin.sample == true ? " (sample)" : "")).foregroundStyle(.white)
-                        Text("\(Int(pin.distanceM ?? 0)) m, \(pin.heightBand), confidence \(String(format: "%.1f", pin.confidence))")
+                        Text("\(Int((pin.distanceM ?? 0) * 3.28084)) ft, \(pin.heightBand), confidence \(String(format: "%.1f", pin.confidence))")
                             .font(.footnote).foregroundStyle(Color.slate)
                     }
                     .accessibilityElement(children: .combine)

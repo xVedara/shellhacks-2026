@@ -135,14 +135,14 @@ export default function MapPage() {
         </Link>
       </PageBar>
       <div className="flex flex-1 flex-col gap-4 p-4 lg:min-h-0 lg:px-6 lg:py-5">
-        <p className="text-ink-2">Hazards reported by StepSafe walkers within 5 km of FIU Graham Center. Updates arrive live.</p>
+        <p className="text-ink-2">Hazards reported by StepSafe walkers within 3 miles of FIU Graham Center. Updates arrive live.</p>
         <section aria-label="Summary" className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           <Metric
             icon="hazard"
             tint="#ff7900"
             label="Active hazards"
             value={show(list.length)}
-            note={loaded ? `${sampleCount} sample · ${list.length - sampleCount} real · 5 km` : "Within 5 km"}
+            note={loaded ? `${sampleCount} sample · ${list.length - sampleCount} real · 3 miles` : "Within 3 miles"}
           />
           <Metric
             icon="clock"
@@ -268,7 +268,7 @@ export default function MapPage() {
                   {loaded && list.length === 0 && (
                     <div className="p-3">
                       <Notice tone="info" title="No active hazards yet">
-                        Nothing has been reported within 5 km of the Graham Center. New reports appear here live, no refresh needed.
+                        Nothing has been reported within 3 miles of the Graham Center. New reports appear here live, no refresh needed.
                       </Notice>
                     </div>
                   )}

@@ -118,8 +118,8 @@ struct ContentView: View {
     private var floorText: String {
         switch model.floorSource {
         case .planeUnder: return "Floor: ARKit plane under you"
-        case .planeNearest: return String(format: "Floor: nearest ARKit plane, drop rule off, ground from %.1f m", Tuning.estimatedFloorGroundMinM)
-        case .estimate: return String(format: "Floor: estimated (camera height %.2f m), drop rule off", Tuning.cameraHeightM)
+        case .planeNearest: return String(format: "Floor: nearest ARKit plane, drop rule off, ground from %.1f ft", Tuning.estimatedFloorGroundMinM * 3.28084)
+        case .estimate: return String(format: "Floor: estimated (camera height %.1f ft), drop rule off", Tuning.cameraHeightM * 3.28084)
         }
     }
 

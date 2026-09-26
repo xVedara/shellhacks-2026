@@ -244,7 +244,7 @@ export function rememberVote(id: string) {
 // --- formatting ---
 
 export const toFeet = (m: number) => m * 3.28084;
-export const formatLength = (m: number) => `${toFeet(m).toFixed(1)} ft (${m.toFixed(2)} m)`;
+export const formatLength = (m: number) => `${toFeet(m).toFixed(1)} ft`;
 
 export function relativeTime(iso: string, now = Date.now()): string {
   const diff = new Date(iso).getTime() - now;

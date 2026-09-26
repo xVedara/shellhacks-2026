@@ -183,7 +183,7 @@ export default function VerifyPage() {
       )}
       {loaded && all.length === 0 && (
         <Notice tone="info" title="Nothing to verify yet">
-          No active hazards within 5 km of the Graham Center. New reports show up here automatically.
+          No active hazards within 3 miles of the Graham Center. New reports show up here automatically.
         </Notice>
       )}
       {loaded && all.length > 0 && !current && (

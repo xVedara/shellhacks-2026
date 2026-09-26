@@ -79,7 +79,7 @@ struct ServerStatusView: View {
             Label("Server \(reach)", systemImage: link.reachable == false ? "wifi.slash" : "network")
                 .foregroundStyle(link.reachable == false ? Color.hazard : .white)
             Text("Last report: \(link.lastReport)").font(.footnote).foregroundStyle(Color.slate)
-            Text("Pins within 60 m: \(link.pinCount). Ahead within 30 m:").font(.footnote).foregroundStyle(Color.slate)
+            Text("Pins within 195 ft: \(link.pinCount). Ahead within 95 ft:").font(.footnote).foregroundStyle(Color.slate)
             ForEach(link.ahead, id: \.pin.id) { due in
                 Text(Spoken.headsUp(due) + (due.pin.sample == true ? " (sample)" : ""))
                     .font(.footnote).foregroundStyle(.white)

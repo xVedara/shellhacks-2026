@@ -4,8 +4,8 @@ StepSafe is a head-mounted iPhone (LiDAR) plus AirPods that warns blind and low-
 pedestrians about what's ahead — ground obstacles, head-height hazards, drop-offs, and
 fast-closing crossing hazards (cars, bikes, a pushed cart) — and a community map where
 every walk makes the next one safer. Sighted Scouts can report and verify hazards from
-the same app. It's a hazard layer, not a guide: StepSafe doesn't replace a cane, a guide
-dog, or your own judgment, and it never gives walking directions.
+the same app. It's a hazard layer, not a guide: StepSafe doesn't replace a guide dog or
+your own judgment, and it never gives walking directions.
 
 Built at ShellHacks 2026 (FIU Graham Center, Miami).
 
