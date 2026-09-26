@@ -8,8 +8,9 @@ export type TtsLang = (typeof TTS_LANGS)[number];
 /**
  * Returns MP3 bytes for already-normalized text. On a cache miss it first calls `charge(chars)`; false means
  * a budget ran out and it throws TtsBudgetError without calling ElevenLabs. `charge(n)` with a negative n
- * refunds a reservation when the upstream call fails before any audio is produced; that call must not count
- * as another miss. Cache hits are free.
+ * refunds a reservation only when ElevenLabs answers non-OK, which means nothing was generated. A timeout,
+ * a network error, or a 200 body that fails while being read keeps the charge: those characters may already
+ * have been billed. That refund must not count as another miss. Cache hits are free.
  * Throws any other error when the upstream call fails.
  */
 export type Tts = (text: string, charge: (chars: number) => boolean) => Promise<Buffer>;
@@ -114,34 +115,29 @@ export function elevenLabsTts({
       // miss: generate below
     }
     if (!charge(text.length)) throw new TtsBudgetError('tts budget exhausted');
-    let audio: Buffer;
-    try {
-      const res = await fetchImpl(
-        `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`,
-        {
-          method: 'POST',
-          headers: { 'xi-api-key': apiKey, 'content-type': 'application/json', accept: 'audio/mpeg' },
-          body: JSON.stringify({ text, model_id: model }),
-          signal: AbortSignal.timeout(timeoutMs),
-        },
-      );
-      // the error body is ElevenLabs' JSON ({detail: {status, message}}); it never contains the key
-      if (!res.ok) {
-        // capped read: an error body is only a hint; a huge one is dropped after recording the status
-        const detail = await readCapped(res, 4096).then((b) => b.toString('utf8').slice(0, 300), () => '(body too large)');
-        throw new Error(`elevenlabs HTTP ${res.status}: ${detail}`);
-      }
-      const type = res.headers.get('content-type') ?? '';
-      if (!type.startsWith('audio/mpeg')) {
-        await res.body?.cancel().catch(() => {});
-        throw new Error(`elevenlabs returned ${type || 'no content-type'}, not audio/mpeg`);
-      }
-      audio = await readCapped(res, MAX_AUDIO_BYTES);
-      if (!audio.length) throw new Error('elevenlabs returned empty audio');
-    } catch (err) {
-      charge(-text.length); // nothing was generated; give the daily character reservation back
-      throw err;
+    const res = await fetchImpl(
+      `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`,
+      {
+        method: 'POST',
+        headers: { 'xi-api-key': apiKey, 'content-type': 'application/json', accept: 'audio/mpeg' },
+        body: JSON.stringify({ text, model_id: model }),
+        signal: AbortSignal.timeout(timeoutMs),
+      },
+    );
+    // the error body is ElevenLabs' JSON ({detail: {status, message}}); it never contains the key
+    if (!res.ok) {
+      // capped read: an error body is only a hint; a huge one is dropped after recording the status
+      const detail = await readCapped(res, 4096).then((b) => b.toString('utf8').slice(0, 300), () => '(body too large)');
+      charge(-text.length); // non-OK means nothing was generated; give the daily character reservation back
+      throw new Error(`elevenlabs HTTP ${res.status}: ${detail}`);
     }
+    const type = res.headers.get('content-type') ?? '';
+    if (!type.startsWith('audio/mpeg')) {
+      await res.body?.cancel().catch(() => {});
+      throw new Error(`elevenlabs returned ${type || 'no content-type'}, not audio/mpeg`);
+    }
+    const audio = await readCapped(res, MAX_AUDIO_BYTES);
+    if (!audio.length) throw new Error('elevenlabs returned empty audio');
     try {
       await mkdir(cacheDir, { recursive: true });
       const tmp = `${file}.${process.pid}.tmp`; // rename is atomic: a reader never sees half a file

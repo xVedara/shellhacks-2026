@@ -286,6 +286,28 @@ describe('elevenlabs tts', () => {
     expect(seen).toEqual([5, -5]);
   });
 
+  it('keeps the character charge when a 200 audio body times out before it finishes', async () => {
+    const seen: number[] = [];
+    const tts = elevenLabsTts({
+      apiKey: 'KEY',
+      cacheDir: await cacheDir(),
+      timeoutMs: 50,
+      fetchImpl: fakeFetch((_url, init) => {
+        const body = new ReadableStream<Uint8Array>({
+          start(controller) {
+            const signal = init?.signal;
+            const fail = () => controller.error(signal?.reason ?? new Error('aborted'));
+            if (signal?.aborted) fail();
+            else signal?.addEventListener('abort', fail, { once: true });
+          },
+        });
+        return new Response(body, { headers: { 'content-type': 'audio/mpeg' } });
+      }),
+    });
+    await expect(tts('chair', (n) => (seen.push(n), true))).rejects.toThrow();
+    expect(seen).toEqual([5]);
+  });
+
   it('a miss with no budget throws TtsBudgetError without calling upstream', async () => {
     const f = fakeFetch(() => mp3());
     const tts = elevenLabsTts({ apiKey: 'KEY', cacheDir: await cacheDir(), fetchImpl: f });
