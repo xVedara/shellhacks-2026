@@ -77,6 +77,9 @@ final class VehicleDetector {
     }
 
     private var scaler: VTPixelTransferSession?
+    /// Reused scaled buffer. `submit` only runs while the previous inference is idle, and `detect` does not
+    /// keep the buffer, so the next frame cannot overwrite pixels still being read.
+    private var scaled: CVPixelBuffer?
 
     /// Copy of the camera image scaled to 640 px on the long side (YOLO runs at 640; 1920 px copies cost more).
     private func downsample(_ src: CVPixelBuffer) -> CVPixelBuffer? {
@@ -84,10 +87,15 @@ final class VehicleDetector {
         guard let scaler else { return nil }
         let w = CVPixelBufferGetWidth(src), h = CVPixelBufferGetHeight(src)
         let s = 640.0 / Double(max(w, h))
-        var out: CVPixelBuffer?
-        guard CVPixelBufferCreate(nil, Int(Double(w) * s) & ~1, Int(Double(h) * s) & ~1,
-                                  CVPixelBufferGetPixelFormatType(src), nil, &out) == kCVReturnSuccess, let dst = out,
-              VTPixelTransferSessionTransferImage(scaler, from: src, to: dst) == noErr else { return nil }
+        let dw = Int(Double(w) * s) & ~1, dh = Int(Double(h) * s) & ~1
+        let fmt = CVPixelBufferGetPixelFormatType(src)
+        if scaled == nil || CVPixelBufferGetWidth(scaled!) != dw || CVPixelBufferGetHeight(scaled!) != dh
+            || CVPixelBufferGetPixelFormatType(scaled!) != fmt {
+            var out: CVPixelBuffer?
+            guard CVPixelBufferCreate(nil, dw, dh, fmt, nil, &out) == kCVReturnSuccess, let dst = out else { return nil }
+            scaled = dst
+        }
+        guard let dst = scaled, VTPixelTransferSessionTransferImage(scaler, from: src, to: dst) == noErr else { return nil }
         return dst
     }
 
@@ -113,11 +121,9 @@ final class VehicleDetector {
                                   confidence: top.confidence)
         }
         let t = input.transform
-        let rot = simd_float3x3(SIMD3(t.columns.0.x, t.columns.0.y, t.columns.0.z),
-                                SIMD3(t.columns.1.x, t.columns.1.y, t.columns.1.z),
-                                SIMD3(t.columns.2.x, t.columns.2.y, t.columns.2.z))
+        let rot = t.rotation3
         let k = input.intrinsics
-        let cam = SIMD3(t.columns.3.x, t.columns.3.y, t.columns.3.z)
+        let cam = t.translation
         let camera = BoxTracker.Camera(fx: k.columns.0.x, fy: k.columns.1.y, cx: k.columns.2.x, cy: k.columns.2.y,
                                        width: Float(input.size.width), height: Float(input.size.height), rotation: rot,
                                        position: cam)

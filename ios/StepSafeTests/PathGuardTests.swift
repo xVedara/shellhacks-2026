@@ -68,6 +68,63 @@ final class PathGuardTests: XCTestCase {
 
     let floor = Shape.plane(y: 0) { _ in true }
 
+    func testSharedRaysMatchDirectAnalysis() {
+        let box = Shape.box(min: SIMD3(-0.3, 0, -2.3), max: SIMD3(0.3, 0.6, -1.7))
+        let frame = render([floor, box])
+        var rays: [SIMD3<Float>] = []
+        DepthRays.fill(frame, into: &rays)
+        XCTAssertEqual(rays.count, width * height)
+        let direct = PathGuard.analyze(frame, wantLabels: true)
+        let shared = PathGuard.analyze(frame, wantLabels: true, rays: rays)
+        XCTAssertEqual(shared.detections[.ground]?.point, direct.detections[.ground]?.point)
+        XCTAssertEqual(shared.detections[.ground]?.pointCount, direct.detections[.ground]?.pointCount)
+        XCTAssertEqual(shared.labels, direct.labels)
+        DepthRays.fill(frame, into: &rays) // same buffer, same size
+        XCTAssertEqual(PathGuard.analyze(frame, rays: rays).detections[.ground]?.pointCount,
+                       direct.detections[.ground]?.pointCount)
+        // A short buffer is not this frame: analysis computes its own rays.
+        XCTAssertEqual(PathGuard.analyze(frame, rays: []).detections[.ground]?.pointCount,
+                       direct.detections[.ground]?.pointCount)
+
+        let edge = render([floor], confidenceBeyond: { $0.z < -1.5 })
+        var edgeRays: [SIMD3<Float>] = []
+        DepthRays.fill(edge, into: &edgeRays)
+        let drop = PathGuard.analyze(edge)
+        let dropShared = PathGuard.analyze(edge, rays: edgeRays)
+        XCTAssertEqual(dropShared.detections[.dropOff]?.point, drop.detections[.dropOff]?.point)
+        XCTAssertEqual(dropShared.detections[.dropOff]?.pointCount, drop.detections[.dropOff]?.pointCount)
+
+        // Blank frame: shared rays and the direct path both report nothing, and a short buffer is ignored.
+        let blank = DepthFrame(depth: [Float](repeating: 0, count: 4), confidence: [UInt8](repeating: 0, count: 4),
+                               width: 2, height: 2, intrinsics: matrix_identity_float3x3,
+                               cameraTransform: matrix_identity_float4x4, floorY: 0)
+        var blankRays: [SIMD3<Float>] = []
+        DepthRays.fill(blank, into: &blankRays)
+        var det = ClosingDetector()
+        XCTAssertEqual(det.update(blank, time: 0, rays: blankRays), [])
+        XCTAssertEqual(det.update(blank, time: 1.0 / 12, rays: []), [])
+    }
+
+    /// ClosingDetector's direct unproject is `rot * (dirCam * d)`; the shared ray is `(rot * dirCam) * d`.
+    func testSharedRayAgreesWithDirectUnprojectWithinAMillimetre() {
+        let t = cameraTransform
+        let rot = t.rotation3
+        let cam = t.translation
+        let k = intrinsics
+        let fx = k.columns.0.x, fy = k.columns.1.y, cx = k.columns.2.x, cy = k.columns.2.y
+        for v in stride(from: 0, to: height, by: 17) {
+            for u in stride(from: 0, to: width, by: 19) {
+                let d: Float = 4
+                let ray = DepthRays.direction(u: u, v: v, intrinsics: k, rotation: rot)
+                let shared = cam + ray * d
+                let direct = cam + rot * SIMD3((Float(u) + 0.5 - cx) / fx * d, -(Float(v) + 0.5 - cy) / fy * d, -d)
+                XCTAssertEqual(shared.x, direct.x, accuracy: 1e-3)
+                XCTAssertEqual(shared.y, direct.y, accuracy: 1e-3)
+                XCTAssertEqual(shared.z, direct.z, accuracy: 1e-3)
+            }
+        }
+    }
+
     func testFlatFloorNoAlert() {
         let r = PathGuard.analyze(render([floor]))
         XCTAssertTrue(r.detections.isEmpty, "\(r.detections)")

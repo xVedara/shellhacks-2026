@@ -59,6 +59,30 @@ final class MapRulesTests: XCTestCase {
                        "Trash bin, 35 feet, right")
     }
 
+    func testHeadsUpReleaseLetsADroppedPinSpeakAgain() {
+        var s = HeadsUpState()
+        let pins = [pin("a", 5, 0)]
+        XCTAssertEqual(s.next(pins, walker: home, heading: 0, now: 0)?.pin.id, "a")
+        XCTAssertNil(s.next(pins, walker: home, heading: 0, now: 1))
+        s.release("a")
+        XCTAssertEqual(s.next(pins, walker: home, heading: 0, now: 2)?.pin.id, "a")
+    }
+
+    func testHeadsUpSpanishUsesTaxonomyNameAndPies() throws {
+        let tax = [HazardTypeEntry(id: "trash-bin", en: "trash bin", es: "cubo de basura", category: "moving",
+                                   defaultHeightBand: "ground")]
+        var p = pin("left", 6, 330)
+        p.type = "trash-bin"
+        let due = try XCTUnwrap(HeadsUpState.ahead([p], walker: home, heading: 0).first)
+        XCTAssertEqual(Spoken.headsUp(due, lang: "es", taxonomy: tax), "Cubo de basura, 20 pies, izquierda")
+        XCTAssertEqual(Spoken.headsUp(due), "Trash bin, 20 feet, left") // no taxonomy: the English label
+        XCTAssertEqual(Taxonomy.localize("Trash Bin", lang: "es", in: tax), "cubo de basura")
+        XCTAssertEqual(Taxonomy.localize("Trash Bin", lang: "en", in: tax), "Trash Bin")
+        XCTAssertEqual(Taxonomy.localize("open manhole", lang: "es", in: tax), "open manhole")
+        XCTAssertEqual(Spoken.named("cubo de basura", detection(.ground, .zero, ahead: 3, lateral: 0.4), lang: "es"),
+                       "Cubo de basura, 9 pies, derecha")
+    }
+
     func testHeadsUpOncePerPinPerFiveMinutes() {
         var s = HeadsUpState()
         let pins = [pin("a", 5, 0), pin("b", 10, 0)]
@@ -252,9 +276,14 @@ final class MapRulesTests: XCTestCase {
         XCTAssertNil(q.pop(playing: AlertPolicy.serverPhrasePriority, now: 2))
         q.push("Alerts on", server: false, now: 2)
         XCTAssertEqual(q.pop(playing: AlertPolicy.serverPhrasePriority, now: 2), "Alerts on")
-        // A server phrase waiting more than 3 s is dropped.
-        XCTAssertNil(q.pop(playing: nil, now: 2 + Tuning.serverPhraseMaxWaitSeconds + 0.1))
+        // A server phrase waiting more than 3 s is dropped, and the caller is told which one.
+        var dropped: [String] = []
+        XCTAssertNil(q.pop(playing: nil, now: 2 + Tuning.serverPhraseMaxWaitSeconds + 0.1, dropped: &dropped))
+        XCTAssertEqual(dropped, ["label"])
         XCTAssertEqual(q.count, 0)
+        q.push("heads-up", server: true, now: 10)
+        q.push("status", server: false, now: 10)
+        XCTAssertEqual(q.replaceAll(with: "what's ahead", now: 10), ["heads-up", "status"])
     }
 
     // MARK: Crop box

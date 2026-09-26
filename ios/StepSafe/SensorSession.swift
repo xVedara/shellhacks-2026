@@ -23,6 +23,9 @@ final class SensorSession: NSObject, ARSessionDelegate {
         var walkerSpeed: Float = 0
         /// Head held still (HeadMotion): vehicle warnings at a curb need it (HoldStillHint).
         var headStill = true
+        /// Every closing object this frame. The nearest is also `confirmed[.closing]` (speech uses one slot).
+        /// Tones and haptics fire for each new track, not only the nearest.
+        var closings: [Detection] = []
     }
 
     enum Status { case on, back, paused, failed }
@@ -71,6 +74,8 @@ final class SensorSession: NSObject, ARSessionDelegate {
     private var lastCurb = -Double.infinity
     private var head = HeadMotion()
     private var analysisCount = 0
+    /// Reused depth rays (analysis queue only): one unproject per frame for PathGuard and ClosingDetector.
+    private var rayDirs: [SIMD3<Float>] = []
     /// Vehicle closing objects from YOLO (nil if the model failed to load). Fed from the delegate queue.
     private let vehicleBox = OSAllocatedUnfairLock<VehicleDetector?>(initialState: nil)
     var vehicles: VehicleDetector? { vehicleBox.withLock { $0 } }
@@ -233,33 +238,37 @@ final class SensorSession: NSObject, ARSessionDelegate {
             guard self.generation == gen else { return }
             self.analysisCount += 1
             let wantThumbnail = self.analysisCount % 3 == 0
-            let result = PathGuard.analyze(input, wantLabels: wantThumbnail)
+            DepthRays.fill(input, into: &self.rayDirs)
+            let result = PathGuard.analyze(input, wantLabels: wantThumbnail, rays: self.rayDirs)
             var confirmed = self.tracker.update(result.detections, time: time)
             // Crossing assist: any object closing fast (depth) or a vehicle closing (YOLO). Not debounced by the
             // tracker: the detector already needs a steady 0.3 s window, and a closing object is priority 1.
             if let drop = confirmed[.dropOff], drop.ahead <= Tuning.curbContextM { self.lastCurb = time }
             let atCurb = time - self.lastCurb <= Tuning.curbHoldSeconds
             let start = DispatchTime.now().uptimeNanoseconds
-            var closing = self.closingDetector.update(input, time: time)
+            var closing = self.closingDetector.update(input, time: time, rays: self.rayDirs)
             let closingMs = Double(DispatchTime.now().uptimeNanoseconds - start) / 1e6
             // Vehicles predicted to pass beside count only at a curb, and only with TTC < 3 s (already gated).
             closing += (self.vehicles?.closing(now: time) ?? []).filter { !$0.passing || atCurb }
-            if let c = closing.min(by: { ($0.passing ? 1 : 0, $0.ttc) < ($1.passing ? 1 : 0, $1.ttc) }) {
-                confirmed[.closing] = Detection(kind: .closing, point: c.point, ahead: c.range, lateral: c.lateral,
-                                                pointCount: 0, closing: .init(speed: c.speed, ttc: c.ttc, label: c.label,
-                                                                              trackId: c.trackId, missM: c.missM,
-                                                                              passing: c.passing))
+            let closings = closing.map { c in
+                Detection(kind: .closing, point: c.point, ahead: c.range, lateral: c.lateral,
+                          pointCount: 0, closing: .init(speed: c.speed, ttc: c.ttc, label: c.label,
+                                                        trackId: c.trackId, missM: c.missM, passing: c.passing))
+            }
+            // Speech still has one closing slot: the most urgent. Every track is on `closings` so a second
+            // car gets its tone and haptic before it is the nearest.
+            if let c = closings.min(by: { ($0.closing?.passing == true ? 1 : 0, $0.closing?.ttc ?? .infinity)
+                < ($1.closing?.passing == true ? 1 : 0, $1.closing?.ttc ?? .infinity) }) {
+                confirmed[.closing] = c
             }
             let walkerSpeed = self.closingDetector.walkerSpeed
-            self.head.update(time: time, rotation: simd_float3x3(SIMD3(transform.columns.0.x, transform.columns.0.y, transform.columns.0.z),
-                                                                 SIMD3(transform.columns.1.x, transform.columns.1.y, transform.columns.1.z),
-                                                                 SIMD3(transform.columns.2.x, transform.columns.2.y, transform.columns.2.z)))
+            self.head.update(time: time, rotation: transform.rotation3)
             let headStill = self.head.still
             guard self.generation == gen else { return }
             self.onOutput?(Output(generation: gen, confirmed: confirmed, fps: fps, floorSource: floor.source,
                                   thumbnail: wantThumbnail ? Self.thumbnail(input, result.labels) : nil,
                                   floorY: floor.y, atCurb: atCurb, closingMs: closingMs, walkerSpeed: walkerSpeed,
-                                  headStill: headStill))
+                                  headStill: headStill, closings: closings))
         }
     }
 

@@ -1,6 +1,18 @@
 import Foundation
 import simd
 
+extension simd_float4x4 {
+    /// Camera position (column 3).
+    var translation: SIMD3<Float> { SIMD3(columns.3.x, columns.3.y, columns.3.z) }
+
+    /// Upper 3×3, the camera's rotation.
+    var rotation3: simd_float3x3 {
+        simd_float3x3(SIMD3(columns.0.x, columns.0.y, columns.0.z),
+                      SIMD3(columns.1.x, columns.1.y, columns.1.z),
+                      SIMD3(columns.2.x, columns.2.y, columns.2.z))
+    }
+}
+
 /// Lat/lng math for the Localizer, heads-up and passive votes. Pure, so it is unit-tested.
 /// AR world axes (worldAlignment .gravityAndHeading): +x = east, +y = up, -z = true north.
 /// Flat-earth (equirectangular) approximation: fine for the tens of metres StepSafe works in.

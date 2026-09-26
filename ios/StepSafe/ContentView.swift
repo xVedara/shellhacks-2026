@@ -52,7 +52,7 @@ final class AppModel: ObservableObject {
         alerts.atCurb = out.atCurb
         alerts.walkerSpeed = out.walkerSpeed
         alerts.headStill = out.headStill
-        alerts.update(out.confirmed)
+        alerts.update(out.confirmed, closings: out.closings)
         link.handle(out) // after the alert decision: nothing here can delay a warning
     }
 
