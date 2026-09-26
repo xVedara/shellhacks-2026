@@ -10,7 +10,7 @@ The file is `StepSafe/Models/yolo11n.mlpackage`. It was exported once with `pip 
 
 The license is AGPL-3.0-only (https://ultralytics.com/license and https://www.gnu.org/licenses/agpl-3.0.html). The model metadata names the same license. Ultralytics also offers an Enterprise license for closed-source use. This repo is AGPL-3.0-only. The text is `LICENSE` at the repo root, and the app target copies that file into the bundle (`ios/project.yml`). There is no in-app credits screen.
 
-`docs/PLAN.md` section 7 asks for this credit on the Devpost write-up.
+ShellHacks requires crediting open-source models and libraries in the Devpost write-up.
 
 ## COCO
 
@@ -22,7 +22,7 @@ COCO annotations and the COCO website are CC-BY-4.0 (https://cocodataset.org/dat
 
 The app bundles 71 phrases in English and Spanish (142 mp3 files) under `StepSafe/Phrases/`. The voice id is `EXAVITQu4vr4xnSDxMaL`. `server/.env.example` names that voice Sarah (Mature, Reassuring, Confident). The model is `eleven_multilingual_v2`. `scripts/gen-phrases.mts` generated the files. The phone plays them on device. Live hazard names go to the team's `GET /tts`, and the server fills that route from ElevenLabs.
 
-The clips were generated on the ElevenLabs Creator plan (commercial use is allowed under that plan's terms). Terms: https://elevenlabs.io/terms-of-use.
+The clips were generated on the ElevenLabs Creator plan, redeemed through MLH (commercial use is allowed under that plan's terms). Terms: https://elevenlabs.io/terms-of-use.
 
 ## coremltools and PyTorch
 

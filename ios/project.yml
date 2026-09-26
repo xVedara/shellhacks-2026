@@ -23,6 +23,7 @@ targets:
       - path: ../LICENSE
         type: file
         buildPhase: resources
+        group: StepSafe
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.babigian.stepsafe

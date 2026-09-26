@@ -1,14 +1,14 @@
 # Credits
 
-Open-source libraries and pretrained models are credited here because ShellHacks requires that credit in the Devpost write-up (`docs/PLAN.md` section 1). Each item's own license is named below. iOS model, voice, and export-tool detail is in [ios/CREDITS.md](ios/CREDITS.md). License texts that have to travel with the app are in [LICENSES/](LICENSES/).
+Open-source libraries and pretrained models are credited here because ShellHacks requires crediting open-source models and libraries in the Devpost write-up. Each item's own license is named below. iOS model, voice, and export-tool detail is in [ios/CREDITS.md](ios/CREDITS.md). License texts that have to travel with the app are in [LICENSES/](LICENSES/).
 
 ## Runtime services and models
 
-Google Gemini names a hazard crop when `GEMINI_API_KEY` is set. The model id is `gemini-flash-lite-latest`. The server calls it through `@google/genai` (Apache-2.0). Gemini API terms are at https://ai.google.dev/gemini-api/terms. Those terms do not ask for a "Powered by Gemini" line. The team uses free Gemini API keys from Google AI Studio, so Google may use prompts and responses (including crop images) to improve its products per the Gemini API terms.
+Google Gemini names a hazard crop when `GEMINI_API_KEY` is set. The model id is `gemini-flash-lite-latest`. The server calls it through `@google/genai` (Apache-2.0). Gemini API terms are at https://ai.google.dev/gemini-api/terms. Those terms do not ask for a "Powered by Gemini" line. The Gemini key runs on the paid tier.
 
 Qwen names a crop when no Gemini key is set and Ollama is running. The tag is `qwen3.8:27b-mlx` (Qwen3.8-27B). The weights are Apache-2.0, Copyright 2026 Alibaba Cloud: https://huggingface.co/Qwen/Qwen3.8-27B. The Ollama tag is https://ollama.com/library/qwen3.8:27b-mlx. The weights are not in git. Ollama itself is MIT, Copyright (c) Ollama, and the binary is not in git: https://github.com/ollama/ollama/blob/main/LICENSE.
 
-ElevenLabs speaks alerts and live hazard names with model `eleven_multilingual_v2` and the premade voice Sarah, id `EXAVITQu4vr4xnSDxMaL`. The phone bundles 71 phrases in English and Spanish. The clips were generated on the ElevenLabs Creator plan (commercial use is allowed under that plan's terms). Terms: https://elevenlabs.io/terms-of-use.
+ElevenLabs speaks alerts and live hazard names with model `eleven_multilingual_v2` and the premade voice Sarah, id `EXAVITQu4vr4xnSDxMaL`. The phone bundles 71 phrases in English and Spanish. The clips were generated on the ElevenLabs Creator plan, redeemed through MLH (commercial use is allowed under that plan's terms). Terms: https://elevenlabs.io/terms-of-use.
 
 Ultralytics YOLO11n detects vehicles on the phone. The weights are AGPL-3.0-only. The bundled model and the AGPL text in the app are described in [ios/CREDITS.md](ios/CREDITS.md). The model metadata says it was trained on COCO. COCO annotations are CC-BY-4.0. COCO images stay under Flickr's terms. Neither file is in this repo.
 
@@ -66,12 +66,12 @@ The web UI uses Inter through `next/font`. The license is OFL-1.1, Copyright 201
 
 StepSafe was built at ShellHacks 2026 with AI coding tools. Ara Babigian and Dev Goswami can both explain how the code works.
 
-Claude Code (Anthropic) is recorded on 15 commits by Ara Babigian. About 15 other commits by Ara have no Claude-Session trailer, so the tool for those commits is not recorded.
+Claude Code (Anthropic) is recorded on 16 commits by Ara Babigian. About 15 other commits by Ara have no Claude-Session trailer, so the tool for those commits is not recorded.
 
-Commit messages name a review gate: Claude Opus (Anthropic) on 12 commits, and a reviewer recorded as sol (ChatGPT / OpenAI) on 9 commits.
+Commit messages name a review gate: Claude Opus (Anthropic) on 12 commits, and a reviewer recorded as sol (OpenAI (Codex CLI)) on 9 commits.
 
 Logos were made with ChatGPT image generation.
 
-Cursor cloud agents authored 17 commits and opened pull requests #1 through #11. Those agents ran Grok 4.7, except closed unmerged pull request #1, whose recorded model name is only "default". A Cursor cloud agent running Claude Opus 5.5 coordinated later review, verification, and design mockups.
+Cursor cloud agents authored 17 commits and opened pull requests #1 through #11. A Cursor cloud agent coordinated later review, verification, and design mockups.
 
 The running app also calls Gemini, Qwen through Ollama, ElevenLabs, and on-device YOLO11n, listed above. Those calls did not write the git history.
