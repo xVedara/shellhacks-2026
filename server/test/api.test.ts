@@ -3,9 +3,13 @@ import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { MongoClient, ObjectId, type Db } from 'mongodb';
 import type { FastifyInstance } from 'fastify';
 import { createHash } from 'node:crypto';
-import { buildApp, renamePending, voteWeight } from '../src/app.ts';
+import { buildApp, ipKey, renamePending, voteWeight } from '../src/app.ts';
 import { ensureIndexes } from '../src/db.ts';
 import type { Naming } from '../src/gemini.ts';
+import { ollamaNamer } from '../src/namer.ts';
+import { envBudget, TtsBudgetError, type Tts } from '../src/tts.ts';
+import { TAXONOMY } from '../src/taxonomy.ts';
+import { PROBES } from './probes.ts';
 
 const CROP = Buffer.from('not-really-a-jpeg').toString('base64');
 const BASE = { lat: 25.7566, lng: -80.3739 };
@@ -14,7 +18,6 @@ const north = (m: number) => BASE.lat + m / M_PER_DEG;
 
 const SCOOTER: Naming = {
   type: 'e-scooter', category: 'moving', heightBand: 'ground', severity: 2,
-  spokenLabel_en: 'scooter on sidewalk', spokenLabel_es: 'patinete en la acera',
 };
 
 let rs: MongoMemoryReplSet;
@@ -39,7 +42,7 @@ beforeAll(async () => {
   client = await MongoClient.connect(rs.getUri());
   db = client.db('stepsafe_test');
   await ensureIndexes(db);
-  app = buildApp({ db, namer, rateLimitPerMin: 100_000 });
+  app = buildApp({ db, namer, rateLimitPerMin: 100_000, ipWriteRateLimitPerMin: 100_000 });
   await app.ready();
 }, 120_000);
 
@@ -72,12 +75,12 @@ describe('POST /hazards', () => {
   it('creates a hazard named by Gemini', async () => {
     const { status, body } = await create({ measurements: { clearanceM: 1.8 } });
     expect(status).toBe(200);
-    expect(body).toMatchObject({ label: 'scooter on sidewalk', merged: false });
+    expect(body).toMatchObject({ label: 'e-scooter', merged: false });
     const d = await detail(body.id);
     expect(d).toMatchObject({
       id: body.id, type: 'e-scooter', category: 'moving', heightBand: 'ground', status: 'active',
-      lat: BASE.lat, lng: BASE.lng, confidence: 1, sample: false, label: 'scooter on sidewalk',
-      spokenLabel_es: 'patinete en la acera', severity: 2, meshUrl: null, crop: CROP,
+      lat: BASE.lat, lng: BASE.lng, confidence: 1, sample: false, label: 'e-scooter',
+      spokenLabel_es: 'patinete eléctrico', severity: 2, meshUrl: null, crop: CROP,
       measurements: { clearanceM: 1.8 }, pendingReclassifications: [],
     });
     expect(d.votes).toHaveLength(1);
@@ -86,18 +89,18 @@ describe('POST /hazards', () => {
     expect(lifespan).toBe(6 * 3600_000);
   });
 
-  it('falls back to "unknown obstacle" when Gemini fails', async () => {
+  it('falls back to type "obstacle" with needsNaming when naming fails', async () => {
     naming = null;
     const { body } = await create({ heightBand: 'head' });
-    expect(body.label).toBe('unknown obstacle');
+    expect(body.label).toBe('obstacle at head height');
     const h = await db.collection('hazards').findOne({ _id: new ObjectId(body.id) });
-    expect(h).toMatchObject({ type: 'unknown obstacle', category: 'temporary', heightBand: 'head', needsNaming: true });
+    expect(h).toMatchObject({ type: 'obstacle', category: 'temporary', heightBand: 'head', needsNaming: true });
   });
 
   it('merges a same-band report within 10 m as an upvote, skipping Gemini', async () => {
     const first = await create();
     const second = await create({ lat: north(8), deviceId: 'dev-B' });
-    expect(second.body).toEqual({ id: first.body.id, label: 'scooter on sidewalk', merged: true });
+    expect(second.body).toEqual({ id: first.body.id, label: 'e-scooter', merged: true });
     expect(namerCalls).toBe(1);
     expect((await detail(first.body.id)).confidence).toBeCloseTo(2);
     expect(await db.collection('hazards').countDocuments()).toBe(1);
@@ -191,17 +194,20 @@ describe('reclassify, report, users', () => {
     const { body } = await create();
     const propose = (deviceId: string, p: Record<string, string>) =>
       app.inject({ method: 'POST', url: `/hazards/${body.id}/reclassify`, payload: { ...p, deviceId } }).then((r) => r.json());
-    const change = { type: 'Trash Bin', category: 'moving' };
+    const change = { type: 'trash-bin', category: 'moving' };
     expect(await propose('dev-B', change)).toEqual({ applied: false, agreeing: 1 });
-    expect(await propose('dev-C', { type: 'trash bin' })).toEqual({ applied: false, agreeing: 1 }); // differs: no category
+    expect(await propose('dev-C', { type: 'trash-bin' })).toEqual({ applied: false, agreeing: 1 }); // differs: no category
     expect(await propose('dev-B', change)).toEqual({ applied: false, agreeing: 1 }); // same device again
     expect((await detail(body.id)).pendingReclassifications).toEqual(
-      expect.arrayContaining([{ type: 'trash bin', category: 'moving', count: 1 }, { type: 'trash bin', count: 1 }]),
+      expect.arrayContaining([{ type: 'trash-bin', category: 'moving', count: 1 }, { type: 'trash-bin', count: 1 }]),
     );
     expect(await propose('dev-D', change)).toEqual({ applied: false, agreeing: 2 });
     expect(await propose('dev-E', change)).toEqual({ applied: true, agreeing: 3 });
     const d = await detail(body.id);
-    expect(d).toMatchObject({ type: 'trash bin', category: 'moving', heightBand: 'ground', label: 'trash bin', pendingReclassifications: [] });
+    expect(d).toMatchObject({
+      type: 'trash-bin', category: 'moving', heightBand: 'ground', label: 'trash bin', spokenLabel_es: 'cubo de basura',
+      pendingReclassifications: [],
+    });
     expect(d.votes).toHaveLength(1);
     const h = (await db.collection('hazards').findOne({ _id: new ObjectId(body.id) }))!;
     expect(h.needsNaming).toBe(true);
@@ -229,18 +235,18 @@ describe('reclassify, report, users', () => {
     expect((await app.inject({ url: '/users/bad%20id' })).statusCode).toBe(400);
   });
 
-  it('renamer never overrides a reclassified category, even on an unknown hazard', async () => {
+  it('renamer names an "obstacle" but never overrides a reclassified category', async () => {
     naming = null;
     const { body } = await create();
     for (const d of ['dev-B', 'dev-C', 'dev-D']) {
       await app.inject({ method: 'POST', url: `/hazards/${body.id}/reclassify`, payload: { category: 'permanent', deviceId: d } });
     }
-    naming = SCOOTER; // Gemini would say moving
+    naming = { ...SCOOTER, severity: 3 }; // the model would say moving
     expect(await renamePending(db, namer)).toBe(1);
     const h = (await db.collection('hazards').findOne({ _id: new ObjectId(body.id) }))!;
     expect(h).toMatchObject({
-      type: 'unknown obstacle', category: 'permanent', heightBand: 'ground', humanLocked: true,
-      spokenLabel_en: 'scooter on sidewalk', needsNaming: false,
+      type: 'e-scooter', category: 'permanent', heightBand: 'ground', lockedFields: ['category'],
+      spokenLabel_en: 'e-scooter', severity: 3, needsNaming: false, // type was not chosen by people: named
     });
   });
 
@@ -248,13 +254,48 @@ describe('reclassify, report, users', () => {
     naming = null;
     const unknown = await create();
     const named = await create({ lat: north(50), deviceId: 'dev-B' });
-    await db.collection('hazards').updateOne({ _id: new ObjectId(named.body.id) }, { $set: { type: 'bench', humanLocked: true } });
-    naming = SCOOTER;
+    await db.collection('hazards').updateOne(
+      { _id: new ObjectId(named.body.id) },
+      { $set: { type: 'bench', lockedFields: ['type'], spokenLabel_en: 'bench', spokenLabel_es: 'banco' } },
+    );
+    naming = { ...SCOOTER, heightBand: 'head' } as Naming;
     expect(await renamePending(db, namer)).toBe(2);
     const u = (await db.collection('hazards').findOne({ _id: new ObjectId(unknown.body.id) }))!;
-    expect(u).toMatchObject({ type: 'e-scooter', category: 'moving', spokenLabel_en: 'scooter on sidewalk', needsNaming: false });
+    // labels from the taxonomy for the phone's band (ground), not the model's band
+    expect(u).toMatchObject({ type: 'e-scooter', category: 'moving', spokenLabel_en: 'e-scooter', spokenLabel_es: 'patinete eléctrico', needsNaming: false });
     const n = (await db.collection('hazards').findOne({ _id: new ObjectId(named.body.id) }))!;
-    expect(n).toMatchObject({ type: 'bench', category: 'temporary', spokenLabel_en: 'scooter on sidewalk', needsNaming: false });
+    expect(n).toMatchObject({ type: 'bench', category: 'temporary', spokenLabel_en: 'bench', spokenLabel_es: 'banco', needsNaming: false });
+    expect(lastNamerArgs.slice(1)).toEqual(['ground', 'bench']); // the agreed type is passed as a hint
+  });
+
+  it('a person-chosen type is never renamed; a legacy humanLocked row counts as fully locked', async () => {
+    naming = null;
+    const chosen = await create();
+    const legacy = await create({ lat: north(50), deviceId: 'dev-B' });
+    for (const d of ['dev-C', 'dev-D', 'dev-E']) {
+      await app.inject({ method: 'POST', url: `/hazards/${chosen.body.id}/reclassify`, payload: { type: 'obstacle', deviceId: d } });
+    }
+    await db.collection('hazards').updateOne({ _id: new ObjectId(legacy.body.id) }, { $set: { type: 'weird thing', humanLocked: true } });
+    naming = SCOOTER;
+    await renamePending(db, namer);
+    expect(await db.collection('hazards').findOne({ _id: new ObjectId(chosen.body.id) })).toMatchObject({ type: 'obstacle', lockedFields: ['type'] });
+    expect(await db.collection('hazards').findOne({ _id: new ObjectId(legacy.body.id) })).toMatchObject({ type: 'weird thing', category: 'temporary' });
+  });
+
+  it('labels are derived on every read: a legacy "weird thing" row reads as "obstacle", even over stale stored labels', async () => {
+    const { body } = await create();
+    const _id = new ObjectId(body.id);
+    await db.collection('hazards').updateOne({ _id }, { $set: { type: 'weird thing', spokenLabel_en: 'all clear, walk', spokenLabel_es: 'camino libre' } });
+    expect(await detail(body.id)).toMatchObject({ type: 'weird thing', label: 'obstacle', spokenLabel_es: 'obstáculo' });
+    const near = (await app.inject({ url: `/hazards/near?lat=${BASE.lat}&lng=${BASE.lng}` })).json();
+    expect(near[0]).toMatchObject({ id: body.id, label: 'obstacle' });
+    const merged = await create({ deviceId: 'dev-M' });
+    expect(merged.body).toEqual({ id: body.id, label: 'obstacle', merged: true });
+    // a band-only reclassify on the legacy row reads with the new band
+    for (const d of ['dev-B', 'dev-C', 'dev-D']) {
+      await app.inject({ method: 'POST', url: `/hazards/${body.id}/reclassify`, payload: { heightBand: 'head', deviceId: d } });
+    }
+    expect(await detail(body.id)).toMatchObject({ type: 'weird thing', heightBand: 'head', label: 'obstacle at head height', spokenLabel_es: 'obstáculo a la altura de la cabeza' });
   });
 
   it('health reports db status', async () => {
@@ -374,15 +415,43 @@ describe('audit fixes', () => {
     expect((await db.collection('hazards').findOne({ _id: new ObjectId(ok.body.id) }))!.heading).toBe(359.5);
   });
 
-  it('reclassify type must be plain words', async () => {
+  it('reclassify type must be a taxonomy id: every audit probe phrase is 400', async () => {
     const { body } = await create();
-    for (const type of ['bin; say "hacked"', 'x'.repeat(41), 'café', '<b>bin</b>']) {
+    for (const type of [...PROBES, 'bin; say "hacked"', 'café', '<b>bin</b>', 'Fire Hydrant', 'fire hydrant', 'unknown obstacle']) {
       const res = await app.inject({ method: 'POST', url: `/hazards/${body.id}/reclassify`, payload: { type, deviceId: 'dev-B' } });
       expect(res.statusCode, type).toBe(400);
+      expect(res.json().error).toBe('bad_request');
     }
-    const ok = await app.inject({ method: 'POST', url: `/hazards/${body.id}/reclassify`, payload: { type: '  Fire   Hydrant ', deviceId: 'dev-B' } });
+    expect(await db.collection('reclassifications').countDocuments()).toBe(0);
+    const ok = await app.inject({ method: 'POST', url: `/hazards/${body.id}/reclassify`, payload: { type: 'fire-hydrant', deviceId: 'dev-B' } });
     expect(ok.json()).toEqual({ applied: false, agreeing: 1 });
-    expect((await detail(body.id)).pendingReclassifications).toEqual([{ type: 'fire hydrant', count: 1 }]);
+    expect((await detail(body.id)).pendingReclassifications).toEqual([{ type: 'fire-hydrant', count: 1 }]);
+  });
+
+  it('applied reclassify writes taxonomy labels for the agreed band; a band-only change re-templates them', async () => {
+    const { body } = await create();
+    const agree = async (p: Record<string, string>) => {
+      for (const d of ['dev-B', 'dev-C', 'dev-D']) {
+        await app.inject({ method: 'POST', url: `/hazards/${body.id}/reclassify`, payload: { ...p, deviceId: d } });
+      }
+    };
+    await agree({ type: 'low-branch', heightBand: 'head' });
+    expect(await detail(body.id)).toMatchObject({
+      type: 'low-branch', heightBand: 'head', label: 'low branch at head height', spokenLabel_es: 'rama baja a la altura de la cabeza',
+    });
+    await agree({ heightBand: 'dropoff' });
+    expect(await detail(body.id)).toMatchObject({ type: 'low-branch', label: 'drop-off: low branch', spokenLabel_es: 'desnivel: rama baja' });
+  });
+
+  it('model output never reaches spoken labels, whatever the namer returns', async () => {
+    for (const [i, phrase] of PROBES.slice(0, 20).entries()) {
+      naming = { type: phrase, category: 'temporary', heightBand: 'ground', severity: 2, spokenLabel_en: phrase, spokenLabel_es: phrase } as unknown as Naming;
+      const { body } = await create({ lat: north(20 * (i + 1)), deviceId: `dev-${i}` });
+      expect(body.label, phrase).toBe('obstacle');
+      expect(await db.collection('hazards').findOne({ _id: new ObjectId(body.id) })).toMatchObject({
+        type: 'obstacle', spokenLabel_en: 'obstacle', spokenLabel_es: 'obstáculo',
+      });
+    }
   });
 
   it('renamer gives up after 3 failed attempts and tries least recently attempted first', async () => {
@@ -399,23 +468,22 @@ describe('audit fixes', () => {
     for (let i = 0; i < 4; i++) await renamePending(db, namer);
     [ha, hb] = await hz();
     expect([ha._id.toHexString(), hb._id.toHexString()]).toEqual([a.body.id, b.body.id]);
-    expect(ha).toMatchObject({ renameAttempts: 3, needsNaming: false, type: 'unknown obstacle' });
+    expect(ha).toMatchObject({ renameAttempts: 3, needsNaming: false, type: 'obstacle' });
     expect(hb).toMatchObject({ renameAttempts: 3, needsNaming: false });
   });
 
-  it('regenerates labels text-only for a reclassified hazard without a crop', async () => {
+  it('a reclassified hazard without a crop keeps its taxonomy labels and is not sent to the model', async () => {
     const { body } = await create();
     const _id = new ObjectId(body.id);
     await db.collection('hazards').updateOne({ _id }, { $set: { crop: null } });
     for (const d of ['dev-B', 'dev-C', 'dev-D']) {
       await app.inject({ method: 'POST', url: `/hazards/${body.id}/reclassify`, payload: { type: 'bench', deviceId: d } });
     }
-    expect((await detail(body.id)).label).toBe('bench'); // placeholder until renamed
-    expect(await renamePending(db, namer)).toBe(1);
-    expect(lastNamerArgs).toEqual([null, 'ground', 'bench']);
-    expect(await db.collection('hazards').findOne({ _id })).toMatchObject({
-      type: 'bench', category: 'moving', spokenLabel_en: 'scooter on sidewalk', needsNaming: false,
-    });
+    expect(await detail(body.id)).toMatchObject({ label: 'bench', spokenLabel_es: 'banco' });
+    namerCalls = 0;
+    expect(await renamePending(db, namer)).toBe(0);
+    expect(namerCalls).toBe(0);
+    expect(await db.collection('hazards').findOne({ _id })).toMatchObject({ type: 'bench', spokenLabel_en: 'bench', needsNaming: false });
   });
 
   it('category change keeps at least an hour of life', async () => {
@@ -506,7 +574,7 @@ describe('GET /events', () => {
       const frame = buf.split('\n\n').find((f) => f.includes('"op":"upsert"'))!;
       expect(frame).toMatch(/^event: hazard\ndata: /m);
       const data = JSON.parse(frame.split('data: ')[1]);
-      expect(data.hazard).toMatchObject({ id, type: 'e-scooter', label: 'scooter on sidewalk', status: 'active' });
+      expect(data.hazard).toMatchObject({ id, type: 'e-scooter', label: 'e-scooter', status: 'active' });
       expect(data.hazard).not.toHaveProperty('crop');
 
       await db.collection('hazards').deleteOne({ _id: new ObjectId(id) });
@@ -516,4 +584,197 @@ describe('GET /events', () => {
       await live.close();
     }
   }, 20_000);
+});
+
+describe('local naming timeout', () => {
+  it('a hung Ollama call falls back to "obstacle" and leaves it for the renamer', async () => {
+    const hang = ((_u: unknown, init?: RequestInit) =>
+      new Promise((_, reject) => init!.signal!.addEventListener('abort', () => reject(new Error('aborted'))))) as typeof fetch;
+    const slow = buildApp({ db, namer: ollamaNamer('http://ollama', 'm', 100, hang), rateLimitPerMin: 100_000 });
+    try {
+      const t = Date.now();
+      const res = await slow.inject({ method: 'POST', url: '/hazards', payload: { crop: CROP, ...BASE, heightBand: 'ground', deviceId: 'dev-A' } });
+      expect(Date.now() - t).toBeLessThan(2000);
+      expect(res.json()).toMatchObject({ label: 'obstacle', merged: false });
+      expect(await db.collection('hazards').findOne({ _id: new ObjectId(res.json().id) })).toMatchObject({ needsNaming: true });
+    } finally {
+      await slow.close();
+    }
+  });
+});
+
+describe('GET /tts', () => {
+  it('answers 503 tts_unavailable without a key, after validating input', async () => {
+    const res = await app.inject({ url: '/tts?text=chair%20ahead&lang=en' });
+    expect(res.statusCode).toBe(503);
+    expect(res.json()).toEqual({ error: 'tts_unavailable' });
+  });
+
+  it('validates text (1-200 chars after trim) and lang', async () => {
+    for (const q of ['', 'text=', 'text=%20%20%20', `text=${'a'.repeat(201)}`, 'text=hi&lang=fr', 'text=a&text=b']) {
+      const res = await app.inject({ url: `/tts?${q}` });
+      expect(res.statusCode, q).toBe(400);
+      expect(res.json().error).toBe('bad_request');
+    }
+  });
+
+  it('streams audio/mpeg, normalizes text, and maps upstream failure to 502', async () => {
+    const calls: string[] = [];
+    let fail = false;
+    const tts: Tts = async (text) => {
+      calls.push(text);
+      if (fail) throw new Error('upstream 500');
+      return Buffer.from([0xff, 0xf3, 7]);
+    };
+    const withTts = buildApp({ db, namer, tts, rateLimitPerMin: 100_000 });
+    try {
+      const ok = await withTts.inject({ url: `/tts?text=${encodeURIComponent(' \u0000 silla \t  adelante ')}&lang=es` });
+      expect(ok.statusCode).toBe(200);
+      expect(ok.headers['content-type']).toBe('audio/mpeg');
+      expect([...ok.rawPayload]).toEqual([0xff, 0xf3, 7]);
+      await withTts.inject({ url: `/tts?text=chair` });
+      expect(calls).toEqual(['silla adelante', 'chair']);
+      expect((await withTts.inject({ url: `/tts?text=${'a'.repeat(200)}` })).statusCode).toBe(200);
+      fail = true;
+      const bad = await withTts.inject({ url: '/tts?text=chair' });
+      expect(bad.statusCode).toBe(502);
+      expect(bad.json()).toEqual({ error: 'tts_failed' });
+    } finally {
+      await withTts.close();
+    }
+  });
+
+  it('budgets cache misses: 20 per minute per IP and a daily character cap; hits stay free', async () => {
+    const cached = new Set<string>();
+    let upstream = 0;
+    const tts: Tts = async (text, charge) => {
+      if (!cached.has(text)) {
+        if (!charge(text.length)) throw new TtsBudgetError('budget');
+        upstream++;
+        cached.add(text);
+      }
+      return Buffer.from([0xff]);
+    };
+    const withTts = buildApp({ db, namer, tts, rateLimitPerMin: 100_000, ttsDailyChars: 500 });
+    const get = (text: string, ip = '10.0.0.1') => withTts.inject({ url: `/tts?text=${text}`, headers: { 'cf-connecting-ip': ip } });
+    try {
+      for (let i = 0; i < 20; i++) expect((await get(`p${i}`)).statusCode).toBe(200);
+      const limited = await get('p20');
+      expect(limited.statusCode).toBe(429);
+      expect(limited.json()).toEqual({ error: 'tts_budget' });
+      expect((await get('p3')).statusCode).toBe(200); // a hit is free even when the miss budget is spent
+      expect((await get('p20', '10.0.0.2')).statusCode).toBe(200); // other IPs have their own budget
+      expect(upstream).toBe(21);
+      // daily characters: 21 phrases of 2-3 chars used ~50 of 500; one IP per phrase so only the daily cap bites
+      let i = 0;
+      while ((await get('x'.repeat(100) + i, `10.1.0.${i}`)).statusCode === 200) i++;
+      expect(i).toBe(4); // 4 x 101 chars fit under 500 with ~50 already used
+      expect((await get('p0', '10.9.9.9')).statusCode).toBe(200); // hits still served after the daily cap
+    } finally {
+      await withTts.close();
+    }
+  });
+
+  it('caps TTS characters per IP per day (misses only)', async () => {
+    const tts: Tts = async (text, charge) => {
+      if (!charge(text.length)) throw new TtsBudgetError('budget');
+      return Buffer.from([0xff]);
+    };
+    const withTts = buildApp({ db, namer, tts, rateLimitPerMin: 100_000, ttsIpDailyChars: 250, ttsMissPerMin: 1000 });
+    const get = (text: string, ip: string) => withTts.inject({ url: `/tts?text=${text}`, headers: { 'cf-connecting-ip': ip } });
+    try {
+      expect((await get('a'.repeat(200), '10.2.0.1')).statusCode).toBe(200);
+      expect((await get('b'.repeat(40), '10.2.0.1')).statusCode).toBe(200); // 240 of 250
+      expect((await get('c'.repeat(20), '10.2.0.1')).statusCode).toBe(429); // would be 260
+      expect((await get('c'.repeat(20), '10.2.0.2')).statusCode).toBe(200); // another IP is unaffected
+    } finally {
+      await withTts.close();
+    }
+  });
+});
+
+describe('client IP trust', () => {
+  it('honours cf-connecting-ip only from a loopback socket; a spoof from elsewhere is keyed by its socket address', async () => {
+    const strict = buildApp({ db, namer, getRateLimitPerMin: 2 });
+    try {
+      const fromLan = (i: number) =>
+        strict.inject({ url: '/users/abc', remoteAddress: '192.168.1.50', headers: { 'cf-connecting-ip': `10.9.9.${i}` } });
+      expect((await fromLan(1)).statusCode).toBe(200);
+      expect((await fromLan(2)).statusCode).toBe(200);
+      expect((await fromLan(3)).statusCode).toBe(429); // rotating the header does not help
+      // behind cloudflared (loopback socket) the header is the client: distinct clients get distinct buckets
+      const viaTunnel = (ip: string) => strict.inject({ url: '/users/abc', remoteAddress: '127.0.0.1', headers: { 'cf-connecting-ip': ip } });
+      expect((await viaTunnel('8.8.8.8')).statusCode).toBe(200);
+      expect((await viaTunnel('8.8.4.4')).statusCode).toBe(200);
+      expect((await viaTunnel('8.8.4.4')).statusCode).toBe(200);
+      expect((await viaTunnel('8.8.4.4')).statusCode).toBe(429);
+      // a malformed header from loopback falls back to the socket address
+      expect((await viaTunnel('not an ip; drop table')).statusCode).toBe(200);
+    } finally {
+      await strict.close();
+    }
+  });
+});
+
+describe('GET /taxonomy', () => {
+  it('returns every entry as {id, en, es, category, defaultHeightBand}, cacheable', async () => {
+    const res = await app.inject({ url: '/taxonomy' });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['cache-control']).toBe('public, max-age=3600');
+    expect(res.headers['content-type']).toMatch(/^application\/json/);
+    const list = res.json();
+    expect(list).toHaveLength(TAXONOMY.length);
+    for (const e of list) {
+      expect(Object.keys(e).sort()).toEqual(['category', 'defaultHeightBand', 'en', 'es', 'id']);
+      expect(['moving', 'temporary', 'permanent']).toContain(e.category);
+      expect(['ground', 'head', 'dropoff']).toContain(e.defaultHeightBand);
+    }
+    expect(list).toContainEqual({ id: 'trash-bin', en: 'trash bin', es: 'cubo de basura', category: 'moving', defaultHeightBand: 'ground' });
+  });
+});
+
+describe('budget env and IPv6 keys', () => {
+  it('an env budget of 0 means 0: every TTS miss is refused, hits still served', async () => {
+    expect(envBudget('0')).toBe(0);
+    expect(envBudget(undefined)).toBeUndefined();
+    expect(envBudget(' ')).toBeUndefined();
+    expect(envBudget('abc')).toBeUndefined();
+    expect(envBudget('-5')).toBeUndefined();
+    expect(envBudget('2500')).toBe(2500);
+    const cached = new Set(['hit']);
+    const tts: Tts = async (text, charge) => {
+      if (!cached.has(text) && !charge(text.length)) throw new TtsBudgetError('budget');
+      return Buffer.from([0xff]);
+    };
+    const zero = buildApp({ db, namer, tts, ttsDailyChars: envBudget('0') });
+    try {
+      expect((await zero.inject({ url: '/tts?text=miss' })).statusCode).toBe(429);
+      expect((await zero.inject({ url: '/tts?text=hit' })).statusCode).toBe(200);
+    } finally {
+      await zero.close();
+    }
+  });
+
+  it('ipKey collapses IPv6 to its /64; IPv4 and IPv4-mapped stay as is', () => {
+    expect(ipKey('203.0.113.9')).toBe('203.0.113.9');
+    expect(ipKey('::ffff:203.0.113.9')).toBe('203.0.113.9');
+    expect(ipKey('2001:db8:1:2:aaaa:bbbb:cccc:dddd')).toBe('2001:db8:1:2::/64');
+    expect(ipKey('2001:db8:1:2::1')).toBe('2001:db8:1:2::/64');
+    expect(ipKey('2001:0db8:0001:0002:ffff::9%en0')).toBe('2001:db8:1:2::/64');
+    expect(ipKey('2001:db8::1')).toBe('2001:db8:0:0::/64');
+    expect(ipKey('::1')).toBe('0:0:0:0::/64');
+  });
+
+  it('rotating addresses inside one IPv6 /64 shares one rate-limit bucket', async () => {
+    const strict = buildApp({ db, namer, getRateLimitPerMin: 2 });
+    try {
+      const get = (ip: string) => strict.inject({ url: '/users/abc', remoteAddress: ip });
+      expect((await get('2001:db8:1:2::1')).statusCode).toBe(200);
+      expect((await get('2001:db8:1:2::2')).statusCode).toBe(200);
+      expect((await get('2001:db8:1:2:ffff::3')).statusCode).toBe(429);
+      expect((await get('2001:db8:1:3::1')).statusCode).toBe(200); // another /64
+    } finally {
+      await strict.close();
+    }
+  });
 });

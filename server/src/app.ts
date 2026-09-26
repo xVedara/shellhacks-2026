@@ -14,8 +14,11 @@ import {
   type Category,
   type HazardDoc,
   type HeightBand,
+  type LockableField,
 } from './db.ts';
 import type { Namer } from './gemini.ts';
+import { isTypeId, labelsFor, OBSTACLE, TAXONOMY, taxonomyEntry, TYPE_IDS } from './taxonomy.ts';
+import { normalizeTtsText, TTS_LANGS, TtsBudgetError, type Tts, type TtsLang } from './tts.ts';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -27,6 +30,14 @@ declare module 'fastify' {
 export interface AppOptions {
   db: Db;
   namer: Namer;
+  /** ElevenLabs TTS; absent (no key) means GET /tts answers 503 and the phone uses its built-in voice. */
+  tts?: Tts;
+  /** ElevenLabs cache misses per minute per client IP (hits are free). */
+  ttsMissPerMin?: number;
+  /** Characters sent to ElevenLabs per UTC day, all clients together (misses only). */
+  ttsDailyChars?: number;
+  /** Characters sent to ElevenLabs per UTC day per client IP (misses only). */
+  ttsIpDailyChars?: number;
   /** Non-GET requests per minute per deviceId (or IP when the body has no valid deviceId). */
   rateLimitPerMin?: number;
   /** GET requests per minute per IP (venue NAT puts many people behind one IP). */
@@ -48,13 +59,16 @@ interface ReclassDoc {
 const MERGE_RADIUS_M = 10;
 const CROP_MAX_BYTES = 200 * 1024;
 const NEAR_MAX_ROWS = 500;
+const TTS_MAX_CHARS = 200;
 const RATE_KEYS_MAX = 10_000;
 const HOUR_MS = 3600_000;
 const RENAME_MAX_ATTEMPTS = 3;
 const SSE_MAX_CLIENTS = 200;
 const SSE_MAX_PER_IP = 5;
-const TYPE_RE = /^[a-z0-9 -]{1,40}$/;
-export const UNKNOWN = 'unknown obstacle';
+/** Spoken labels, derived on every read from type + band; a legacy or unknown type reads as "obstacle". */
+export const spokenLabels = (h: Pick<HazardDoc, 'type' | 'heightBand'>) => labelsFor(taxonomyEntry(h.type).id, h.heightBand);
+const lockedFields = (h: HazardDoc): LockableField[] =>
+  h.lockedFields ?? (h.humanLocked ? ['type', 'category', 'heightBand'] : []);
 
 const DEVICE_RE = /^[A-Za-z0-9._:-]{1,128}$/;
 const deviceId = { type: 'string', pattern: DEVICE_RE.source };
@@ -79,7 +93,7 @@ export function summary(h: HazardDoc, distanceM?: number) {
     confidence: h.confidence,
     lastSeen: h.lastSeen.toISOString(),
     status: h.status,
-    label: h.spokenLabel_en,
+    label: spokenLabels(h).spokenLabel_en,
     sample: h.sample,
     ...(distanceM === undefined ? {} : { distanceM: Math.round(distanceM * 10) / 10 }),
   };
@@ -90,26 +104,29 @@ export const expiryAfterCategoryChange = (lastSeen: Date, category: Category) =>
   new Date(Math.max(lastSeen.getTime() + LIFESPAN_MS[category], Date.now() + HOUR_MS));
 
 /**
- * Re-asks Gemini for up to `limit` hazards flagged needsNaming (Gemini failed at creation, or people
- * reclassified), least recently attempted first. Once a reclassification applied (humanLocked),
- * type/category/heightBand are never touched; only labels and severity are regenerated, from the crop or,
- * without one, from the type alone. Gives up after RENAME_MAX_ATTEMPTS failures.
+ * Re-asks the model for up to `limit` hazards flagged needsNaming (naming failed at creation, or people
+ * reclassified), least recently attempted first. Severity is always refreshed. The type (and, with it, the category)
+ * is replaced only when it is not a real taxonomy type yet (legacy text or "obstacle") and people did not choose it;
+ * fields in lockedFields are never touched. Hazards without a crop are skipped. Gives up after
+ * RENAME_MAX_ATTEMPTS failures. Stops early while `busy()`
+ * (a model call is already running), so it never competes with a walker's inline naming.
  */
-export async function renamePending(db: Db, namer: Namer, limit = 5) {
+export async function renamePending(db: Db, namer: Namer, limit = 5, busy: () => boolean = () => false) {
   const hazards = db.collection<HazardDoc>('hazards');
   const pending = await hazards
     .find({ needsNaming: true }, { sort: { renameAttemptAt: 1 }, limit }) // missing renameAttemptAt sorts first
     .toArray();
   let renamed = 0;
   for (const h of pending) {
-    const locked = h.humanLocked === true;
-    const hint = locked && h.type !== UNKNOWN ? h.type : undefined;
-    if (!h.crop && !hint) {
-      await hazards.updateOne({ _id: h._id }, { $set: { needsNaming: false } }); // nothing to name from
+    if (busy()) break; // a walker's inline naming is running: stand aside, the next pass continues
+    if (!h.crop) {
+      await hazards.updateOne({ _id: h._id }, { $set: { needsNaming: false } }); // nothing to look at
       continue;
     }
+    const locked = lockedFields(h);
     const attempts = (h.renameAttempts ?? 0) + 1;
-    const n = await namer(h.crop ? h.crop.toString('base64') : null, h.heightBand, hint);
+    const typeLocked = locked.includes('type');
+    const n = await namer(h.crop.toString('base64'), h.heightBand, typeLocked && isTypeId(h.type) ? h.type : undefined);
     if (!n) {
       await hazards.updateOne(
         { _id: h._id, needsNaming: true },
@@ -117,20 +134,18 @@ export async function renamePending(db: Db, namer: Namer, limit = 5) {
       );
       continue;
     }
-    const set: Partial<HazardDoc> = {
-      spokenLabel_en: n.spokenLabel_en, spokenLabel_es: n.spokenLabel_es, severity: n.severity, needsNaming: false,
-      renameAttempts: attempts, renameAttemptAt: new Date(),
-    };
-    if (!locked) {
-      set.type = n.type;
-      if (n.category !== h.category) {
+    const set: Partial<HazardDoc> = { severity: n.severity, needsNaming: false, renameAttempts: attempts, renameAttemptAt: new Date() };
+    if (!typeLocked && (!isTypeId(h.type) || h.type === OBSTACLE)) {
+      const type = taxonomyEntry(n.type).id;
+      Object.assign(set, { type, ...labelsFor(type, h.heightBand) });
+      if (!locked.includes('category') && n.category !== h.category) {
         set.category = n.category;
         if (h.status === 'active') set.expiresAt = expiryAfterCategoryChange(h.lastSeen, n.category);
       }
     }
     // filters make a reclassification that landed meanwhile win over this rename
     const res = await hazards.updateOne(
-      { _id: h._id, type: h.type, needsNaming: true, ...(locked ? {} : { humanLocked: { $ne: true } }) },
+      { _id: h._id, type: h.type, needsNaming: true, lockedFields: h.lockedFields ?? { $exists: false } },
       { $set: set },
     );
     renamed += res.modifiedCount;
@@ -138,8 +153,21 @@ export async function renamePending(db: Db, namer: Namer, limit = 5) {
   return renamed;
 }
 
+/** Limiter key for an address: IPv4 (also IPv4-mapped IPv6) as is, other IPv6 collapsed to its /64 prefix. */
+export function ipKey(ip: string) {
+  const addr = ip.replace(/%.*$/, ''); // zone id
+  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(addr);
+  if (mapped) return mapped[1];
+  if (!addr.includes(':')) return addr;
+  const [head, tail] = addr.split('::');
+  const h = head ? head.split(':') : [];
+  const t = tail ? tail.split(':') : [];
+  const groups = tail === undefined ? h : [...h, ...Array(Math.max(0, 8 - h.length - t.length)).fill('0'), ...t];
+  return `${groups.slice(0, 4).map((g) => (parseInt(g, 16) || 0).toString(16)).join(':')}::/64`;
+}
+
 export function buildApp({
-  db, namer, rateLimitPerMin = 30, getRateLimitPerMin = 300, ipWriteRateLimitPerMin = 120, logger = false,
+  db, namer, tts, ttsMissPerMin = 20, ttsDailyChars = 20_000, ttsIpDailyChars = 2000, rateLimitPerMin = 30, getRateLimitPerMin = 300, ipWriteRateLimitPerMin = 120, logger = false,
 }: AppOptions) {
   const app = Fastify({ logger, bodyLimit: 1024 * 1024 });
   const hazards = db.collection<HazardDoc>('hazards');
@@ -176,10 +204,13 @@ export function buildApp({
     if (!w || now - w.start >= 60_000) hits.set(key, (w = { start: now, n: 0 }));
     return ++w.n > limit;
   };
-  // cf-connecting-ip is trustworthy only because the server binds to 127.0.0.1 behind cloudflared
+  // cf-connecting-ip is honoured only from a loopback socket (cloudflared on the same box); anyone else could forge it.
+  // IPv6 clients are keyed by their /64: one subscriber usually owns a whole /64 and could rotate within it.
+  const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
   const clientIp = (req: FastifyRequest) => {
     const cf = req.headers['cf-connecting-ip'];
-    return typeof cf === 'string' ? cf : req.ip;
+    const sock = req.socket.remoteAddress ?? req.ip;
+    return ipKey(typeof cf === 'string' && LOOPBACK.has(sock) && /^[0-9A-Fa-f:.]{2,45}$/.test(cf) ? cf : sock);
   };
   app.addHook('preValidation', async (req, reply) => {
     if (req.method === 'OPTIONS' || req.url.startsWith('/health') || req.url.startsWith('/events')) return;
@@ -338,12 +369,15 @@ export function buildApp({
           { projection: { crop: 0 } },
         );
         if (!target || !(await castVote(target, b.deviceId, 'up', 'walker'))) return null; // gone mid-request: create instead
-        return { id: target._id.toHexString(), label: target.spokenLabel_en, merged: true };
+        return { id: target._id.toHexString(), label: spokenLabels(target).spokenLabel_en, merged: true };
       };
 
       const early = await tryMerge();
       if (early) return early;
-      const naming = await namer(b64, b.heightBand); // outside the lock: can take up to 4 s
+      const naming = await namer(b64, b.heightBand); // outside the lock: can take up to NAMER_TIMEOUT_MS
+      // spoken labels come only from the taxonomy, for the phone's band; never from model text
+      const type = naming ? taxonomyEntry(naming.type).id : OBSTACLE; // failure: "obstacle" + needsNaming
+      const labels = labelsFor(type, b.heightBand);
       return serialized(async () => {
         const late = await tryMerge(); // another report may have landed while Gemini ran
         if (late) return late;
@@ -354,7 +388,7 @@ export function buildApp({
         const category: Category = naming?.category ?? 'temporary';
         const doc: HazardDoc = {
           _id: new ObjectId(),
-          type: naming?.type ?? UNKNOWN,
+          type,
           category,
           heightBand: b.heightBand, // the phone's depth-derived band beats the model's guess
           location: point,
@@ -363,8 +397,7 @@ export function buildApp({
           crop: new Binary(bytes),
           meshUrl: null,
           severity: naming?.severity ?? 2,
-          spokenLabel_en: naming?.spokenLabel_en ?? UNKNOWN,
-          spokenLabel_es: naming?.spokenLabel_es ?? 'obstáculo desconocido',
+          ...labels,
           needsNaming: !naming,
           confidence: weight,
           status: 'active',
@@ -378,7 +411,7 @@ export function buildApp({
         // leaves a pin whose confidence is not backed by a vote until the next vote recomputes it.
         await hazards.insertOne(doc);
         await votes.insertOne({ hazardId: doc._id, deviceId: b.deviceId, vote: 'up', source: 'walker', weight, at: now });
-        return { id: doc._id.toHexString(), label: doc.spokenLabel_en, merged: false };
+        return { id: doc._id.toHexString(), label: spokenLabels(doc).spokenLabel_en, merged: false };
       });
     },
   );
@@ -439,7 +472,7 @@ export function buildApp({
       measurements: h.measurements ?? null,
       crop: h.crop ? h.crop.toString('base64') : null,
       meshUrl: null,
-      spokenLabel_es: h.spokenLabel_es,
+      spokenLabel_es: spokenLabels(h).spokenLabel_es,
       severity: h.severity,
       createdAt: h.createdAt.toISOString(),
       expiresAt: h.expiresAt.toISOString(),
@@ -492,7 +525,7 @@ export function buildApp({
           required: ['deviceId'],
           anyOf: [{ required: ['type'] }, { required: ['category'] }, { required: ['heightBand'] }],
           properties: {
-            type: { type: 'string', minLength: 1, maxLength: 60 }, // content checked against TYPE_RE below
+            type: { type: 'string', enum: TYPE_IDS }, // a taxonomy id (GET /taxonomy); free text never becomes a label
             category: { type: 'string', enum: CATEGORIES },
             heightBand: { type: 'string', enum: HEIGHT_BANDS },
             deviceId,
@@ -502,17 +535,15 @@ export function buildApp({
     },
     async (req, reply) => {
       const _id = toId(req.params.id);
-      const h = _id && (await hazards.findOne({ _id }, { projection: { _id: 1, status: 1, lastSeen: 1 } }));
+      const h = _id &&
+        (await hazards.findOne({ _id }, { projection: { _id: 1, status: 1, lastSeen: 1, type: 1, heightBand: 1, lockedFields: 1, humanLocked: 1 } }));
       if (!h) return reply.code(404).send(notFound);
       const b = req.body;
       const proposal = {
-        type: b.type?.trim().toLowerCase().replace(/\s+/g, ' ') || null,
+        type: b.type ?? null,
         category: b.category ?? null,
         heightBand: b.heightBand ?? null,
       };
-      if (b.type !== undefined && !(proposal.type && TYPE_RE.test(proposal.type))) {
-        return reply.code(400).send(badRequest('type must be 1-40 characters of a-z, 0-9, space or hyphen'));
-      }
       if (!proposal.type && !proposal.category && !proposal.heightBand) {
         return reply.code(400).send(badRequest('proposal is empty'));
       }
@@ -524,10 +555,13 @@ export function buildApp({
       );
       const agreeing = await reclass.countDocuments({ hazardId: h._id, ...proposal });
       if (agreeing < 3) return { applied: false, agreeing };
-      // humanLocked: the renamer may regenerate labels but never override what people chose
-      const set: Partial<HazardDoc> = { needsNaming: true, humanLocked: true, renameAttempts: 0 };
-      // the type is only a placeholder label until the renamer writes real EN/ES labels
-      if (proposal.type) Object.assign(set, { type: proposal.type, spokenLabel_en: proposal.type, spokenLabel_es: proposal.type });
+      // lock only what people chose; the renamer never overrides those fields
+      const chosen = (['type', 'category', 'heightBand'] as const).filter((f) => proposal[f]);
+      const set: Partial<HazardDoc> = {
+        needsNaming: true, renameAttempts: 0, lockedFields: [...new Set([...lockedFields(h), ...chosen])].sort(),
+        ...spokenLabels({ type: proposal.type ?? h.type, heightBand: proposal.heightBand ?? h.heightBand }),
+      };
+      if (proposal.type) set.type = proposal.type;
       if (proposal.category) {
         set.category = proposal.category;
         // ponytail: concurrent category changes/upvotes can race on expiresAt; last writer wins
@@ -570,6 +604,53 @@ export function buildApp({
       const id = req.params.deviceId;
       const u = await users.findOne({ deviceId: id });
       return u ? { displayName: u.displayName, karma: u.karma } : { displayName: defaultName(id), karma: 0 };
+    },
+  );
+
+  const taxonomyJson = JSON.stringify(TAXONOMY);
+  app.get('/taxonomy', async (_req, reply) =>
+    reply.type('application/json').header('cache-control', 'public, max-age=3600').send(taxonomyJson));
+
+  // TTS budgets protect the ElevenLabs quota; they count only cache misses (hits never reach ElevenLabs).
+  // ponytail: in-memory like the rate limit, so a restart resets the daily count.
+  const ttsDay = { day: '', chars: 0, perIp: new Map<string, number>() }; // perIp is cleared daily
+  app.get<{ Querystring: { text: string; lang: TtsLang } }>(
+    '/tts',
+    {
+      schema: {
+        querystring: {
+          type: 'object',
+          required: ['text'],
+          // lang is validated for the contract but unused: the multilingual model detects the language
+          properties: { text: { type: 'string', maxLength: 2000 }, lang: { type: 'string', enum: TTS_LANGS, default: 'en' } },
+        },
+      },
+    },
+    async (req, reply) => {
+      const text = normalizeTtsText(req.query.text);
+      if (!text || text.length > TTS_MAX_CHARS) {
+        return reply.code(400).send(badRequest(`text must be 1-${TTS_MAX_CHARS} characters`));
+      }
+      if (!tts) return reply.code(503).send({ error: 'tts_unavailable' });
+      const charge = (chars: number) => {
+        const today = new Date().toISOString().slice(0, 10);
+        if (ttsDay.day !== today) Object.assign(ttsDay, { day: today, chars: 0, perIp: new Map() });
+        const ip = clientIp(req);
+        const ipChars = ttsDay.perIp.get(ip) ?? 0;
+        if (ttsDay.chars + chars > ttsDailyChars || ipChars + chars > ttsIpDailyChars) return false;
+        if (over(`ttsmiss:${ip}`, ttsMissPerMin, Date.now())) return false;
+        ttsDay.chars += chars;
+        ttsDay.perIp.set(ip, ipChars + chars);
+        return true;
+      };
+      try {
+        const audio = await tts(text, charge);
+        return reply.type('audio/mpeg').header('cache-control', 'public, max-age=86400').send(audio);
+      } catch (err) {
+        if (err instanceof TtsBudgetError) return reply.code(429).send({ error: 'tts_budget' });
+        req.log.warn({ err }, 'tts failed');
+        return reply.code(502).send({ error: 'tts_failed' });
+      }
     },
   );
 

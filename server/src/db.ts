@@ -7,6 +7,7 @@ export const CATEGORIES = ['moving', 'temporary', 'permanent'] as const;
 export const HEIGHT_BANDS = ['ground', 'head', 'dropoff'] as const;
 export type Category = (typeof CATEGORIES)[number];
 export type HeightBand = (typeof HEIGHT_BANDS)[number];
+export type LockableField = 'type' | 'category' | 'heightBand';
 
 const HOUR = 3600_000;
 export const LIFESPAN_MS: Record<Category, number> = {
@@ -27,10 +28,13 @@ export interface HazardDoc {
   crop: Binary | null;
   meshUrl: null;
   severity: number;
+  /** Written for reference only; every response derives labels from type + heightBand (`spokenLabels`). */
   spokenLabel_en: string;
   spokenLabel_es: string;
   needsNaming: boolean;
-  /** Set once a reclassification applied: type/category/heightBand are people-chosen. */
+  /** Fields people chose through reclassification (sorted); the renamer never changes them. */
+  lockedFields?: LockableField[];
+  /** Legacy (before lockedFields): true meant every field was locked. Read, never written. */
   humanLocked?: boolean;
   renameAttempts?: number;
   renameAttemptAt?: Date;
