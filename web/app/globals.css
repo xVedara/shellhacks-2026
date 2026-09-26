@@ -1,28 +1,73 @@
 @import "tailwindcss";
 
-/* StepSafe palette. Contrast on navy #081624: white 18:1, muted 8.7:1, blue 4.7:1, signal 8:1.
-   Brand Slate #66717E is only 3.7:1 on navy, so it is used on light surfaces only. */
+/* StepSafe dark-glass theme.
+   Page: brand navy diagonal gradient. Surfaces: translucent "glass" panels with a hairline edge.
+   Contrast (on the effective glass tone, about #112034): white 16:1, muted #A9B4C2 7.8:1, signal #13B9F2 7.2:1.
+   Brand blue #087FF5 is a fill (navy text on it, 4.7:1), never small text on glass.
+   Orange #FF7900 marks hazards and warnings only. */
 @theme {
   --color-navy: #081624;
-  --color-navy-2: #0f2235; /* raised surface */
-  --color-line: #2c4158; /* borders on navy */
-  --color-muted: #a9b4c2; /* secondary text on navy */
+  --color-navy-2: #0f2235; /* opaque raised surface (sticky bars, popovers) */
+  --color-line: #2c4158; /* strong borders */
+  --color-muted: #a9b4c2; /* secondary text */
   --color-cloud: #f5f7fa;
   --color-slate-brand: #66717e;
-  --color-blue: #087ff5; /* links, controls, active */
-  --color-signal: #13b9f2; /* live / scan indicators */
+  --color-blue: #087ff5; /* control fills, active states */
+  --color-signal: #13b9f2; /* live indicators, links on glass */
   --color-alert: #ff7900; /* hazards and warnings only */
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --color-glass: rgb(20 34 54 / 0.62);
+  --color-edge: rgb(148 170 196 / 0.18); /* hairline on glass */
+  --color-well: rgb(255 255 255 / 0.045); /* recessed tile inside a glass panel */
+  --font-sans: var(--font-body), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-display: var(--font-display-face), "Arial Narrow", ui-sans-serif, sans-serif;
 }
 
 :root {
   color-scheme: dark;
 }
 
-html,
-body {
+html {
   background: var(--color-navy);
+}
+body {
   color: #fff;
+  background:
+    radial-gradient(900px 480px at 8% -10%, rgb(19 185 242 / 0.10), transparent 70%),
+    radial-gradient(700px 420px at 100% 110%, rgb(8 104 248 / 0.10), transparent 70%),
+    linear-gradient(135deg, #081624 0%, #122238 52%, #0a1828 100%);
+  background-attachment: fixed;
+}
+
+/* One glass surface for every panel. */
+.glass {
+  background: var(--color-glass);
+  border: 1px solid var(--color-edge);
+  border-radius: 1rem;
+  box-shadow: 0 10px 32px rgb(2 8 20 / 0.42), inset 0 1px 0 rgb(255 255 255 / 0.04);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  backdrop-filter: blur(14px) saturate(1.2);
+}
+/* Floating over the map tiles: more opaque so text never fights the streets underneath. */
+.glass-float {
+  background: rgb(10 22 38 / 0.86);
+  border: 1px solid var(--color-edge);
+  border-radius: 0.875rem;
+  box-shadow: 0 6px 22px rgb(2 8 20 / 0.45);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+.well {
+  background: var(--color-well);
+  border: 1px solid rgb(148 170 196 / 0.10);
+  border-radius: 0.75rem;
+}
+
+.eyebrow {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
 }
 
 /* Visible, thick focus ring everywhere (WCAG 2.4.7 / 2.4.11). */
@@ -41,7 +86,32 @@ body {
 
 .leaflet-container {
   font: inherit;
-  background: #dfe3e8;
+  background: #1a2a3f;
+}
+/* Slightly calmer tiles so the pins carry the eye; streets and labels stay fully readable. */
+.leaflet-tile-pane {
+  filter: saturate(0.7) brightness(0.96);
+}
+.leaflet-bar {
+  border: 1px solid var(--color-edge) !important;
+  border-radius: 0.75rem !important;
+  overflow: hidden;
+  box-shadow: 0 6px 22px rgb(2 8 20 / 0.45) !important;
+}
+.leaflet-bar a,
+.leaflet-bar a:hover {
+  width: 36px !important;
+  height: 36px !important;
+  line-height: 36px !important;
+  color: #fff !important;
+  background: rgb(10 22 38 / 0.9) !important;
+  border-bottom-color: var(--color-edge) !important;
+}
+.leaflet-bar a:hover {
+  background: rgb(20 40 64 / 0.95) !important;
+}
+.leaflet-bar a.leaflet-disabled {
+  color: var(--color-muted) !important;
 }
 
 .kbd {
@@ -61,7 +131,8 @@ body {
 .leaflet-control-attribution {
   font-size: 12px;
   color: var(--color-navy) !important;
-  background: rgba(255, 255, 255, 0.94) !important;
+  background: rgb(255 255 255 / 0.94) !important;
+  border-top-left-radius: 8px;
 }
 .leaflet-control-attribution a {
   color: #0657b0 !important;
@@ -76,33 +147,38 @@ body {
 .ss-pin {
   position: relative;
   line-height: 0;
+  transition: transform 120ms ease-out;
+}
+.leaflet-marker-icon:hover .ss-pin {
+  transform: scale(1.08);
 }
 .ss-pin__sample {
   position: absolute;
   left: 50%;
   top: 100%;
   transform: translateX(-50%);
-  margin-top: 2px;
-  padding: 1px 4px;
-  font: 700 10px/1.3 var(--font-sans);
-  letter-spacing: 0.04em;
+  margin-top: 5px;
+  padding: 1px 5px;
+  font: 700 9.5px/1.35 var(--font-sans);
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--color-navy);
   background: #fff;
   border: 1px dashed var(--color-navy);
-  border-radius: 3px;
+  border-radius: 999px;
   white-space: nowrap;
   pointer-events: none;
+  box-shadow: 0 1px 3px rgb(2 8 20 / 0.35);
 }
 /* Newest live report: a steady ring plus a few pulses. */
 .ss-pin--new::before,
 .ss-pin--new::after {
   content: "";
   position: absolute;
-  inset: -7px;
+  inset: -9px;
   border-radius: 9999px;
   border: 3px solid var(--color-navy);
-  box-shadow: 0 0 0 2px #fff;
+  box-shadow: 0 0 0 2px #fff, 0 0 18px 4px rgb(19 185 242 / 0.55);
   pointer-events: none;
 }
 .ss-pin--new::after {
@@ -115,7 +191,7 @@ body {
     opacity: 1;
   }
   100% {
-    transform: scale(1.6);
+    transform: scale(1.7);
     opacity: 0;
   }
 }
@@ -123,4 +199,13 @@ body {
   .ss-pin--new::after {
     animation: none;
   }
+  .ss-pin {
+    transition: none;
+  }
+}
+
+/* Thin scrollbars inside glass panels. */
+.scroll-quiet {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(148 170 196 / 0.3) transparent;
 }

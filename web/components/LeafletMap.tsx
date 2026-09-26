@@ -5,7 +5,7 @@
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CircleMarker, MapContainer, Marker, Polyline, TileLayer, Tooltip, useMap } from "react-leaflet";
+import { CircleMarker, MapContainer, Marker, Polyline, TileLayer, Tooltip, ZoomControl, useMap } from "react-leaflet";
 import type { HazardSummary } from "@/lib/api";
 import { hazardAccessibleName, markerSize, markerSvg } from "@/lib/marker";
 
@@ -36,7 +36,7 @@ function hazardIcon(h: HazardSummary, selected: boolean, highlighted: boolean) {
   const size = markerSize(h.confidence) + (selected ? 8 : 0);
   const html =
     `<div class="ss-pin${selected ? " ss-pin--selected" : ""}${highlighted ? " ss-pin--new" : ""}">` +
-    markerSvg(h, size, selected) +
+    markerSvg(h, size, selected, true) +
     (h.sample ? `<span class="ss-pin__sample">Sample</span>` : "") +
     `</div>`;
   return L.divIcon({ html, className: "ss-pin-wrap", iconSize: [size, size], iconAnchor: [size / 2, size / 2] });
@@ -181,7 +181,7 @@ export default function LeafletMap({
         zoom={zoom}
         preferCanvas
         className="h-full w-full"
-        zoomControl={!compact}
+        zoomControl={false}
         dragging={!compact}
         scrollWheelZoom={!compact}
         doubleClickZoom={!compact}
@@ -192,6 +192,7 @@ export default function LeafletMap({
           url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
           maxZoom={19}
         />
+        {!compact && <ZoomControl position="bottomright" />}
         {compact ? <Recenter center={center} zoom={zoom} /> : <PanToSelected hazards={hazards} selectedId={selectedId} />}
         {showOsm && <OsmLayer />}
         {hazards.map((h) => (

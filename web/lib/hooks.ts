@@ -37,6 +37,9 @@ export function useLiveHazards() {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [recentlyAdded, setRecentlyAdded] = useState<string | null>(null);
+  /** Hazards this page saw leave the map live (remove or cleared upsert): id -> time. Client-side only. */
+  const [cleared, setCleared] = useState<Map<string, number>>(new Map());
+  const [lastEventAt, setLastEventAt] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -79,6 +82,7 @@ export function useLiveHazards() {
       epoch++;
       publish();
       setLoaded(true);
+      setLastEventAt(Date.now());
       return true;
     };
 
@@ -115,6 +119,9 @@ export function useLiveHazards() {
           return;
         }
         buffer?.push(evt);
+        const goneId = evt.op === "remove" ? evt.id : evt.op === "upsert" && evt.hazard?.status === "cleared" ? evt.hazard.id : null;
+        if (goneId && pins.has(goneId)) setCleared((c) => new Map(c).set(goneId, Date.now()));
+        setLastEventAt(Date.now());
         const added = applyEvent(pins, evt);
         if (evt.op === "upsert" && evt.hazard?.id) revisions.set(evt.hazard.id, (revisions.get(evt.hazard.id) ?? 0) + 1);
         if (added) setRecentlyAdded(added);
@@ -143,7 +150,17 @@ export function useLiveHazards() {
   /** Changes whenever the server may have changed this hazard (upsert event or resync). */
   const detailVersion = (id: string | null) => (id ? `${live.epoch}:${live.revisions.get(id) ?? 0}` : undefined);
 
-  return { hazards: live.hazards, connection, loaded, error, recentlyAdded, detailVersion };
+  return { hazards: live.hazards, connection, loaded, error, recentlyAdded, detailVersion, cleared, lastEventAt };
+}
+
+/** Current time, re-read every `ms` so relative labels and "last hour" counts stay honest. */
+export function useNow(ms = 30_000) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), ms);
+    return () => clearInterval(t);
+  }, [ms]);
+  return now;
 }
 
 /** Anonymous device identity plus the server's view of its name and karma. */

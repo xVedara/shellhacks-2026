@@ -11,7 +11,7 @@ import {
   relativeTime,
   type HazardDetail as Detail,
 } from "@/lib/api";
-import { Notice, PinSwatch, SampleBadge } from "./ui";
+import { Notice, PinTile, SampleBadge } from "./ui";
 
 const dateTime = (iso: string) => {
   const d = new Date(iso);
@@ -50,14 +50,14 @@ export function useHazardDetail(id: string | null, version?: string) {
 export function HazardHeading({ hazard, as: Tag = "h2" }: { hazard: Detail; as?: "h1" | "h2" }) {
   return (
     <div className="flex items-start gap-3">
-      <PinSwatch hazard={hazard} size={28} />
-      <div>
-        <Tag className="text-xl font-bold leading-tight text-white">
+      <PinTile hazard={hazard} size={48} />
+      <div className="min-w-0">
+        <Tag className="font-display text-[1.7rem] font-bold uppercase leading-[1.05] tracking-wide text-white">
           {hazard.label || hazard.type} {hazard.sample && <SampleBadge />}
         </Tag>
-        <p className="text-sm text-muted">
+        <p className="mt-1 text-sm text-muted">
           {CATEGORY_META[hazard.category].label} · {HEIGHT_META[hazard.heightBand].label} · type “{hazard.type}”
-          {hazard.status === "cleared" && <strong className="ml-1">· Cleared</strong>}
+          {hazard.status === "cleared" && <strong className="ml-1 text-white">· Cleared</strong>}
         </p>
       </div>
     </div>
@@ -67,7 +67,10 @@ export function HazardHeading({ hazard, as: Tag = "h2" }: { hazard: Detail; as?:
 export function Crop({ hazard, className = "" }: { hazard: Detail; className?: string }) {
   if (!hazard.crop)
     return (
-      <div className={`flex h-24 w-full items-center sm:aspect-[4/3] sm:h-auto justify-center rounded-lg border-2 border-dashed border-line bg-navy-2 text-sm text-muted ${className}`}>
+      <div className={`flex h-36 w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-edge bg-well text-sm text-muted ${className}`}>
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M3 3l18 18M9.5 5h5l1.5 2H19a2 2 0 0 1 2 2v8.5M17.5 19H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.5M9.9 10.2a3 3 0 0 0 4 4" />
+        </svg>
         No photo was sent with this report
       </div>
     );
@@ -76,7 +79,7 @@ export function Crop({ hazard, className = "" }: { hazard: Detail; className?: s
     <img
       src={cropSrc(hazard.crop)}
       alt={`Camera crop of the reported ${hazard.label || hazard.type}`}
-      className={`w-full rounded-lg border-2 border-line bg-navy-2 object-contain ${className}`}
+      className={`w-full rounded-xl border border-edge bg-black/30 object-contain ${className}`}
     />
   );
 }
@@ -84,7 +87,7 @@ export function Crop({ hazard, className = "" }: { hazard: Detail; className?: s
 export default function HazardDetail({ hazard }: { hazard: Detail }) {
   const m = hazard.measurements;
   return (
-    <div className="space-y-5 text-white">
+    <div className="space-y-4 text-white">
       <HazardHeading hazard={hazard} />
       {hazard.sample && (
         <Notice tone="info" title="Sample hazard">
@@ -93,47 +96,47 @@ export default function HazardDetail({ hazard }: { hazard: Detail }) {
       )}
       <Crop hazard={hazard} className="max-h-72" />
 
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-        <div>
-          <dt className="font-semibold">Clearance height</dt>
-          <dd>{m?.clearanceM != null ? formatLength(m.clearanceM) : "Not measured"}</dd>
+      <dl className="grid grid-cols-2 gap-2 text-sm">
+        <div className="well px-3 py-2">
+          <dt className="eyebrow">Clearance height</dt>
+          <dd className="mt-0.5 font-medium">{m?.clearanceM != null ? formatLength(m.clearanceM) : "Not measured"}</dd>
         </div>
-        <div>
-          <dt className="font-semibold">Remaining sidewalk width</dt>
-          <dd>{m?.widthM != null ? formatLength(m.widthM) : "Not measured"}</dd>
+        <div className="well px-3 py-2">
+          <dt className="eyebrow">Remaining sidewalk width</dt>
+          <dd className="mt-0.5 font-medium">{m?.widthM != null ? formatLength(m.widthM) : "Not measured"}</dd>
         </div>
-        <div>
-          <dt className="font-semibold">Confidence</dt>
-          <dd>{hazard.confidence.toFixed(1)} (cleared below −2)</dd>
+        <div className="well px-3 py-2">
+          <dt className="eyebrow">Confidence</dt>
+          <dd className="mt-0.5 font-medium">{hazard.confidence.toFixed(1)} (cleared below −2)</dd>
         </div>
-        <div>
-          <dt className="font-semibold">Severity</dt>
-          <dd>{hazard.severity} of 3</dd>
+        <div className="well px-3 py-2">
+          <dt className="eyebrow">Severity</dt>
+          <dd className="mt-0.5 font-medium">{hazard.severity} of 3</dd>
         </div>
-        <div>
-          <dt className="font-semibold">Last seen</dt>
-          <dd>
+        <div className="well px-3 py-2">
+          <dt className="eyebrow">Last seen</dt>
+          <dd className="mt-0.5 font-medium">
             <When iso={hazard.lastSeen} />
           </dd>
         </div>
-        <div>
-          <dt className="font-semibold">Expires</dt>
-          <dd>
+        <div className="well px-3 py-2">
+          <dt className="eyebrow">Expires</dt>
+          <dd className="mt-0.5 font-medium">
             <When iso={hazard.expiresAt} /> <span className="text-muted">({CATEGORY_META[hazard.category].lifespan} without an upvote)</span>
           </dd>
         </div>
-        <div>
-          <dt className="font-semibold">First reported</dt>
-          <dd>{dateTime(hazard.createdAt)}</dd>
+        <div className="well px-3 py-2">
+          <dt className="eyebrow">First reported</dt>
+          <dd className="mt-0.5 font-medium">{dateTime(hazard.createdAt)}</dd>
         </div>
-        <div>
-          <dt className="font-semibold">Spoken in Spanish</dt>
-          <dd lang="es">{hazard.spokenLabel_es || "—"}</dd>
+        <div className="well px-3 py-2">
+          <dt className="eyebrow">Spoken in Spanish</dt>
+          <dd lang="es" className="mt-0.5 font-medium">{hazard.spokenLabel_es || "—"}</dd>
         </div>
       </dl>
 
       <section aria-labelledby={`pending-${hazard.id}`}>
-        <h3 id={`pending-${hazard.id}`} className="mb-1 font-semibold">
+        <h3 id={`pending-${hazard.id}`} className="eyebrow mb-1.5">
           Pending reclassifications
         </h3>
         {hazard.pendingReclassifications.length === 0 ? (
@@ -156,15 +159,15 @@ export default function HazardDetail({ hazard }: { hazard: Detail }) {
       </section>
 
       <section aria-labelledby={`votes-${hazard.id}`}>
-        <h3 id={`votes-${hazard.id}`} className="mb-1 font-semibold">
+        <h3 id={`votes-${hazard.id}`} className="eyebrow mb-1.5">
           Vote history ({hazard.votes.length})
         </h3>
         {hazard.votes.length === 0 ? (
           <p className="text-sm text-muted">No votes yet.</p>
         ) : (
-          <div className="max-h-64 overflow-auto rounded border border-line">
+          <div className="scroll-quiet max-h-64 overflow-auto rounded-xl border border-edge">
             <table className="w-full text-left text-sm">
-              <thead className="sticky top-0 bg-navy-2">
+              <thead className="sticky top-0 bg-navy-2 text-xs uppercase tracking-wider text-muted">
                 <tr>
                   <th scope="col" className="px-2 py-1">When</th>
                   <th scope="col" className="px-2 py-1">Vote</th>
@@ -174,7 +177,7 @@ export default function HazardDetail({ hazard }: { hazard: Detail }) {
               </thead>
               <tbody>
                 {[...hazard.votes].reverse().map((v, i) => (
-                  <tr key={i} className="border-t border-line">
+                  <tr key={i} className="border-t border-edge">
                     <td className="px-2 py-1">
                       <When iso={v.at} />
                     </td>

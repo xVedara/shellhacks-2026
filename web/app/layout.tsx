@@ -1,9 +1,11 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { Poppins, Saira_Extra_Condensed } from "next/font/google";
 import Header from "@/components/Header";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+// Poppins for UI and body, Saira Extra Condensed for headlines and big numbers.
+const body = Poppins({ subsets: ["latin"], weight: ["400", "500", "600", "700"], variable: "--font-body" });
+const display = Saira_Extra_Condensed({ subsets: ["latin"], weight: ["600", "700"], variable: "--font-display-face" });
 
 export const metadata: Metadata = {
   title: "StepSafe community map",
@@ -14,8 +16,8 @@ export const viewport: Viewport = { width: "device-width", initialScale: 1, them
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`h-full ${inter.variable}`}>
-      <body className="flex h-dvh flex-col bg-navy font-sans text-white antialiased">
+    <html lang="en" className={`h-full ${body.variable} ${display.variable}`}>
+      <body className="flex h-dvh flex-col font-sans text-white antialiased">
         <a
           href="#main"
           className="sr-only z-[2000] rounded bg-white px-3 py-2 font-semibold text-navy focus:not-sr-only focus:absolute focus:left-2 focus:top-2"

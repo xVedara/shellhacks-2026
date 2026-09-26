@@ -14,14 +14,14 @@ npm run start                                               # serves on :3000 (-
 ```
 
 `NEXT_PUBLIC_API_URL` is inlined at build time, so rebuild when the API host changes.
-Fonts (Inter via `next/font/google`) are downloaded during `npm run build`, so the build machine
+Fonts (Poppins for UI, Saira Extra Condensed for headlines and numbers, via `next/font/google`) are downloaded during `npm run build`, so the build machine
 needs internet; the running app does not.
 
 ## Pages
 
 | Route | What it does |
 | --- | --- |
-| `/` | Live map + side panel. Loads `GET /hazards/near` (Graham Center 25.7566,-80.3739, radius 5000 m), then follows `GET /events`. Upserts add/move pins, removes (or `status: "cleared"`) delete them. Every EventSource `open` (first connect and each reconnect) re-fetches `/hazards/near` and replaces the pin set, because events sent while disconnected are lost; events arriving while that request is in flight are buffered and replayed on top of the snapshot, so it cannot undo a newer upsert or remove. The badge says "Live" only after the snapshot lands; a failed snapshot with the stream up retries with backoff (1 s to 30 s). An open detail (map panel, `/verify`, `/hazard/[id]`) re-fetches `GET /hazards/:id` on every upsert for that id and after each resync. Closing the panel returns focus to the list row. Keyboard-accessible hazard list next to the map; clicking a pin or list row opens the detail panel. OSM reference layer toggle. |
+| `/` | Dashboard: metric strip, live map, glass side rail. The strip is computed client-side from data the page already holds (no extra endpoints): active hazards (sample vs real), last hour (`lastSeen` within 60 min, so "reported or seen again"; summaries carry no `createdAt`), awaiting check (not voted from this device, same rule as `/verify`), cleared today (remove / cleared-upsert events this page saw since local midnight; resets on reload), and stream status with time of the last update. Live map + side panel. Loads `GET /hazards/near` (Graham Center 25.7566,-80.3739, radius 5000 m), then follows `GET /events`. Upserts add/move pins, removes (or `status: "cleared"`) delete them. Every EventSource `open` (first connect and each reconnect) re-fetches `/hazards/near` and replaces the pin set, because events sent while disconnected are lost; events arriving while that request is in flight are buffered and replayed on top of the snapshot, so it cannot undo a newer upsert or remove. The badge says "Live" only after the snapshot lands; a failed snapshot with the stream up retries with backoff (1 s to 30 s). An open detail (map panel, `/verify`, `/hazard/[id]`) re-fetches `GET /hazards/:id` on every upsert for that id and after each resync. Closing the panel returns focus to the list row. Keyboard-accessible hazard list next to the map; clicking a pin or list row opens the detail panel. OSM reference layer toggle. |
 | `/verify` | Client-side queue built from the same list: lowest confidence first, skipping ids this device already voted on (stored in `localStorage` key `stepsafe.voted`). One hazard at a time: crop, mini map, type/category/height band, measurements. Upvote / Downvote (`POST /hazards/:id/votes`, `source: "verifier"`), Skip, Reclassify (shows `agreeing` of 3), Report (spam/abuse/other). Shortcuts: `U` up, `D` down, `S` skip, only while focus is on the page body or plain content in the hazard card (never on a link, button or field), only once the hazard's details have loaded, and they can be switched off with the "Keyboard shortcuts" checkbox (WCAG 2.1.4). Vote buttons stay disabled until the details load. Reclassify lowercases and trims the type; allowed: letters, numbers, spaces, hyphens, max 40. On phones the vote bar sticks to the bottom of the screen. |
 | `/hazard/[id]` | Full detail: crop, clearance and remaining width in feet and metres, confidence, severity, last seen, expiry, Spanish label, pending reclassifications, vote history, location map. |
 
@@ -56,10 +56,13 @@ Graham Center and writes `public/osm-graham.json` (committed, about 110 KB, 891 
 Data © OpenStreetMap contributors, ODbL 1.0; tiles from tile.openstreetmap.org with attribution.
 The OSM dots are distinguished by color only (with tooltips); accepted because it is an optional reference layer for sighted verifiers, and hazards themselves never rely on color alone.
 
+## Look
+
+Dark-glass dashboard: brand-navy 135° gradient page, translucent blurred panels (`.glass`, `.glass-float` over the map, `.well` for recessed tiles in `app/globals.css`), metric strip on top, map with floating legend / OSM toggle / zoom, feed and detail in a right rail (stacked on phones). Pins keep their encoding and gain a soft tint halo of their category color. Orange stays reserved for hazards and warnings.
+
 ## Accessibility
 
-Dark navy UI with WCAG AA text contrast (white 18:1, muted #A9B4C2 8.7:1, brand blue #087FF5 4.7:1 on
-navy; primary buttons use navy text on blue). Brand Slate #66717E is only 3.7:1 on navy, so it is
+Dark navy UI with WCAG AA text contrast (on the glass tone: white 16:1, muted #A9B4C2 7.8:1, signal #13B9F2 7.2:1 for links; primary buttons use navy text on brand blue, 4.7:1; brand blue is never small text on glass). Brand Slate #66717E is only 3.7:1 on navy, so it is
 not used for text there. Skip link, visible 3 px focus rings (navy + white halo on map tiles),
 keyboard-reachable pins (Enter opens) and a parallel list, labelled controls, `aria-live`
 announcements for new hazards and action results, works at 390 px wide.
