@@ -30,8 +30,11 @@
   --warn-tint: #2a1a0c;
   --ok: #13b9f2;
   --hazard: #ff7900;
-  --float-shadow: 0 8px 24px rgb(0 0 0 / 0.32);
-  --sheet-shadow: 0 -12px 40px rgb(0 0 0 / 0.38);
+  --float-shadow: 0 8px 24px rgb(0 0 0 / 0.28);
+  --elev-hairline: inset 0 1px 0 rgb(255 255 255 / 0.08), 0 0 0 1px var(--line);
+  --elev-sheet: inset 0 1px 0 rgb(255 255 255 / 0.1), 0 0 0 1px var(--line), 0 -18px 36px rgb(0 0 0 / 0.28);
+  --sheet-fill: linear-gradient(180deg, #16283b 0%, var(--card) 96px);
+  --focus-glow: 0 0 0 6px rgb(19 185 242 / 0.32);
   --tiles: brightness(0.78) contrast(1.05) saturate(0.82);
   --header: #081624;
 }
@@ -60,8 +63,11 @@
   --warn-tint: #fff4ea;
   --ok: #087ff5;
   --hazard: #ff7900;
-  --float-shadow: 0 8px 24px rgb(8 22 36 / 0.12);
-  --sheet-shadow: 0 -10px 32px rgb(8 22 36 / 0.12);
+  --float-shadow: 0 8px 24px rgb(8 22 36 / 0.1);
+  --elev-hairline: inset 0 1px 0 #fff, 0 0 0 1px var(--line);
+  --elev-sheet: inset 0 1px 0 #fff, 0 0 0 1px var(--line), 0 -14px 32px rgb(8 22 36 / 0.08);
+  --sheet-fill: linear-gradient(180deg, #ffffff 0%, #f7f8fa 96px);
+  --focus-glow: 0 0 0 6px rgb(8 127 245 / 0.22);
   --tiles: none;
   --header: #ffffff;
 }
@@ -107,19 +113,18 @@ body {
   background: var(--page);
   font-feature-settings: "cv11", "ss01";
   letter-spacing: -0.011em;
+  line-height: 1.45;
 }
 
 .panel {
   background: var(--card);
-  border: 1px solid var(--line);
   border-radius: 12px;
-  box-shadow: 0 0 0 1px var(--line);
+  box-shadow: var(--elev-hairline);
 }
 .float {
   background: var(--card);
-  border: 1px solid var(--line);
   border-radius: 12px;
-  box-shadow: var(--float-shadow);
+  box-shadow: var(--elev-hairline), var(--float-shadow);
 }
 .label {
   font-size: 12px;
@@ -131,14 +136,14 @@ body {
   :focus-visible {
     outline: 2px solid var(--blue);
     outline-offset: 2px;
-    box-shadow: 0 0 0 4px var(--signal-soft);
+    box-shadow: var(--focus-glow);
   }
 }
 .leaflet-container :focus-visible,
 .leaflet-marker-icon:focus-visible {
   outline: 2px solid var(--blue);
   outline-offset: 3px;
-  box-shadow: 0 0 0 5px var(--signal-soft);
+  box-shadow: var(--focus-glow);
   border-radius: 8px;
 }
 
@@ -222,13 +227,14 @@ body {
   flex-direction: column;
   overflow: hidden;
   padding: 0 20px max(16px, env(safe-area-inset-bottom));
-  border: 1px solid var(--line);
-  border-bottom: 0;
   border-radius: 20px 20px 0 0;
-  background: var(--card);
+  background: var(--sheet-fill);
   color: var(--ink);
-  box-shadow: var(--sheet-shadow);
+  box-shadow: var(--elev-sheet);
   transition: height 280ms ease-out;
+}
+.sheet-panel.is-dragging {
+  transition: none;
 }
 .instrument-card {
   --panel-h: min(640px, 68%);
@@ -245,8 +251,11 @@ body {
     min-height: 0;
     flex: none;
     overflow: hidden;
+    border-style: solid;
+    border-color: var(--line);
     border-width: 0 0 0 1px;
     border-radius: 0;
+    background: var(--card);
     box-shadow: none;
     padding-top: 12px;
   }
@@ -254,9 +263,51 @@ body {
     --sheet: 0px !important;
   }
 }
+.sheet-face {
+  animation: face-in 280ms ease-out both;
+}
+.filter-chip {
+  transition:
+    background-color 200ms ease-out,
+    border-color 200ms ease-out,
+    color 200ms ease-out,
+    box-shadow 200ms ease-out;
+}
+.hazard-row {
+  animation: row-in 220ms ease-out both;
+}
+.legend-fold {
+  animation: face-in 220ms ease-out both;
+}
+@keyframes face-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
-  .sheet-panel {
+  .sheet-panel,
+  .filter-chip {
     transition: none;
+  }
+  .sheet-face,
+  .hazard-row,
+  .legend-fold {
+    animation: none;
   }
 }
 
@@ -287,7 +338,7 @@ body {
   line-height: 0;
   border-radius: 22%;
   box-shadow: 0 0 0 2px var(--pin-cat, #ff7900);
-  transition: transform 160ms ease-out;
+  transition: transform 220ms ease-out, box-shadow 220ms ease-out;
 }
 .ss-pin__glyph {
   display: block;
@@ -311,12 +362,22 @@ body {
   text-align: center;
 }
 .ss-pin--selected {
+  transform: scale(1.08);
   box-shadow:
     0 0 0 2px var(--pin-cat, #ff7900),
     0 0 0 4px var(--card),
     0 0 0 7px #13b9f2;
+  animation: pin-select 220ms ease-out both;
 }
-.leaflet-marker-icon:hover .ss-pin {
+@keyframes pin-select {
+  from {
+    transform: scale(0.94);
+  }
+  to {
+    transform: scale(1.08);
+  }
+}
+.leaflet-marker-icon:hover .ss-pin:not(.ss-pin--selected) {
   transform: scale(1.06);
 }
 .ss-cluster {
@@ -370,11 +431,14 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .ss-pin--new::after,
   .ss-pin,
+  .ss-pin--selected,
   .motion-safe\:animate-ping {
     animation: none;
   }
   .ss-pin,
-  .leaflet-marker-icon:hover .ss-pin {
+  .ss-pin--selected,
+  .leaflet-marker-icon:hover .ss-pin,
+  .leaflet-marker-icon:hover .ss-pin:not(.ss-pin--selected) {
     transition: none;
     transform: none;
   }

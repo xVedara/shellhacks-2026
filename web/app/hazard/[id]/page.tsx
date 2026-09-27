@@ -69,7 +69,7 @@ export default function HazardPage() {
         )}
       </div>
       <aside ref={panelRef} className="sheet-panel instrument-card" aria-label="Hazard status">
-        <div className="scroll-quiet min-h-0 flex-1 overflow-y-auto pb-2">
+        <div className="sheet-face scroll-quiet min-h-0 flex-1 overflow-y-auto pb-2">
           <Link href={`/?selected=${encodeURIComponent(hazardId)}`} className="inline-flex min-h-11 items-center text-[14px] font-medium text-accent">
             Live map
           </Link>
@@ -95,7 +95,7 @@ export default function HazardPage() {
                   <p className="text-[13px] text-ink-3">FIU Graham Center · {milesBetween(detail.lat, detail.lng)}</p>
                 </div>
               </div>
-              <dl className="mt-3.5 grid grid-cols-3 overflow-hidden rounded-xl border border-line bg-raised">
+              <dl className="mt-3.5 grid grid-cols-3 overflow-hidden rounded-xl bg-raised shadow-[var(--elev-hairline)]">
                 <div className="px-3 py-2.5">
                   <dt className="text-[11px] text-ink-3">Confidence</dt>
                   <dd className="mt-1 text-[18px] font-semibold tabular-nums tracking-[-0.03em]">{detail.confidence.toFixed(1)}</dd>

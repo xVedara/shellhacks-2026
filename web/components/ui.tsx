@@ -157,7 +157,7 @@ export function Notice({ tone, title, children }: { tone: "warn" | "info"; title
 }
 
 const base =
-  "inline-flex min-h-11 items-center justify-center gap-2 rounded-full px-4 text-[14px] font-medium tracking-[-0.011em] transition-colors disabled:cursor-not-allowed disabled:opacity-50";
-export const primaryButton = `${base} bg-primary text-primary-ink hover:opacity-90`;
-export const secondaryButton = `${base} border border-[var(--border-strong)] bg-transparent text-ink hover:bg-hover`;
+  "inline-flex min-h-11 items-center justify-center gap-2 rounded-full px-5 text-[14px] tracking-[-0.02em] transition-[opacity,background-color,box-shadow] duration-200 ease-out disabled:cursor-not-allowed disabled:opacity-50";
+export const primaryButton = `${base} bg-primary font-semibold text-primary-ink shadow-[var(--elev-hairline)] hover:opacity-90`;
+export const secondaryButton = `${base} border border-[var(--border-strong)] bg-transparent font-medium text-ink hover:bg-hover`;
 export const linkClass = "font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent";

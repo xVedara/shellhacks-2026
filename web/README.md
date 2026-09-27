@@ -51,7 +51,7 @@ free text.
 - Category is a colored edge and a small M / T / P mark: moving `#FFC23D`, temporary `#FF7900`,
   permanent `#D93A1E`. The letter is the category mark, not the pin's label.
 - Height uses those three height tiles in the legend, and the height name in the row text.
-- Size = confidence (22 to 40 px). The selected pin is larger and wears a signal-blue `#13B9F2` ring.
+- Size = confidence (22 to 40 px). The selected pin scales up and wears a signal-blue `#13B9F2` ring.
 - Overlapping pins collapse into a count cluster; choosing it zooms in.
 - `sample: true` hazards carry a dashed "SAMPLE" tag on the map, in the list, in detail and in the
   verify queue, plus a "Seeded for the demo" notice. Seed data is never shown as a real report.
@@ -94,8 +94,8 @@ Primary buttons are near-white on navy, or navy on near-white. Orange is not use
 warnings carry a text title and an icon. Inline links are underlined. Skip link, blue focus glow,
 keyboard-reachable pins (Enter opens) and a parallel list, labelled controls, `aria-live` announcements
 for new hazards and action results, instrument facts as `<dl>`, the theme toggle is a button with
-`aria-pressed`. Action targets are at least 44px. `prefers-reduced-motion` drops the new-pin pulse and
-the sheet resize transition. Works at 390px wide.
+`aria-pressed`. Action targets are at least 44px. `prefers-reduced-motion` drops the new-pin pulse, the
+sheet resize, list and filter motion, and the selected-pin scale. Works at 390px wide.
 
 ## Known gaps
 

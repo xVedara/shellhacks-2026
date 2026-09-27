@@ -79,6 +79,8 @@ export default function MapPage() {
   const [legendOpen, setLegendOpen] = useState(false);
   const [showOsm, setShowOsm] = useState(false);
   const [dragH, setDragH] = useState<number | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [measuredSheet, setMeasuredSheet] = useState<number | null>(null);
   const desktop = useDesktop();
   const linkedId = useSyncExternalStore((onChange) => {
     window.addEventListener("popstate", onChange);
@@ -122,8 +124,26 @@ export default function MapPage() {
     return () => ro.disconnect();
   }, []);
 
+  useEffect(() => {
+    const el = panelRef.current;
+    if (!el) return;
+    const read = () => {
+      const wide = matchMedia("(min-width: 768px)").matches;
+      const next = wide ? 0 : Math.round(el.getBoundingClientRect().height);
+      setMeasuredSheet((prev) => (prev === next ? prev : next));
+    };
+    const ro = new ResizeObserver(read);
+    ro.observe(el);
+    const mq = matchMedia("(min-width: 768px)");
+    mq.addEventListener("change", read);
+    return () => {
+      ro.disconnect();
+      mq.removeEventListener("change", read);
+    };
+  }, []);
+
   const panelPx = dragH ?? panelHeight(detent, stageH);
-  const sheet = desktop ? 0 : panelPx;
+  const sheet = desktop ? 0 : (measuredSheet ?? panelPx);
 
   const detailOpen = panel === "detail" && !!selectedId && (desktop || detent !== "peek");
   const showPeek = !desktop && detent === "peek" && !detailOpen;
@@ -166,6 +186,7 @@ export default function MapPage() {
 
   const onGrabDown = (e: React.PointerEvent<HTMLButtonElement>) => {
     drag.current = { y: e.clientY, h: panelPx, moved: false };
+    setDragging(true);
     e.currentTarget.setPointerCapture(e.pointerId);
   };
   const onGrabMove = (e: React.PointerEvent<HTMLButtonElement>) => {
@@ -179,6 +200,7 @@ export default function MapPage() {
     const moved = drag.current.moved;
     const height = dragH ?? drag.current.h;
     drag.current = null;
+    setDragging(false);
     setDragH(null);
     if (!moved) setDetent(DETENTS[(DETENTS.indexOf(detent) + 1) % DETENTS.length]);
     else snap(height);
@@ -218,7 +240,7 @@ export default function MapPage() {
 
       <aside
         ref={panelRef}
-        className="sheet-panel"
+        className={`sheet-panel${dragging ? " is-dragging" : ""}`}
         style={{ ["--panel-h" as string]: `${panelPx}px` }}
         aria-label={showPeek ? "Live status" : detailOpen ? "Hazard details" : "Nearby hazards"}
       >
@@ -248,7 +270,7 @@ export default function MapPage() {
           {newest ? `New hazard reported: ${newest.sample ? "sample, " : ""}${newest.label || typeDisplayName(newest.type, taxonomy)}` : ""}
         </p>
 
-        <div className="flex min-h-0 flex-1 flex-col">
+        <div key={showPeek ? "peek" : detailOpen ? "detail" : "list"} className="sheet-face flex min-h-0 flex-1 flex-col">
           {showPeek ? (
             <div>
               <LiveKicker connection={connection} count={loaded ? list.length : 0} />
@@ -321,8 +343,8 @@ export default function MapPage() {
                       type="button"
                       aria-pressed={on}
                       onClick={() => toggleFilter(f.id)}
-                      className={`inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3.5 text-[14px] font-medium ${
-                        on ? "border-[var(--signal)] bg-accent-tint text-accent" : "border-[var(--border-strong)] bg-transparent text-ink"
+                      className={`filter-chip inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3.5 text-[14px] font-medium tracking-[-0.011em] ${
+                        on ? "border-[var(--signal)] bg-accent-tint text-accent shadow-[0_0_0_3px_var(--signal-soft)]" : "border-[var(--border-strong)] bg-transparent text-ink"
                       }`}
                     >
                       {f.label}
@@ -366,10 +388,11 @@ export default function MapPage() {
                 {filters.includes("cleared") && (
                   <p className="py-2 text-[13px] text-ink-3">{clearedToday} cleared today on this page.</p>
                 )}
-                <ul>
-                  {rows.map((h) => (
+                <ul key={filters.join(",")}>
+                  {rows.map((h, index) => (
                     <HazardRow
                       key={h.id}
+                      index={index}
                       hazard={h}
                       selected={h.id === selectedId}
                       isNew={h.id === recentlyAdded}
@@ -405,6 +428,7 @@ function HazardRow({
   now,
   taxonomy,
   onSelect,
+  index,
 }: {
   hazard: HazardSummary;
   selected: boolean;
@@ -412,16 +436,17 @@ function HazardRow({
   now: number;
   taxonomy: ReturnType<typeof useTaxonomy>["taxonomy"];
   onSelect: (id: string) => void;
+  index: number;
 }) {
   const name = h.label || typeDisplayName(h.type, taxonomy);
   return (
-    <li>
+    <li className="hazard-row" style={{ animationDelay: `${Math.min(index, 5) * 28}ms` }}>
       <button
         type="button"
         data-hazard-id={h.id}
         onClick={() => onSelect(h.id)}
         aria-current={selected ? "true" : undefined}
-        className={`flex min-h-[60px] w-full items-center gap-3 border-t border-line py-2 text-left ${selected ? "-mx-2 w-[calc(100%+16px)] rounded-xl bg-raised px-2" : ""}`}
+        className={`flex min-h-[60px] w-full items-center gap-3 border-t border-line py-2 text-left transition-[background-color,box-shadow] duration-200 ease-out ${selected ? "-mx-2 w-[calc(100%+16px)] rounded-xl bg-raised px-2 shadow-[inset_0_0_0_1px_var(--signal)]" : ""}`}
       >
         <TypeIcon type={h.type} category={h.category} selected={selected} />
         <span className="min-w-0 flex-1">
@@ -464,7 +489,7 @@ function LegendBlock({
         </button>
       )}
       {open && (
-        <div className="pb-2">
+        <div className="legend-fold pb-2">
           {!toggle && <div className="pt-3" />}
           <Legend osm={showOsm} onOsm={onOsm} />
           {showOsm && (
