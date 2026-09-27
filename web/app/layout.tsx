@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { Inter } from "next/font/google";
 import Header from "@/components/Header";
+import SkipLink from "@/components/SkipLink";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
@@ -40,14 +41,10 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
       </head>
       <body className="flex h-dvh flex-col overflow-hidden font-sans text-[14px] text-ink antialiased md:flex-row">
-        <a
-          href="#main"
-          className="sr-only z-[2000] rounded-md bg-card px-3 py-2 font-medium text-heading focus:not-sr-only focus:absolute focus:left-2 focus:top-2"
-        >
-          Skip to content
-        </a>
+        <SkipLink target="main">Skip to content</SkipLink>
         <Header />
-        <main id="main" className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {/* tabIndex -1: the skip link focuses it; a ring shows only for keyboard focus (:focus-visible). */}
+        <main id="main" tabIndex={-1} className="flex min-h-0 min-w-0 flex-1 flex-col">
           {children}
         </main>
       </body>

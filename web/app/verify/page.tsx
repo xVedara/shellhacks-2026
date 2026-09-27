@@ -66,16 +66,18 @@ export default function VerifyPage() {
   const requestedNote =
     // Hidden while a vote or skip message shows: that message already says what happened.
     loaded && requestedId && currentId !== requestedId && !skipped.has(requestedId) && !message
-      ? voted.has(requestedId)
-        ? "You already checked that hazard from this device. Showing the next one in the queue."
-        : "That hazard is no longer active. Showing the next one in the queue."
+      ? `${voted.has(requestedId) ? "You already checked that hazard from this device." : "That hazard is no longer active."}${
+          currentId ? " Showing the next one in the queue." : ""
+        }`
       : null;
   if (currentId !== pinnedId) {
     setPinnedId(currentId);
     setPanel(null);
   }
   const current = currentId ? hazards.get(currentId) : undefined;
-  const { detail, error: detailError, loading: detailLoading } = useHazardDetail(currentId, detailVersion(currentId));
+  // Bumped by "Try again" so a failed detail request can be re-sent; voting waits for the details.
+  const [retryKey, setRetryKey] = useState(0);
+  const { detail, error: detailError, loading: detailLoading } = useHazardDetail(currentId, `${detailVersion(currentId)}:${retryKey}`);
   // Nothing can be voted on until its photo and details are on screen.
   const ready = !!detail && detail.id === currentId;
   const measured = (m: number | null | undefined) =>
@@ -253,7 +255,14 @@ export default function VerifyPage() {
             {/* With a photo the left column spans the card's rows; without one it would leave an empty band. */}
             <div className={`space-y-4 ${detail?.crop ? "md:row-span-3" : ""}`}>
               {detailLoading && <p role="status" className="text-ink-3">Loading photo and details…</p>}
-              {detailError && <Notice tone="warn" title="Couldn’t load details">{detailError}</Notice>}
+              {detailError && (
+                <Notice tone="warn" title="Couldn’t load details">
+                  <p>{detailError} Voting waits for the photo and details; Skip still works.</p>
+                  <button type="button" className={`${secondaryButton} mt-2`} onClick={() => setRetryKey((k) => k + 1)}>
+                    Try again
+                  </button>
+                </Notice>
+              )}
               {detail && detail.id === current.id && (
                 <>
                   <div id="verify-heading">
@@ -302,8 +311,9 @@ export default function VerifyPage() {
               </Link>
             </div>
 
-            {/* Direct child of the article so it can stick to the bottom of a phone screen. */}
-            <div className="sticky bottom-0 z-[1100] -mx-4 grid grid-cols-3 gap-2 border-t border-line bg-card p-3 pb-[max(12px,env(safe-area-inset-bottom))] md:static md:mx-0 md:border-0 md:bg-transparent md:p-0">
+            {/* Direct child of the article so it can stick to the bottom of a phone screen. A landscape phone is
+                too short for a sticky bar (it would cover most of the card), so there it stays in the flow. */}
+            <div className="sticky bottom-0 z-[1100] -mx-4 grid grid-cols-3 gap-2 border-t border-line bg-card p-3 pb-[max(12px,env(safe-area-inset-bottom))] short:static md:static md:mx-0 md:border-0 md:bg-transparent md:p-0">
               <button type="button" disabled={busy || !ready} aria-keyshortcuts={shortcutsOn ? "U" : undefined} onClick={() => vote("up")} className={`${voteButton} border-primary bg-primary text-primary-ink hover:bg-[var(--primary-hover)]`}>
                 <span><span aria-hidden="true">▲ </span>Still there</span>
                 <span className="text-[12px] font-normal">Upvote{shortcutsOn && <span className="hidden md:inline"> · U</span>}</span>

@@ -188,8 +188,19 @@ body {
   }
 }
 /* The map itself is a tab stop (arrow keys pan). Its ring is drawn inside the map, because the header,
-   the sheet and the screen edge cover anything outside it (WCAG 2.4.7). */
+   the sheet and the screen edge cover anything outside it, and on an overlay, because Leaflet's tile and
+   marker panes (z-index up to 700) paint over the container's own outline (WCAG 2.4.7). The overlay sits
+   below the Leaflet controls (1000) and ignores the pointer. */
 .leaflet-container:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+.leaflet-container:focus-visible::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 800;
+  pointer-events: none;
   outline: 2px solid var(--blue);
   outline-offset: -4px;
   box-shadow: inset 0 0 0 6px rgb(8 127 245 / 0.32);
@@ -309,6 +320,12 @@ body {
   color: var(--ink);
   box-shadow: var(--elev-sheet);
   transition: height 280ms ease-out;
+}
+/* The skip links focus <main> and the panel: draw their rings inside, where the header and screen edge cannot
+   hide them. */
+main:focus-visible,
+.sheet-panel:focus-visible {
+  outline-offset: -2px;
 }
 .sheet-panel.is-dragging {
   transition: none;

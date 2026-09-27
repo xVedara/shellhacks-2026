@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import HazardDetail, { useHazardDetail } from "@/components/HazardDetail";
 import Map from "@/components/Map";
+import SkipLink from "@/components/SkipLink";
 import { Legend, LiveDot, Notice, SampleBadge, TypeIcon, linkClass, primaryButton, secondaryButton } from "@/components/ui";
 import { API_URL, CATEGORY_META, GRAHAM_CENTER, HEIGHT_META, relativeTime, typeDisplayName, type HazardSummary } from "@/lib/api";
 import { milesFromGraham } from "@/lib/geo";
@@ -48,7 +49,8 @@ function connectionWord(connection: Connection) {
   return "Connecting";
 }
 
-function LiveKicker({ connection, count }: { connection: Connection; count: number }) {
+/** `count` is null until the first snapshot answers. */
+function LiveKicker({ connection, count }: { connection: Connection; count: number | null }) {
   const word = connectionWord(connection);
   return (
     <div>
@@ -58,7 +60,7 @@ function LiveKicker({ connection, count }: { connection: Connection; count: numb
           <span role="status">{word}</span>
         </span>
         <span className="font-normal text-ink-3">
-          · {connection === "down" ? (count ? "showing the last hazards received" : "retrying") : `${count} nearby`}
+          · {connection === "down" ? "retrying" : count === null ? "loading" : `${count} nearby`}
         </span>
       </p>
       <p className="mt-0.5 text-[13px] text-ink-3">Within 3 mi of FIU Graham Center</p>
@@ -180,15 +182,14 @@ export default function MapPage() {
 
   return (
     <div ref={stageRef} className="relative flex min-h-0 flex-1">
-      <a
-        href="#hazard-panel"
-        onClick={() => {
+      <SkipLink
+        target="hazard-panel"
+        onActivate={() => {
           if (showPeek) setDetent("medium");
         }}
-        className="sr-only z-[1300] rounded-md bg-card px-3 py-2 font-medium text-heading focus:not-sr-only focus:absolute focus:left-2 focus:top-2"
       >
         Skip to hazard panel
-      </a>
+      </SkipLink>
       {/* The zoom and locate buttons need a clear strip of map above the sheet. */}
       <div
         className={`map-stage relative min-h-0 min-w-0 flex-1${mapControlsHidden(desktop, stageH, sheet) ? " controls-hidden" : ""}${mapPinsClass(desktop, stageH - sheet)}`}
@@ -224,7 +225,7 @@ export default function MapPage() {
         ref={panelRef}
         id="hazard-panel"
         tabIndex={-1}
-        className={`sheet-panel focus-visible:[outline-offset:-2px]${dragging ? " is-dragging" : ""}`}
+        className={`sheet-panel${dragging ? " is-dragging" : ""}`}
         style={{ ["--panel-h" as string]: `${panelPx}px` }}
         aria-label={showPeek ? "Live status" : detailOpen ? "Hazard details" : "Nearby hazards"}
       >
@@ -265,7 +266,7 @@ export default function MapPage() {
         <div key={showPeek ? "peek" : detailOpen ? "detail" : "list"} className="sheet-face flex min-h-0 flex-1 flex-col">
           {showPeek ? (
             <div>
-              <LiveKicker connection={connection} count={loaded ? list.length : 0} />
+              <LiveKicker connection={connection} count={loaded ? list.length : null} />
               <button id="peek-action" type="button" className={`${primaryButton} mt-3.5 w-full`} onClick={() => setDetent("medium")}>
                 {panel === "detail" && selectedId ? "Back to details" : "Open list"}
               </button>
@@ -295,17 +296,11 @@ export default function MapPage() {
                 Hazard details
               </h2>
               <div className="scroll-quiet min-h-0 flex-1 overflow-y-auto pb-3">
-                {(connection === "reconnecting" || (connection === "down" && loaded)) && (
+                {connection === "reconnecting" && (
                   <div className="mb-3">
-                    {connection === "down" ? (
-                      <Notice tone="warn" title="Lost contact with the server">
-                        Showing the last hazards received. Reconnecting automatically.
-                      </Notice>
-                    ) : (
-                      <Notice tone="info" title="Live updates paused">
-                        The event stream dropped. Reconnecting; the list resyncs when it comes back.
-                      </Notice>
-                    )}
+                    <Notice tone="info" title="Live updates paused">
+                      The event stream dropped. Reconnecting; the list resyncs when it comes back.
+                    </Notice>
                   </div>
                 )}
                 {loaded && !selected && (
@@ -400,7 +395,7 @@ function LiveHazardList({
       {/* On a landscape phone the status and the filters share one row to leave room for hazards. */}
       <div className="flex shrink-0 flex-col short:flex-row short:flex-wrap short:items-center short:justify-between short:gap-x-4">
         <div className="shrink-0">
-          <LiveKicker connection={connection} count={loaded ? total : 0} />
+          <LiveKicker connection={connection} count={loaded ? total : null} />
           {lastEventAt && connection === "live" && (
             <p className="sr-only">Updated {relativeTime(new Date(lastEventAt).toISOString(), now)}</p>
           )}
@@ -423,24 +418,26 @@ function LiveHazardList({
               </label>
             );
           })}
+          {show === "awaiting" && loaded && (
+            <span className="text-[13px] text-ink-3">
+              {rows.length} of {total}
+            </span>
+          )}
           {clearedToday > 0 && <span className="text-[13px] text-ink-3">{clearedToday} cleared today</span>}
         </fieldset>
+        <p className="sr-only" aria-live="polite">
+          {show === "awaiting" && loaded ? `Showing ${rows.length} of ${total} hazards you have not checked.` : ""}
+        </p>
       </div>
-      {(connection === "reconnecting" || (connection === "down" && loaded)) && (
+      {connection === "reconnecting" && (
         <div className="mt-3 shrink-0">
-          {connection === "down" ? (
-            <Notice tone="warn" title="Lost contact with the server">
-              Showing the last hazards received. Reconnecting automatically.
-            </Notice>
-          ) : (
-            <Notice tone="info" title="Live updates paused">
-              The event stream dropped. Reconnecting; the list resyncs when it comes back.
-            </Notice>
-          )}
+          <Notice tone="info" title="Live updates paused">
+            The event stream dropped. Reconnecting; the list resyncs when it comes back.
+          </Notice>
         </div>
       )}
       <h2 id="list-heading" tabIndex={-1} className="sr-only">
-        {option.heading}
+        {option.heading} ({rows.length})
       </h2>
       <div className="scroll-quiet mt-1 min-h-0 flex-1 overflow-y-auto">
         {!loaded && connection !== "down" && (

@@ -384,9 +384,12 @@ function MapLocateNote({ map, onNote }: { map: L.Map | null; onNote: (note: stri
   useEffect(() => {
     if (!map) return;
     const fail = () => onNote("Current location is unavailable.");
+    const found = () => onNote("Map centered on your current location.");
     map.on("locationerror", fail);
+    map.on("locationfound", found);
     return () => {
       map.off("locationerror", fail);
+      map.off("locationfound", found);
     };
   }, [map, onNote]);
   return null;
@@ -441,7 +444,8 @@ export default function LeafletMap({
           url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
           maxZoom={19}
         />
-        <AttributionControl position="bottomleft" />
+        {/* Only the required OpenStreetMap credit; no library link or flag. */}
+        <AttributionControl position="bottomleft" prefix={false} />
         {!compact && <ZoomControl position="bottomright" />}
         {compact ? <Recenter center={center} zoom={zoom} /> : <PanToSelected hazards={hazards} selectedId={selectedId} sheet={sheet} />}
         {!compact && <PanFocusedMarker sheet={sheet} />}

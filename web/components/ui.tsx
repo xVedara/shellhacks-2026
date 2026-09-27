@@ -100,7 +100,6 @@ export function Legend({
 }) {
   return (
     <div className="text-[14px] text-ink">
-      <h3 className="mb-2 text-[13px] font-semibold tracking-[-0.011em]">Legend</h3>
       <ul className="space-y-1">
         {HEIGHT_BANDS.map((b) => (
           <li key={b} className="flex min-h-9 items-center gap-2.5">
