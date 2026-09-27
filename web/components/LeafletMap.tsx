@@ -164,9 +164,14 @@ function PanFocusedMarker({ sheet }: { sheet: number }) {
   return null;
 }
 
+/** A pin must show at least this much of itself (width and height) above the sheet and inside the map. */
+const MIN_EXPOSED = 24;
+
 /**
- * Pins whose centre sits under the phone sheet or past the map's edge show only a sliver (WCAG 2.5.8, 2.4.11):
- * no pointer, no tab stop, hidden from the accessibility tree. The list below carries every hazard.
+ * Pins that show less than 24x24px of themselves (under the phone sheet or past the map's edge) are slivers
+ * (WCAG 2.5.8, 2.4.11): no pointer, no tab stop, hidden from the accessibility tree. The list carries every
+ * hazard. A pin that has focus when it goes offstage hands focus to the panel first, so focus never strands on
+ * a hidden node. (Not `inert`: Chrome would drop that focus to <body> with no announcement.)
  */
 function OffstagePins({ sheet }: { sheet: number }) {
   const map = useMap();
@@ -177,10 +182,14 @@ function OffstagePins({ sheet }: { sheet: number }) {
       const size = map.getSize();
       const origin = map.getContainer().getBoundingClientRect();
       for (const el of pane.querySelectorAll<HTMLElement>(".leaflet-marker-icon")) {
-        const r = el.getBoundingClientRect();
-        const x = r.left + r.width / 2 - origin.left;
-        const y = r.top + r.height / 2 - origin.top;
-        const off = x < 0 || x > size.x || y < 0 || y > size.y - sheet;
+        // The drawn glyph, not the icon box (which carries padding for the ring).
+        const r = (el.querySelector(".ss-pin, .ss-cluster") ?? el).getBoundingClientRect();
+        const left = Math.max(r.left - origin.left, 0);
+        const right = Math.min(r.right - origin.left, size.x);
+        const top = Math.max(r.top - origin.top, 0);
+        const bottom = Math.min(r.bottom - origin.top, size.y - sheet);
+        const off = right - left < MIN_EXPOSED || bottom - top < MIN_EXPOSED;
+        if (off && el.contains(document.activeElement)) document.getElementById("hazard-panel")?.focus();
         // Idempotent (writes only on a difference), so the attribute observer below settles after one pass.
         if (el.classList.contains("ss-pin-offstage") !== off) el.classList.toggle("ss-pin-offstage", off);
         if (off) {
