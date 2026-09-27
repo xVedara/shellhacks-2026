@@ -552,7 +552,8 @@ function HazardRow({
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[15px] font-medium tracking-[-0.02em] text-ink">
             {name} {h.sample && <SampleBadge />}
-            {isNew && <span className="ml-1.5 rounded-full bg-accent-tint px-1.5 text-[11px] font-semibold text-accent">New</span>}
+            {/* Accent blue on this tint over a selected row is 4.33:1; ink clears 4.5 (WCAG 1.4.3). */}
+            {isNew && <span className="ml-1.5 rounded-full bg-accent-tint px-1.5 text-[11px] font-semibold text-ink">New</span>}
           </span>
           <span className="mt-0.5 block truncate text-[12px] text-ink-3">
             <span className="sr-only">{CATEGORY_META[h.category].label} · </span>

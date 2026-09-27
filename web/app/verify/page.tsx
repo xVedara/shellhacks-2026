@@ -151,8 +151,8 @@ export default function VerifyPage() {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <PageBar title="Verify queue">
-        {/* Single-key shortcuts only matter with a keyboard; touch screens get the buttons. */}
-        <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 text-[13px] font-medium text-ink pointer-coarse:hidden">
+        {/* U/D/S still fire when a keyboard is paired with a coarse pointer, so the off switch stays on screen (WCAG 2.1.4). */}
+        <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 text-[13px] font-medium text-ink">
           <input
             type="checkbox"
             checked={shortcutsOn}
