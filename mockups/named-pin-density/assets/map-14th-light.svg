@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800">
+<rect width="1200" height="800" fill="#e4e2dc"/>
+    <ellipse cx="180" cy="700" rx="150" ry="70" fill="#c2d7e6"/>
+    <rect x="620" y="0" width="580" height="310" fill="#f4f3ef"/>
+    <rect x="648" y="28" width="250" height="18" fill="#c5d8c2"/>
+    <text x="910" y="150" fill="#3e4854" font-family="system-ui, sans-serif" font-size="18" font-weight="650" text-anchor="middle" dominant-baseline="middle">Primera Casa</text>
+    <rect x="70" y="70" width="250" height="150" rx="2" fill="#f4f3ef"/>
+    <text x="195" y="145" fill="#3e4854" font-family="system-ui, sans-serif" font-size="14" font-weight="600" text-anchor="middle" dominant-baseline="middle">Market</text>
+    <path d="M-40 590 C 220 520, 480 500, 760 545 S 1100 610, 1280 560" fill="none" stroke="#eceae4" stroke-width="168" stroke-linecap="round"/>
+    <path d="M-40 590 C 220 520, 480 500, 760 545 S 1100 610, 1280 560" fill="none" stroke="#f7f7f5" stroke-width="78" stroke-linecap="round"/>
+    <path d="M-40 590 C 220 520, 480 500, 760 545 S 1100 610, 1280 560" fill="none" stroke="#d5cfc4" stroke-width="2" stroke-dasharray="10 14" stroke-linecap="round"/>
+    <polygon points="500,470 690,458 724,545 474,560" fill="#eceae4" stroke="#d5cfc4" stroke-width="2"/>
+    <polygon points="548,508 656,500 674,542 530,552" fill="#f7f7f5"/>
+    <circle cx="120" cy="250" r="16" fill="#6d9870"/><circle cx="168" cy="228" r="12" fill="#8aaf86"/><circle cx="214" cy="268" r="12" fill="#6d9870"/><circle cx="90" cy="320" r="16" fill="#8aaf86"/><circle cx="260" cy="210" r="12" fill="#6d9870"/><circle cx="340" cy="240" r="12" fill="#8aaf86"/><circle cx="400" cy="190" r="16" fill="#6d9870"/><circle cx="470" cy="230" r="12" fill="#8aaf86"/><circle cx="90" cy="430" r="12" fill="#6d9870"/><circle cx="150" cy="400" r="16" fill="#8aaf86"/><circle cx="980" cy="360" r="12" fill="#6d9870"/><circle cx="1040" cy="330" r="12" fill="#8aaf86"/><circle cx="1100" cy="390" r="16" fill="#6d9870"/><circle cx="900" cy="400" r="12" fill="#8aaf86"/><circle cx="860" cy="340" r="12" fill="#6d9870"/>
+    <text x="150" y="688" fill="#5c6570" font-family="system-ui, sans-serif" font-size="13" font-weight="600" text-anchor="middle" dominant-baseline="middle">Lakeview</text>
+    <text x="430" y="430" fill="#7d756c" font-family="system-ui, sans-serif" font-size="14" font-weight="600" text-anchor="middle" dominant-baseline="middle">Southwest 14th Street</text>
+</svg>

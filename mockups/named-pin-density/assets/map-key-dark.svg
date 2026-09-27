@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="500" viewBox="0 0 1200 500">
+<rect width="1200" height="500" fill="#171c22"/>
+    <rect x="40" y="36" width="280" height="150" rx="2" fill="#232a33"/>
+    <text x="180" y="110" fill="#d5dbe3" font-family="system-ui, sans-serif" font-size="16" font-weight="600" text-anchor="middle" dominant-baseline="middle">Graham Center</text>
+    <rect x="860" y="40" width="280" height="170" rx="2" fill="#232a33"/>
+    <text x="1000" y="120" fill="#d5dbe3" font-family="system-ui, sans-serif" font-size="16" font-weight="600" text-anchor="middle" dominant-baseline="middle">Library</text>
+    <circle cx="400" cy="90" r="18" fill="#2c4d3b"/>
+    <circle cx="470" cy="120" r="14" fill="#3d6a50"/>
+    <circle cx="740" cy="80" r="16" fill="#2c4d3b"/>
+    <rect x="0" y="300" width="1200" height="78" fill="#3c4654"/>
+    <rect x="560" y="0" width="54" height="500" fill="#313a46"/>
+    <rect x="0" y="276" width="1200" height="22" fill="#222a33"/>
+    <rect x="0" y="378" width="1200" height="18" fill="#222a33"/>
+    <text x="240" y="342" fill="#8e98a4" font-family="system-ui, sans-serif" font-size="13" font-weight="600" text-anchor="middle" dominant-baseline="middle">campus walk</text>
+</svg>
