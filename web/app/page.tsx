@@ -1,93 +1,71 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import HazardDetail, { useHazardDetail } from "@/components/HazardDetail";
+import { ThemeToggle } from "@/components/Header";
 import Map from "@/components/Map";
-import { Legend, LiveDot, Notice, PageBar, PanelHead, PinTile, SampleBadge, linkClass, primaryButton, secondaryButton } from "@/components/ui";
-import { API_URL, CATEGORY_META, GRAHAM_CENTER, HEIGHT_META, relativeTime, typeDisplayName } from "@/lib/api";
+import { Legend, LiveDot, Notice, SampleBadge, TypeIcon, linkClass, primaryButton, secondaryButton } from "@/components/ui";
+import { API_URL, CATEGORY_META, GRAHAM_CENTER, HEIGHT_META, relativeTime, typeDisplayName, type HazardSummary } from "@/lib/api";
 import { useLiveHazards, useNow, useTaxonomy, type Connection } from "@/lib/hooks";
 import { useVotedIds } from "@/lib/use-voted";
 
-const HOUR = 3_600_000;
+type Detent = "peek" | "medium" | "expanded";
+type FilterId = "active" | "awaiting" | "cleared";
 
-// Small stroke icons for the metric tiles (drawn for this app).
-const ICONS = {
-  hazard: <path d="M12 3.5 2.8 19.5h18.4L12 3.5Zm0 6v4.5m0 2.6v.1" />,
-  clock: <path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0-13v4.6l3 1.8" />,
-  eye: <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Zm9.5 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />,
-  check: <path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm-4-9.2 2.7 2.7L16.2 9" />,
-};
+const FILTERS: { id: FilterId; label: string }[] = [
+  { id: "active", label: "Active" },
+  { id: "awaiting", label: "Awaiting" },
+  { id: "cleared", label: "Cleared" },
+];
 
-/** Tinted icon square; the tint is decoration, the label beside it carries the meaning. */
-function IconSquare({ tint, children }: { tint: string; children: React.ReactNode }) {
-  return (
-    <span
-      className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-md sm:flex"
-      style={{ background: `color-mix(in srgb, ${tint} 14%, var(--card))`, color: tint }}
-      aria-hidden="true"
-    >
-      {children}
-    </span>
+const DETENTS: Detent[] = ["peek", "medium", "expanded"];
+
+function useDesktop() {
+  return useSyncExternalStore(
+    (onChange) => {
+      const mq = matchMedia("(min-width: 768px)");
+      mq.addEventListener("change", onChange);
+      return () => mq.removeEventListener("change", onChange);
+    },
+    () => matchMedia("(min-width: 768px)").matches,
+    () => false,
   );
 }
 
-function Metric({ icon, tint, label, value, note }: { icon: keyof typeof ICONS; tint: string; label: string; value: React.ReactNode; note: string }) {
-  return (
-    <div className="panel flex min-w-0 items-start gap-3 px-3.5 py-3">
-      <IconSquare tint={tint}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-          {ICONS[icon]}
-        </svg>
-      </IconSquare>
-      <dl className="min-w-0">
-        <dt className="truncate text-[13px] text-ink-2">{label}</dt>
-        <dd className="text-[20px] font-semibold leading-tight tabular-nums text-heading">{value}</dd>
-        <dd className="line-clamp-2 text-[12px] leading-snug text-ink-3">{note}</dd>
-      </dl>
-    </div>
-  );
+function selectedFromLocation() {
+  return new URLSearchParams(window.location.search).get("selected");
 }
 
-const STREAM_WORD: Record<Connection, string> = { loading: "Connecting", live: "Live", reconnecting: "Paused", down: "Offline" };
+function panelHeight(detent: Detent, stage: number) {
+  if (detent === "peek") return Math.round(Math.min(230, Math.max(188, stage * 0.24)));
+  if (detent === "medium") return Math.round(Math.min(stage - 96, Math.max(280, stage * 0.52)));
+  return Math.round(Math.min(stage - 48, Math.max(360, stage * 0.88)));
+}
 
-function LiveMetric({ connection, lastEventAt }: { connection: Connection; lastEventAt: number | null }) {
+function milesBetween(lat: number, lng: number) {
+  const R = 6371000;
+  const toR = (d: number) => (d * Math.PI) / 180;
+  const dLat = toR(lat - GRAHAM_CENTER[0]);
+  const dLng = toR(lng - GRAHAM_CENTER[1]);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toR(GRAHAM_CENTER[0])) * Math.cos(toR(lat)) * Math.sin(dLng / 2) ** 2;
+  const meters = 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+  return `${(meters / 1609.344).toFixed(1)} mi`;
+}
+
+function LiveKicker({ connection, count }: { connection: Connection; count: number }) {
+  const word = connection === "down" ? "Offline failsafe" : connection === "live" ? "Live" : connection === "reconnecting" ? "Paused" : "Connecting";
   return (
-    <div className="panel col-span-2 flex min-w-0 items-start gap-3 px-3.5 py-3 sm:col-span-1">
-      <IconSquare tint="var(--ok)">
+    <div>
+      <p className="flex min-h-6 items-center gap-2 text-[15px] font-semibold tracking-[-0.02em]">
         <LiveDot connection={connection} />
-      </IconSquare>
-      <dl className="flex min-w-0 flex-1 items-center gap-2.5 sm:block">
-        <dt className="flex items-center gap-2 text-[13px] text-ink-2">
-          <span className="sm:hidden">
-            <LiveDot connection={connection} />
-          </span>
-          <span className="sr-only sm:not-sr-only">Stream</span>
-        </dt>
-        <dd className="text-[20px] font-semibold leading-tight text-heading">
-          <span role="status">{STREAM_WORD[connection]}</span>
-        </dd>
-        <dd className="ml-auto line-clamp-2 text-[12px] leading-snug text-ink-3 sm:ml-0">
-          {connection === "down"
-            ? "Can’t reach the server · retrying"
-            : lastEventAt
-              ? `Updated ${relativeTime(new Date(lastEventAt).toISOString())}`
-              : "Waiting for first update"}
-        </dd>
-      </dl>
+        <span>{word}</span>
+        {connection !== "down" && <span className="font-normal text-ink-3">· {count} nearby</span>}
+      </p>
+      <p className="mt-0.5 text-[13px] text-ink-3">Within 3 mi of FIU Graham Center</p>
     </div>
-  );
-}
-
-function OsmLayerNotice({ className }: { className: string }) {
-  return (
-    <p className={className}>
-      OpenStreetMap layer: crossings (white), curbs (grey), tactile paving (yellow). Data © OpenStreetMap contributors,{" "}
-      <a href="https://opendatacommons.org/licenses/odbl/1-0/" className="underline">
-        ODbL
-      </a>
-      .
-    </p>
   );
 }
 
@@ -95,235 +73,413 @@ export default function MapPage() {
   const { hazards, connection, loaded, error, recentlyAdded, detailVersion, cleared, lastEventAt } = useLiveHazards();
   const { taxonomy } = useTaxonomy();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [panel, setPanel] = useState<"list" | "detail">("list");
+  const [detent, setDetent] = useState<Detent>("peek");
+  const [filters, setFilters] = useState<FilterId[]>(["active"]);
+  const [legendOpen, setLegendOpen] = useState(false);
   const [showOsm, setShowOsm] = useState(false);
+  const [dragH, setDragH] = useState<number | null>(null);
+  const desktop = useDesktop();
+  const linkedId = useSyncExternalStore((onChange) => {
+    window.addEventListener("popstate", onChange);
+    return () => window.removeEventListener("popstate", onChange);
+  }, selectedFromLocation, () => null);
   const voted = useVotedIds();
   const now = useNow(15_000);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
   const panelHeading = useRef<HTMLHeadingElement>(null);
+  const returnFocusTo = useRef<string | null>(null);
+  const drag = useRef<{ y: number; h: number; moved: boolean } | null>(null);
+  const [stageH, setStageH] = useState(700);
 
-  const list = useMemo(
-    () => [...hazards.values()].sort((a, b) => b.lastSeen.localeCompare(a.lastSeen)),
-    [hazards],
-  );
+  const list = useMemo(() => [...hazards.values()].sort((a, b) => b.lastSeen.localeCompare(a.lastSeen)), [hazards]);
   const selected = selectedId ? hazards.get(selectedId) : undefined;
   const { detail, error: detailError, loading: detailLoading } = useHazardDetail(selectedId, detailVersion(selectedId));
   const newest = recentlyAdded ? hazards.get(recentlyAdded) : undefined;
 
-  // Metric strip, computed from what the page already holds (no extra endpoints).
   const midnight = new Date(now).setHours(0, 0, 0, 0);
-  const samples = (hs: typeof list) => hs.filter((h) => h.sample).length;
-  const sampleCount = samples(list);
-  // 0 to 1 h old; a lastSeen in the future (clock skew) doesn't count as recent.
-  const lastHour = list.filter((h) => {
-    const age = now - new Date(h.lastSeen).getTime();
-    return age >= 0 && age <= HOUR;
-  });
-  const awaiting = list.filter((h) => !voted.has(h.id));
   const clearedToday = [...cleared.values()].filter((t) => t >= midnight).length;
-  const show = (n: number) => (loaded ? n : "—");
 
-  const select = useCallback((id: string) => setSelectedId(id), []);
-  const returnFocusTo = useRef<string | null>(null);
+  const rows = useMemo(() => {
+    if (filters.length === 0) return list;
+    const active = filters.includes("active");
+    const awaiting = filters.includes("awaiting");
+    if (!active && !awaiting) return [];
+    return awaiting ? list.filter((h) => !voted.has(h.id)) : list;
+  }, [filters, list, voted]);
+
+  if (linkedId && selectedId !== linkedId && detent === "peek" && panel === "list") {
+    setSelectedId(linkedId);
+    setDetent("medium");
+  }
+
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setStageH(el.getBoundingClientRect().height || 700));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const panelPx = dragH ?? panelHeight(detent, stageH);
+  const sheet = desktop ? 0 : panelPx;
+
+  const detailOpen = panel === "detail" && !!selectedId && (desktop || detent !== "peek");
+  const showPeek = !desktop && detent === "peek" && !detailOpen;
+
+  const select = useCallback((id: string) => {
+    setSelectedId(id);
+    setPanel("detail");
+    setDetent("expanded");
+  }, []);
+
   const closePanel = () => {
     returnFocusTo.current = selectedId;
-    setSelectedId(null);
+    setPanel("list");
+    setDetent("medium");
   };
+
   useEffect(() => {
-    if (selectedId) {
+    if (detailOpen) {
       panelHeading.current?.focus();
     } else if (returnFocusTo.current) {
-      // Back to the list row for the hazard that was open (falls back to the list heading).
       const row = document.querySelector<HTMLElement>(`[data-hazard-id="${CSS.escape(returnFocusTo.current)}"]`);
       (row ?? document.getElementById("list-heading"))?.focus();
       returnFocusTo.current = null;
     }
-  }, [selectedId]);
+  }, [detailOpen]);
+
+  const snap = (height: number) => {
+    const options = DETENTS.map((d) => panelHeight(d, stageH));
+    let best: Detent = "medium";
+    let gap = Infinity;
+    DETENTS.forEach((d, i) => {
+      const next = Math.abs(options[i] - height);
+      if (next < gap) {
+        gap = next;
+        best = d;
+      }
+    });
+    setDetent(best);
+  };
+
+  const onGrabDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    drag.current = { y: e.clientY, h: panelPx, moved: false };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const onGrabMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (!drag.current) return;
+    const dy = drag.current.y - e.clientY;
+    if (Math.abs(dy) > 4) drag.current.moved = true;
+    setDragH(Math.min(stageH - 48, Math.max(160, drag.current.h + dy)));
+  };
+  const onGrabUp = () => {
+    if (!drag.current) return;
+    const moved = drag.current.moved;
+    const height = dragH ?? drag.current.h;
+    drag.current = null;
+    setDragH(null);
+    if (!moved) setDetent(DETENTS[(DETENTS.indexOf(detent) + 1) % DETENTS.length]);
+    else snap(height);
+  };
+
+  const toggleFilter = (id: FilterId) => {
+    setFilters((curr) => (curr.includes(id) ? curr.filter((f) => f !== id) : [...curr, id]));
+  };
 
   return (
-    <>
-      <PageBar title="Live map">
-        <Link href="/verify" className={primaryButton}>
-          Verify hazards
-        </Link>
-      </PageBar>
-      <div className="flex flex-1 flex-col gap-4 p-4 lg:min-h-0 lg:px-6 lg:py-5">
-        <p className="text-ink-2">Hazards reported by StepSafe walkers within 3 miles of FIU Graham Center. Updates arrive live.</p>
-        <section aria-label="Summary" className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          <Metric
-            icon="hazard"
-            tint="#ff7900"
-            label="Active hazards"
-            value={show(list.length)}
-            note={loaded ? `${sampleCount} sample · ${list.length - sampleCount} real · 3 miles` : "Within 3 miles"}
-          />
-          <Metric
-            icon="clock"
-            tint="var(--accent)"
-            label="Last hour"
-            value={show(lastHour.length)}
-            note={loaded ? `Reported or seen again · ${samples(lastHour)} sample` : "Reported or seen again"}
-          />
-          <Metric
-            icon="eye"
-            tint="var(--accent)"
-            label="Awaiting check"
-            value={show(awaiting.length)}
-            note={loaded ? `Not yet verified here · ${samples(awaiting)} sample` : "Not yet verified from this device"}
-          />
-          <Metric icon="check" tint="var(--ink-3)" label="Cleared today" value={show(clearedToday)} note="Seen clearing live on this page" />
-          <LiveMetric connection={connection} lastEventAt={lastEventAt} />
-        </section>
-
-        <div className="flex flex-col gap-4 lg:min-h-0 lg:flex-1 lg:flex-row">
-          <section aria-labelledby="map-heading" className="panel flex flex-col overflow-hidden lg:min-h-0 lg:flex-1">
-            <PanelHead
-              title={<span id="map-heading">Map</span>}
-              sub="FIU Graham Center · pin size shows community confidence"
-              action={
-                <label className="flex cursor-pointer items-center gap-2 text-[13px] font-medium text-ink">
-                  <input type="checkbox" checked={showOsm} onChange={(e) => setShowOsm(e.target.checked)} className="h-4 w-4 accent-[var(--accent)]" />
-                  OpenStreetMap layer
-                </label>
-              }
-            />
-            <div className="relative h-[58vh] min-h-80 lg:h-auto lg:flex-1">
-              <Map
-                hazards={list}
-                center={GRAHAM_CENTER}
-                zoom={17}
-                selectedId={selectedId}
-                highlightId={recentlyAdded}
-                onSelect={select}
-                showOsm={showOsm}
-                label="Map of reported hazards around FIU Graham Center"
-              />
-              <div className="float absolute bottom-3 left-3 z-[1000] hidden max-w-sm px-3.5 py-3 lg:block">
-                <Legend />
-                {showOsm && <OsmLayerNotice className="mt-2 border-t border-line pt-2 text-[12px] text-ink-3" />}
-              </div>
-              {connection === "down" && !loaded && (
-                <div className="absolute inset-0 z-[1100] flex items-center justify-center bg-page/85 p-4">
-                  <div className="max-w-md rounded-lg bg-card shadow-[var(--float-shadow)]">
-                    <Notice tone="warn" title="Can’t reach the StepSafe server">
-                      <p>
-                        Tried <code className="break-all text-ink">{API_URL}</code>. {error && `(${error}) `}Retrying every 5 seconds; the map fills in
-                        as soon as it answers.
-                      </p>
-                    </Notice>
-                  </div>
-                </div>
-              )}
+    <div ref={stageRef} className="relative flex min-h-0 flex-1">
+      <div className="map-stage relative min-h-0 min-w-0 flex-1" style={{ ["--sheet" as string]: `${sheet}px` }}>
+        <Map
+          hazards={list}
+          center={GRAHAM_CENTER}
+          zoom={17}
+          selectedId={selectedId}
+          highlightId={recentlyAdded}
+          onSelect={select}
+          showOsm={showOsm}
+          label="Map of reported hazards around FIU Graham Center"
+        />
+        {connection === "down" && !loaded && (
+          <div className="absolute inset-0 z-[1100] flex items-center justify-center bg-page/85 p-4">
+            <div className="max-w-md rounded-xl bg-card shadow-[var(--float-shadow)]">
+              <Notice tone="warn" title="Can’t reach the StepSafe server">
+                <p>
+                  Tried <code className="break-all text-ink">{API_URL}</code>. {error && `(${error}) `}Retrying every 5 seconds; the map fills in as soon
+                  as it answers.
+                </p>
+              </Notice>
             </div>
-          </section>
+          </div>
+        )}
+      </div>
 
-          <aside aria-label="Hazard feed and details" className="panel flex flex-col overflow-hidden lg:min-h-0 lg:w-[400px] lg:shrink-0">
-            <p className="sr-only" aria-live="polite">
-              {newest ? `New hazard reported: ${newest.sample ? "sample, " : ""}${newest.label || typeDisplayName(newest.type, taxonomy)}` : ""}
-            </p>
+      <aside
+        ref={panelRef}
+        className="qs-panel"
+        style={{ ["--panel-h" as string]: `${panelPx}px` }}
+        aria-label={showPeek ? "Live status" : detailOpen ? "Hazard details" : "Nearby hazards"}
+      >
+        <h1 className="sr-only">Live map</h1>
+        <button
+          type="button"
+          className="flex h-11 w-full shrink-0 items-center justify-center md:hidden"
+          role="slider"
+          aria-valuemin={0}
+          aria-valuemax={2}
+          aria-valuenow={DETENTS.indexOf(detent)}
+          aria-valuetext={detent}
+          aria-label="Hazard list size"
+          onPointerDown={onGrabDown}
+          onPointerMove={onGrabMove}
+          onPointerUp={onGrabUp}
+          onPointerCancel={onGrabUp}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowUp") setDetent(DETENTS[Math.min(2, DETENTS.indexOf(detent) + 1)]);
+            if (e.key === "ArrowDown") setDetent(DETENTS[Math.max(0, DETENTS.indexOf(detent) - 1)]);
+          }}
+        >
+          <span className="block h-[5px] w-9 rounded-full bg-[var(--border-strong)]" />
+        </button>
 
-            {(connection === "reconnecting" || (connection === "down" && loaded)) && (
-              <div className="border-b border-line p-3">
-                {connection === "down" ? (
-                  <Notice tone="warn" title="Lost contact with the server">
-                    Showing the last hazards received. Reconnecting automatically.
-                  </Notice>
-                ) : (
-                  <Notice tone="info" title="Live updates paused">
-                    The event stream dropped. Reconnecting; the list resyncs when it comes back.
-                  </Notice>
-                )}
-              </div>
-            )}
+        <p className="sr-only" aria-live="polite">
+          {newest ? `New hazard reported: ${newest.sample ? "sample, " : ""}${newest.label || typeDisplayName(newest.type, taxonomy)}` : ""}
+        </p>
 
-            {selectedId ? (
-              <section aria-labelledby="panel-heading" className="flex flex-col lg:min-h-0 lg:flex-1">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-3 py-2">
-                  <button type="button" className={secondaryButton} onClick={closePanel}>
-                    ← All hazards
-                  </button>
-                  <Link href={`/hazard/${encodeURIComponent(selectedId)}`} className={`${linkClass} px-1 text-[13px]`}>
+        <div className="flex min-h-0 flex-1 flex-col">
+          {showPeek ? (
+            <div>
+              <LiveKicker connection={connection} count={loaded ? list.length : 0} />
+              <button type="button" className={`${primaryButton} mt-3.5 w-full`} onClick={() => setDetent("medium")}>
+                Open list
+              </button>
+            </div>
+          ) : detailOpen ? (
+            <div className="flex min-h-0 flex-1 flex-col">
+              <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 pb-2">
+                <button type="button" className={secondaryButton} onClick={closePanel}>
+                  All hazards
+                </button>
+                {selectedId && (
+                  <Link href={`/hazard/${encodeURIComponent(selectedId)}`} className={`${linkClass} inline-flex min-h-11 items-center px-1 text-[13px]`}>
                     Open full page
                   </Link>
+                )}
+              </div>
+              <h2 id="panel-heading" ref={panelHeading} tabIndex={-1} className="sr-only">
+                Hazard details
+              </h2>
+              <div className="scroll-quiet min-h-0 flex-1 overflow-y-auto pb-3">
+                {(connection === "reconnecting" || (connection === "down" && loaded)) && (
+                  <div className="mb-3">
+                    {connection === "down" ? (
+                      <Notice tone="warn" title="Lost contact with the server">
+                        Showing the last hazards received. Reconnecting automatically.
+                      </Notice>
+                    ) : (
+                      <Notice tone="info" title="Live updates paused">
+                        The event stream dropped. Reconnecting; the list resyncs when it comes back.
+                      </Notice>
+                    )}
+                  </div>
+                )}
+                {loaded && !selected && (
+                  <Notice tone="info" title="This hazard was cleared or removed">
+                    It is no longer on the live map.
+                  </Notice>
+                )}
+                {detailLoading && (
+                  <p role="status" className="text-ink-3">
+                    Loading hazard details…
+                  </p>
+                )}
+                {detailError && <Notice tone="warn" title="Couldn’t load this hazard">{detailError}</Notice>}
+                {detail && <HazardDetail hazard={detail} taxonomy={taxonomy} />}
+                <div className="mt-4">
+                  <Link href="/verify" className={`${primaryButton} w-full`}>
+                    Verify
+                  </Link>
                 </div>
-                <h2 id="panel-heading" ref={panelHeading} tabIndex={-1} className="sr-only">
-                  Hazard details
-                </h2>
-                <div className="scroll-quiet flex flex-col gap-3 p-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
-                  {loaded && !selected && (
-                    <Notice tone="info" title="This hazard was cleared or removed">
-                      It is no longer on the live map.
+              </div>
+            </div>
+          ) : (
+            <div className="flex min-h-0 flex-1 flex-col">
+              <div className="shrink-0">
+                <LiveKicker connection={connection} count={loaded ? list.length : 0} />
+                {lastEventAt && connection === "live" && (
+                  <p className="sr-only">Updated {relativeTime(new Date(lastEventAt).toISOString(), now)}</p>
+                )}
+              </div>
+              <div className="mt-3 flex shrink-0 flex-wrap gap-2" role="group" aria-label="Filter hazards">
+                {FILTERS.map((f) => {
+                  const on = filters.includes(f.id);
+                  return (
+                    <button
+                      key={f.id}
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() => toggleFilter(f.id)}
+                      className={`inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3.5 text-[14px] font-medium ${
+                        on ? "border-[var(--signal)] bg-accent-tint text-accent" : "border-[var(--border-strong)] bg-transparent text-ink"
+                      }`}
+                    >
+                      {f.label}
+                      {on && <span aria-hidden="true">×</span>}
+                    </button>
+                  );
+                })}
+              </div>
+              {(connection === "reconnecting" || (connection === "down" && loaded)) && (
+                <div className="mt-3 shrink-0">
+                  {connection === "down" ? (
+                    <Notice tone="warn" title="Lost contact with the server">
+                      Showing the last hazards received. Reconnecting automatically.
+                    </Notice>
+                  ) : (
+                    <Notice tone="info" title="Live updates paused">
+                      The event stream dropped. Reconnecting; the list resyncs when it comes back.
                     </Notice>
                   )}
-                  {detailLoading && <p role="status" className="text-ink-3">Loading hazard details…</p>}
-                  {detailError && <Notice tone="warn" title="Couldn’t load this hazard">{detailError}</Notice>}
-                  {detail && <HazardDetail hazard={detail} taxonomy={taxonomy} />}
                 </div>
-              </section>
-            ) : (
-              <section aria-labelledby="list-heading" className="flex flex-col lg:min-h-0 lg:flex-1">
-                <PanelHead id="list-heading" title="Active hazards" count={loaded ? list.length : null} sub="Most recently seen first. Select one for details." />
-                <details className="border-b border-line px-4 py-2.5 lg:hidden">
-                  <summary className="cursor-pointer text-[13px] font-medium text-ink">Map legend</summary>
-                  <div className="mt-3">
-                    <Legend />
-                    <OsmLayerNotice className="mt-2 text-[12px] text-ink-3" />
+              )}
+              <h2 id="list-heading" className="sr-only">
+                Active hazards
+              </h2>
+              <div className="scroll-quiet mt-1 min-h-0 flex-1 overflow-y-auto">
+                {!loaded && connection !== "down" && (
+                  <p role="status" className="py-3 text-ink-3">
+                    Loading hazards…
+                  </p>
+                )}
+                {!loaded && connection === "down" && <p className="py-3 text-ink-3">Waiting for the server…</p>}
+                {loaded && rows.length === 0 && !filters.includes("cleared") && (
+                  <div className="py-3">
+                    <Notice tone="info" title={list.length === 0 ? "No active hazards yet" : "Nothing matches these filters"}>
+                      {list.length === 0
+                        ? "Nothing has been reported within 3 miles of the Graham Center. New reports appear here live, no refresh needed."
+                        : "Turn a filter off to see the other hazards."}
+                    </Notice>
                   </div>
-                </details>
-
-                <div className="scroll-quiet lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
-                  {!loaded && connection !== "down" && (
-                    <p role="status" className="p-4 text-ink-3">
-                      Loading hazards…
-                    </p>
-                  )}
-                  {!loaded && connection === "down" && <p className="p-4 text-ink-3">Waiting for the server…</p>}
-                  {loaded && list.length === 0 && (
-                    <div className="p-3">
-                      <Notice tone="info" title="No active hazards yet">
-                        Nothing has been reported within 3 miles of the Graham Center. New reports appear here live, no refresh needed.
-                      </Notice>
-                    </div>
-                  )}
-                  <ul className="divide-y divide-line">
-                    {list.map((h) => {
-                      const isNew = h.id === recentlyAdded;
-                      return (
-                        <li key={h.id}>
-                          <button
-                            type="button"
-                            data-hazard-id={h.id}
-                            onClick={() => select(h.id)}
-                            className={`flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-hover focus-visible:outline-offset-[-2px] ${isNew ? "bg-accent-tint" : ""}`}
-                          >
-                            <PinTile hazard={h} />
-                            <span className="min-w-0 flex-1">
-                              <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 font-medium leading-snug text-ink">
-                                {h.label || typeDisplayName(h.type, taxonomy)} {h.sample && <SampleBadge />}
-                                {isNew && <span className="rounded bg-accent px-1.5 text-[11px] font-semibold leading-[18px] text-card">New</span>}
-                              </span>
-                              <span className="block truncate text-[12px] text-ink-3">
-                                {CATEGORY_META[h.category].label} · {HEIGHT_META[h.heightBand].label} · seen {relativeTime(h.lastSeen, now)}
-                              </span>
-                            </span>
-                            <span className="flex w-10 shrink-0 flex-col items-end gap-1" aria-label={`confidence ${h.confidence.toFixed(1)}`}>
-                              <span className="text-[13px] font-semibold leading-none tabular-nums text-ink">{h.confidence.toFixed(1)}</span>
-                              <span className="h-1 w-full overflow-hidden rounded-full bg-line" aria-hidden="true">
-                                <span
-                                  className="block h-full rounded-full bg-accent"
-                                  style={{ width: `${Math.max(6, Math.min(100, ((h.confidence + 2) / 7) * 100))}%` }}
-                                />
-                              </span>
-                            </span>
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              </section>
-            )}
-          </aside>
+                )}
+                {filters.includes("cleared") && (
+                  <p className="py-2 text-[13px] text-ink-3">{clearedToday} cleared today on this page.</p>
+                )}
+                <ul>
+                  {rows.map((h) => (
+                    <HazardRow
+                      key={h.id}
+                      hazard={h}
+                      selected={h.id === selectedId}
+                      isNew={h.id === recentlyAdded}
+                      now={now}
+                      taxonomy={taxonomy}
+                      onSelect={select}
+                    />
+                  ))}
+                </ul>
+              </div>
+              <LegendBlock
+                open={desktop || legendOpen}
+                toggle={!desktop}
+                onToggle={() => setLegendOpen((v) => !v)}
+                showOsm={showOsm}
+                onOsm={setShowOsm}
+              />
+            </div>
+          )}
+          {detailOpen && (
+            <LegendBlock open={legendOpen} toggle onToggle={() => setLegendOpen((v) => !v)} showOsm={showOsm} onOsm={setShowOsm} />
+          )}
         </div>
-      </div>
-    </>
+      </aside>
+    </div>
+  );
+}
+
+function HazardRow({
+  hazard: h,
+  selected,
+  isNew,
+  now,
+  taxonomy,
+  onSelect,
+}: {
+  hazard: HazardSummary;
+  selected: boolean;
+  isNew: boolean;
+  now: number;
+  taxonomy: ReturnType<typeof useTaxonomy>["taxonomy"];
+  onSelect: (id: string) => void;
+}) {
+  const name = h.label || typeDisplayName(h.type, taxonomy);
+  return (
+    <li>
+      <button
+        type="button"
+        data-hazard-id={h.id}
+        onClick={() => onSelect(h.id)}
+        aria-current={selected ? "true" : undefined}
+        className={`flex min-h-[60px] w-full items-center gap-3 border-t border-line py-2 text-left ${selected ? "-mx-2 w-[calc(100%+16px)] rounded-xl bg-raised px-2" : ""}`}
+      >
+        <TypeIcon type={h.type} category={h.category} selected={selected} />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[15px] font-medium tracking-[-0.02em] text-ink">
+            {name} {h.sample && <SampleBadge />}
+            {isNew && <span className="ml-1.5 rounded-full bg-accent-tint px-1.5 text-[11px] font-semibold text-accent">New</span>}
+          </span>
+          <span className="mt-0.5 block truncate text-[12px] text-ink-3">
+            {CATEGORY_META[h.category].label} · {HEIGHT_META[h.heightBand].label} · {milesBetween(h.lat, h.lng)} · {relativeTime(h.lastSeen, now)}
+          </span>
+        </span>
+        <span className="w-16 shrink-0 text-right">
+          <span className="block text-[15px] font-semibold tabular-nums tracking-[-0.02em]">{h.confidence.toFixed(1)}</span>
+          <span className="block text-[11px] text-ink-3">confidence</span>
+        </span>
+      </button>
+    </li>
+  );
+}
+
+function LegendBlock({
+  open,
+  toggle,
+  onToggle,
+  showOsm,
+  onOsm,
+}: {
+  open: boolean;
+  toggle: boolean;
+  onToggle: () => void;
+  showOsm: boolean;
+  onOsm: (next: boolean) => void;
+}) {
+  return (
+    <div className="shrink-0 border-t border-line">
+      {toggle && (
+        <button type="button" className="flex min-h-11 w-full items-center justify-between gap-3 text-left text-[14px] font-medium" aria-expanded={open} onClick={onToggle}>
+          <span>Legend</span>
+          <span className="text-[12px] font-normal text-ink-3">{open ? "Hide" : "Height and category"}</span>
+        </button>
+      )}
+      {open && (
+        <div className="pb-2">
+          {!toggle && <div className="pt-3" />}
+          <Legend osm={showOsm} onOsm={onOsm} />
+          {showOsm && (
+            <p className="mt-2 text-[12px] text-ink-3">
+              OpenStreetMap layer: crossings (white), curbs (grey), tactile paving (yellow). Data © OpenStreetMap contributors,{" "}
+              <a href="https://opendatacommons.org/licenses/odbl/1-0/" className="underline">
+                ODbL
+              </a>
+              .
+            </p>
+          )}
+          <div className="md:hidden">
+            <ThemeToggle />
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

@@ -7,7 +7,8 @@ import L from "leaflet";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { AttributionControl, CircleMarker, MapContainer, Marker, Polyline, TileLayer, Tooltip, ZoomControl, useMap } from "react-leaflet";
 import type { HazardSummary } from "@/lib/api";
-import { hazardAccessibleName, markerSize, markerSvg } from "@/lib/marker";
+import { clusterByPixel } from "@/lib/cluster";
+import { hazardAccessibleName, markerHtml, markerSize } from "@/lib/marker";
 import { sameHazardMarker, type HazardMarkerProps } from "@/lib/pin-equal";
 
 export type MapProps = {
@@ -36,11 +37,21 @@ type OsmFeature = {
 function hazardIcon(h: HazardSummary, selected: boolean, highlighted: boolean) {
   const size = markerSize(h.confidence) + (selected ? 8 : 0);
   const html =
-    `<div class="ss-pin${selected ? " ss-pin--selected" : ""}${highlighted ? " ss-pin--new" : ""}">` +
-    markerSvg(h, size, selected, true) +
+    `<span class="ss-pin-hit${highlighted ? " ss-pin--new" : ""}">` +
+    markerHtml(h, size, selected) +
     (h.sample ? ` <span class="ss-pin__sample">Sample</span>` : "") +
-    `</div>`;
+    `</span>`;
   return L.divIcon({ html, className: "ss-pin-wrap", iconSize: [size, size], iconAnchor: [size / 2, size / 2] });
+}
+
+function clusterIcon(count: number) {
+  const size = 44;
+  return L.divIcon({
+    html: `<span class="ss-cluster" style="width:${size}px;height:${size}px">${count}</span>`,
+    className: "ss-pin-wrap",
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+  });
 }
 
 function Recenter({ center, zoom }: { center: [number, number]; zoom?: number }) {
@@ -65,6 +76,14 @@ function PanToSelected({ hazards, selectedId }: { hazards: HazardSummary[]; sele
   return null;
 }
 
+function BindMap({ onMap }: { onMap: (map: L.Map) => void }) {
+  const map = useMap();
+  useEffect(() => {
+    onMap(map);
+  }, [map, onMap]);
+  return null;
+}
+
 let osmCache: Promise<OsmFeature[]> | null = null;
 const loadOsm = () =>
   (osmCache ??= fetch("/osm-graham.json")
@@ -81,7 +100,6 @@ const OSM_STYLE: Record<OsmFeature["kind"], { color: string; fill: string }> = {
   tactile: { color: "#111", fill: "#f5c400" },
 };
 
-// No props: a live hazard tick must not reconcile all 891 OSM features.
 const OsmLayer = memo(function OsmLayer() {
   const [features, setFeatures] = useState<OsmFeature[]>([]);
   useEffect(() => {
@@ -128,8 +146,6 @@ const HazardMarker = memo(function HazardMarker({
   const name = hazardAccessibleName(h);
   const icon = useMemo(() => hazardIcon(h, selected, highlighted), [h, selected, highlighted]);
 
-  // react-leaflet never updates `title` after creation, so keep the accessible name current
-  // ourselves (options.title too, because Leaflet re-applies it whenever the icon is swapped).
   useEffect(() => {
     const marker = ref.current;
     if (!marker) return;
@@ -137,8 +153,6 @@ const HazardMarker = memo(function HazardMarker({
     const el = marker.getElement();
     el?.setAttribute("title", name);
     el?.setAttribute("aria-label", name);
-    // Compact maps are not buttons (Leaflet only sets role=button when keyboard is on).
-    // A role is what makes aria-label reach screen readers on a plain div.
     if (compact) el?.setAttribute("role", "img");
   }, [name, icon, compact]);
 
@@ -162,6 +176,127 @@ const HazardMarker = memo(function HazardMarker({
   );
 }, sameHazardMarker);
 
+function ClusteredHazards({
+  hazards,
+  selectedId,
+  highlightId,
+  onSelect,
+}: {
+  hazards: HazardSummary[];
+  selectedId?: string | null;
+  highlightId?: string | null;
+  onSelect?: (id: string) => void;
+}) {
+  const map = useMap();
+  const [view, setView] = useState(0);
+  useEffect(() => {
+    const bump = () => setView((n) => n + 1);
+    map.on("zoomend moveend", bump);
+    return () => {
+      map.off("zoomend moveend", bump);
+    };
+  }, [map]);
+
+  const groups = useMemo(() => {
+    const points = hazards.map((h) => {
+      const p = map.latLngToContainerPoint([h.lat, h.lng]);
+      return { item: h, x: p.x, y: p.y };
+    });
+    const clustered = clusterByPixel(points, 36);
+    // Keep the selected pin visible even when it overlaps neighbors.
+    const split: { hazards: HazardSummary[]; x: number; y: number }[] = [];
+    for (const group of clustered) {
+      const selected = group.items.find((h) => h.id === selectedId);
+      const rest = group.items.filter((h) => h.id !== selectedId);
+      if (selected && rest.length) {
+        const p = map.latLngToContainerPoint([selected.lat, selected.lng]);
+        split.push({ hazards: [selected], x: p.x, y: p.y });
+        split.push({ hazards: rest, x: group.x, y: group.y });
+      } else {
+        split.push({ hazards: group.items, x: group.x, y: group.y });
+      }
+    }
+    return split;
+    // view is the camera generation; map methods read the latest projection.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hazards, map, selectedId, view]);
+
+  return (
+    <>
+      {groups.map((group) => {
+        if (group.hazards.length === 1) {
+          const h = group.hazards[0];
+          return (
+            <HazardMarker
+              key={h.id}
+              hazard={h}
+              selected={h.id === selectedId}
+              highlighted={h.id === highlightId}
+              onSelect={onSelect}
+            />
+          );
+        }
+        const ll = map.containerPointToLatLng([group.x, group.y]);
+        const name = `${group.hazards.length} overlapping hazards`;
+        return (
+          <Marker
+            key={group.hazards.map((h) => h.id).join("-")}
+            position={[ll.lat, ll.lng]}
+            icon={clusterIcon(group.hazards.length)}
+            title={name}
+            zIndexOffset={500}
+            eventHandlers={{
+              click: () => {
+                const bounds = L.latLngBounds(group.hazards.map((h) => [h.lat, h.lng]));
+                map.fitBounds(bounds, { padding: [48, 48], maxZoom: map.getZoom() + 2 });
+              },
+            }}
+          />
+        );
+      })}
+    </>
+  );
+}
+
+function LocateButton({ map }: { map: L.Map | null }) {
+  const [note, setNote] = useState("");
+  return (
+    <>
+      <button
+        type="button"
+        className="map-locate"
+        aria-label="Current location"
+        onClick={() => {
+          if (!map) return;
+          setNote("");
+          map.locate({ setView: true, maxZoom: 17 });
+        }}
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="3.25" />
+          <path d="M12 3.5v2.2M12 18.3v2.2M3.5 12h2.2M18.3 12h2.2" />
+        </svg>
+      </button>
+      <p className="sr-only" aria-live="polite">
+        {note}
+      </p>
+      <MapLocateNote map={map} onNote={setNote} />
+    </>
+  );
+}
+
+function MapLocateNote({ map, onNote }: { map: L.Map | null; onNote: (note: string) => void }) {
+  useEffect(() => {
+    if (!map) return;
+    const fail = () => onNote("Current location is unavailable.");
+    map.on("locationerror", fail);
+    return () => {
+      map.off("locationerror", fail);
+    };
+  }, [map, onNote]);
+  return null;
+}
+
 export default function LeafletMap({
   hazards,
   center,
@@ -173,8 +308,9 @@ export default function LeafletMap({
   compact,
   label,
 }: MapProps) {
+  const [map, setMap] = useState<L.Map | null>(null);
   return (
-    <div role="region" aria-label={label} className="h-full w-full">
+    <div role="region" aria-label={label} className="relative h-full w-full">
       <MapContainer
         center={center}
         zoom={zoom}
@@ -187,26 +323,25 @@ export default function LeafletMap({
         doubleClickZoom={!compact}
         keyboard={!compact}
       >
+        <BindMap onMap={setMap} />
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
           maxZoom={19}
         />
-        <AttributionControl position="bottomright" />
+        <AttributionControl position="bottomleft" />
         {!compact && <ZoomControl position="bottomright" />}
         {compact ? <Recenter center={center} zoom={zoom} /> : <PanToSelected hazards={hazards} selectedId={selectedId} />}
         {showOsm && <OsmLayer />}
-        {hazards.map((h) => (
-          <HazardMarker
-            key={h.id}
-            hazard={h}
-            selected={h.id === selectedId}
-            highlighted={h.id === highlightId}
-            compact={compact}
-            onSelect={onSelect}
-          />
-        ))}
+        {compact
+          ? hazards.map((h) => (
+              <HazardMarker key={h.id} hazard={h} selected={h.id === selectedId} highlighted={h.id === highlightId} compact onSelect={onSelect} />
+            ))
+          : (
+              <ClusteredHazards hazards={hazards} selectedId={selectedId} highlightId={highlightId} onSelect={onSelect} />
+            )}
       </MapContainer>
+      {!compact && <LocateButton map={map} />}
     </div>
   );
 }

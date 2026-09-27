@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 import { useIdentity } from "@/lib/hooks";
 
 const THEME_KEY = "stepsafe.theme";
@@ -25,37 +25,18 @@ export function Icon({ name, size = 16 }: { name: keyof typeof ICON; size?: numb
 
 const NAV = [
   { href: "/", label: "Live map", icon: "map" },
-  { href: "/verify", label: "Verify queue", icon: "check" },
+  { href: "/verify", label: "Verify", icon: "check" },
 ] as const;
 
-// The theme lives on <html data-theme>, set before paint by the boot script in app/layout.tsx.
 const subscribeTheme = (cb: () => void) => {
   const obs = new MutationObserver(cb);
   obs.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
   return () => obs.disconnect();
 };
-const readTheme = () => (document.documentElement.dataset.theme === "dark" ? "dark" : "light");
+const readTheme = () => (document.documentElement.dataset.theme === "light" ? "light" : "dark");
 
-function storedTheme() {
-  try {
-    return localStorage.getItem(THEME_KEY);
-  } catch {
-    return null;
-  }
-}
-
-function ThemeToggle() {
-  const theme = useSyncExternalStore(subscribeTheme, readTheme, () => null);
-
-  // With no saved choice, keep following the OS if it flips while the page is open.
-  useEffect(() => {
-    const mq = matchMedia("(prefers-color-scheme: dark)");
-    const follow = () => {
-      if (!storedTheme()) document.documentElement.dataset.theme = mq.matches ? "dark" : "light";
-    };
-    mq.addEventListener("change", follow);
-    return () => mq.removeEventListener("change", follow);
-  }, []);
+export function ThemeToggle({ className = "" }: { className?: string }) {
+  const theme = useSyncExternalStore(subscribeTheme, readTheme, () => "dark");
 
   const toggle = () => {
     const next = theme === "dark" ? "light" : "dark";
@@ -72,10 +53,10 @@ function ThemeToggle() {
       type="button"
       onClick={toggle}
       aria-pressed={theme === "dark"}
-      className="inline-flex h-8 items-center gap-2 rounded-md px-2 text-[13px] font-medium text-ink-2 hover:bg-hover hover:text-ink"
+      className={`inline-flex min-h-11 items-center gap-2 rounded-full px-3 text-[13px] font-medium text-ink-2 hover:bg-hover hover:text-ink ${className}`}
     >
       <Icon name={theme === "dark" ? "moon" : "sun"} />
-      <span className="sr-only lg:not-sr-only">Dark theme</span>
+      {theme === "dark" ? "Dark theme" : "Light theme"}
     </button>
   );
 }
@@ -83,7 +64,7 @@ function ThemeToggle() {
 function Profile({ user, status, deviceId }: ReturnType<typeof useIdentity>) {
   const initial = user?.displayName?.[0]?.toUpperCase() ?? "?";
   return (
-    <div className="flex min-w-0 items-center gap-2.5 rounded-md px-2 py-1.5 lg:mt-1" title={deviceId ?? undefined}>
+    <div className="flex min-w-0 items-center gap-2.5" title={deviceId ?? undefined}>
       <span
         aria-hidden="true"
         className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-tint text-[12px] font-semibold text-accent"
@@ -91,17 +72,20 @@ function Profile({ user, status, deviceId }: ReturnType<typeof useIdentity>) {
         {status === "ok" && user ? initial : "?"}
       </span>
       <p className="min-w-0 text-[13px] leading-tight">
-        {status === "loading" && <span className="text-ink-3">Loading your profile…</span>}
+        {status === "loading" && <span className="text-ink-3">Loading profile…</span>}
         {status === "ok" && user && (
           <>
-            <span className="block truncate font-medium text-ink">{user.displayName}</span>
-            <span className="block whitespace-nowrap text-[12px] tabular-nums text-ink-3">{user.karma} karma · verifier</span>
+            <span className="block truncate font-medium text-ink md:hidden">
+              {user.displayName} · {user.karma}
+            </span>
+            <span className="hidden truncate font-medium text-ink md:block">{user.displayName}</span>
+            <span className="hidden text-[12px] tabular-nums text-ink-3 md:block">{user.karma} karma</span>
           </>
         )}
         {status === "unavailable" && (
           <>
-            <span className="block whitespace-nowrap font-medium text-ink">Anonymous verifier</span>
-            <span className="block whitespace-nowrap text-[12px] text-ink-3">(profile unavailable)</span>
+            <span className="block truncate font-medium text-ink">Anonymous</span>
+            <span className="hidden text-[12px] text-ink-3 md:block">Profile unavailable</span>
           </>
         )}
       </p>
@@ -111,37 +95,36 @@ function Profile({ user, status, deviceId }: ReturnType<typeof useIdentity>) {
 
 export default function Header() {
   const pathname = usePathname();
-  const identity = useIdentity(); // once: each call polls the server
+  const identity = useIdentity();
 
   return (
-    <header className="relative z-[1200] flex shrink-0 flex-col border-b border-line bg-sunken lg:w-60 lg:border-b-0 lg:border-r">
-      <div className="flex items-center gap-2.5 px-4 py-2.5 lg:px-3 lg:pb-2 lg:pt-3">
-        <Link href="/" className="flex shrink-0 items-center gap-2.5 rounded-md">
+    <header className="relative z-[1200] flex shrink-0 flex-col border-b border-line bg-[var(--header)] md:w-[248px] md:border-b-0 md:border-r">
+      <div className="flex min-h-12 items-center gap-2.5 px-4 md:px-5 md:pb-2 md:pt-4">
+        <Link href="/" className="flex min-h-11 shrink-0 items-center gap-2.5 rounded-md">
           <Image src="/logo-light.png" width={28} height={28} alt="" priority className="logo-light rounded-md" />
           <Image src="/logo-dark.png" width={28} height={28} alt="" priority className="logo-dark rounded-md" />
           <span className="min-w-0 leading-tight">
-            <span className="block text-[15px] font-semibold text-heading">StepSafe</span>
-            <span className="hidden truncate text-[12px] text-ink-3 sm:block">Community hazard map</span>
+            <span className="block text-[16px] font-semibold tracking-[-0.03em] text-heading">StepSafe</span>
+            <span className="hidden text-[12px] text-ink-3 md:block">Community hazard map</span>
           </span>
         </Link>
-        <div className="ml-auto flex items-center gap-1 lg:hidden">
+        <div className="ml-auto md:hidden">
           <Profile {...identity} />
-          <ThemeToggle />
         </div>
       </div>
 
-      <nav aria-label="Main" className="px-2 lg:mt-2 lg:flex-1">
-        <ul className="flex gap-1 lg:flex-col lg:gap-0.5">
+      <nav aria-label="Main" className="px-2 md:mt-2 md:flex-1">
+        <ul className="flex gap-1 md:flex-col md:gap-1">
           {NAV.map((item) => {
             const current = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
             return (
-              <li key={item.href} className="flex-1 lg:flex-none">
+              <li key={item.href} className="flex-1 md:flex-none">
                 <Link
                   href={item.href}
                   aria-current={current ? "page" : undefined}
-                  className={`flex h-9 items-center justify-center gap-2.5 border-b-2 px-2.5 text-[14px] font-medium lg:h-8 lg:justify-start lg:rounded-md lg:border-b-0 ${
+                  className={`flex min-h-11 items-center justify-center gap-2 rounded-none border-b-2 px-2.5 text-[14px] font-medium md:justify-start md:rounded-md md:border-b-0 md:px-3 ${
                     current
-                      ? "border-accent text-accent lg:bg-accent-tint lg:font-semibold lg:shadow-[inset_2px_0_0_var(--accent)]"
+                      ? "border-[var(--blue)] text-accent md:border-transparent md:bg-raised md:font-semibold md:shadow-[inset_2px_0_0_var(--blue)]"
                       : "border-transparent text-ink-2 hover:bg-hover hover:text-ink"
                   }`}
                 >
@@ -154,9 +137,11 @@ export default function Header() {
         </ul>
       </nav>
 
-      <div className="hidden border-t border-line p-2 lg:block">
-        <ThemeToggle />
-        <Profile {...identity} />
+      <div className="mt-auto hidden border-t border-line p-3 md:block">
+        <ThemeToggle className="w-full justify-start px-2" />
+        <div className="px-2 py-2">
+          <Profile {...identity} />
+        </div>
       </div>
     </header>
   );

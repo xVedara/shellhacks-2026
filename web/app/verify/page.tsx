@@ -29,7 +29,7 @@ import { useVotedIds } from "@/lib/use-voted";
 type Panel = null | "reclassify" | "report";
 
 const voteButton =
-  "flex flex-col items-center justify-center gap-0.5 rounded-md border px-1 py-2 text-[14px] font-medium leading-tight transition-colors disabled:cursor-not-allowed disabled:opacity-50 md:px-4 md:py-2.5";
+  "flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-full border px-2 py-2 text-[14px] font-medium leading-tight transition-colors disabled:cursor-not-allowed disabled:opacity-50 md:px-4";
 
 export default function VerifyPage() {
   const { hazards, connection, loaded, error, detailVersion } = useLiveHazards();
@@ -134,7 +134,7 @@ export default function VerifyPage() {
   const checked = all.filter((h) => voted.has(h.id)).length;
 
   return (
-    <>
+    <div className="min-h-0 flex-1 overflow-y-auto">
       <PageBar title="Verify queue">
         <label className="inline-flex cursor-pointer items-center gap-2 text-[13px] font-medium text-ink">
           <input
@@ -330,7 +330,7 @@ export default function VerifyPage() {
         </article>
       )}
     </div>
-    </>
+    </div>
   );
 }
 
@@ -409,7 +409,7 @@ function ReclassifyForm({
     }
   };
 
-  const field = "mt-1 block h-8 w-full rounded-md border border-field bg-card px-2 text-[13px] font-normal text-ink";
+  const field = "mt-1 block min-h-11 w-full rounded-xl border border-field bg-card px-3 text-[13px] font-normal text-ink";
   return (
     <form id="reclassify-panel" onSubmit={submit} className="space-y-3 rounded-lg border border-line bg-sunken p-4">
       <fieldset className="space-y-3" disabled={busy}>
