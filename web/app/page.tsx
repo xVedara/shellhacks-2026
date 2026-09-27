@@ -7,6 +7,7 @@ import { ThemeToggle } from "@/components/Header";
 import Map from "@/components/Map";
 import { Legend, LiveDot, Notice, SampleBadge, TypeIcon, linkClass, primaryButton, secondaryButton } from "@/components/ui";
 import { API_URL, CATEGORY_META, GRAHAM_CENTER, HEIGHT_META, relativeTime, typeDisplayName, type HazardSummary } from "@/lib/api";
+import { milesFromGraham } from "@/lib/geo";
 import { useLiveHazards, useNow, useTaxonomy, type Connection } from "@/lib/hooks";
 import { useVotedIds } from "@/lib/use-voted";
 
@@ -41,18 +42,6 @@ function panelHeight(detent: Detent, stage: number) {
   if (detent === "peek") return Math.round(Math.min(230, Math.max(188, stage * 0.24)));
   if (detent === "medium") return Math.round(Math.min(stage - 96, Math.max(280, stage * 0.52)));
   return Math.round(Math.min(stage - 48, Math.max(360, stage * 0.88)));
-}
-
-function milesBetween(lat: number, lng: number) {
-  const R = 6371000;
-  const toR = (d: number) => (d * Math.PI) / 180;
-  const dLat = toR(lat - GRAHAM_CENTER[0]);
-  const dLng = toR(lng - GRAHAM_CENTER[1]);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toR(GRAHAM_CENTER[0])) * Math.cos(toR(lat)) * Math.sin(dLng / 2) ** 2;
-  const meters = 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
-  return `${(meters / 1609.344).toFixed(1)} mi`;
 }
 
 function connectionWord(connection: Connection) {
@@ -97,7 +86,6 @@ export default function MapPage() {
     return () => window.removeEventListener("popstate", onChange);
   }, selectedFromLocation, () => null);
   const voted = useVotedIds();
-  const now = useNow(15_000);
   const stageRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLElement>(null);
   const panelHeading = useRef<HTMLHeadingElement>(null);
@@ -109,9 +97,6 @@ export default function MapPage() {
   const selected = selectedId ? hazards.get(selectedId) : undefined;
   const { detail, error: detailError, loading: detailLoading } = useHazardDetail(selectedId, detailVersion(selectedId));
   const newest = recentlyAdded ? hazards.get(recentlyAdded) : undefined;
-
-  const midnight = new Date(now).setHours(0, 0, 0, 0);
-  const clearedToday = [...cleared.values()].filter((t) => t >= midnight).length;
 
   const rows = useMemo(() => {
     if (filters.length === 0) return list;
@@ -340,96 +325,154 @@ export default function MapPage() {
               </div>
             </div>
           ) : (
-            <div className="flex min-h-0 flex-1 flex-col">
-              <div className="shrink-0">
-                <LiveKicker connection={connection} count={loaded ? list.length : 0} />
-                {lastEventAt && connection === "live" && (
-                  <p className="sr-only">Updated {relativeTime(new Date(lastEventAt).toISOString(), now)}</p>
-                )}
-              </div>
-              <div className="mt-3 flex shrink-0 flex-wrap gap-2" role="group" aria-label="Filter hazards">
-                {FILTERS.map((f) => {
-                  const on = filters.includes(f.id);
-                  return (
-                    <button
-                      key={f.id}
-                      type="button"
-                      aria-pressed={on}
-                      onClick={() => toggleFilter(f.id)}
-                      className={`filter-chip inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3.5 text-[14px] font-medium tracking-[-0.011em] ${
-                        on ? "border-[var(--signal)] bg-accent-tint text-accent shadow-[0_0_0_3px_var(--signal-soft)]" : "border-[var(--border-strong)] bg-transparent text-ink"
-                      }`}
-                    >
-                      {f.label}
-                      {on && <span aria-hidden="true">×</span>}
-                    </button>
-                  );
-                })}
-              </div>
-              {(connection === "reconnecting" || (connection === "down" && loaded)) && (
-                <div className="mt-3 shrink-0">
-                  {connection === "down" ? (
-                    <Notice tone="warn" title="Lost contact with the server">
-                      Showing the last hazards received. Reconnecting automatically.
-                    </Notice>
-                  ) : (
-                    <Notice tone="info" title="Live updates paused">
-                      The event stream dropped. Reconnecting; the list resyncs when it comes back.
-                    </Notice>
-                  )}
-                </div>
-              )}
-              <h2 id="list-heading" tabIndex={-1} className="sr-only">
-                Active hazards
-              </h2>
-              <div className="scroll-quiet mt-1 min-h-0 flex-1 overflow-y-auto">
-                {!loaded && connection !== "down" && (
-                  <p role="status" className="py-3 text-ink-3">
-                    Loading hazards…
-                  </p>
-                )}
-                {!loaded && connection === "down" && <p className="py-3 text-ink-3">Waiting for the server…</p>}
-                {loaded && rows.length === 0 && !filters.includes("cleared") && (
-                  <div className="py-3">
-                    <Notice tone="info" title={list.length === 0 ? "No active hazards yet" : "Nothing matches these filters"}>
-                      {list.length === 0
-                        ? "Nothing has been reported within 3 miles of the Graham Center. New reports appear here live, no refresh needed."
-                        : "Turn a filter off to see the other hazards."}
-                    </Notice>
-                  </div>
-                )}
-                {filters.includes("cleared") && (
-                  <p className="py-2 text-[13px] text-ink-3">{clearedToday} cleared today on this page.</p>
-                )}
-                <ul key={filters.join(",")}>
-                  {rows.map((h, index) => (
-                    <HazardRow
-                      key={h.id}
-                      index={index}
-                      hazard={h}
-                      selected={h.id === selectedId}
-                      isNew={h.id === recentlyAdded}
-                      now={now}
-                      taxonomy={taxonomy}
-                      onSelect={select}
-                    />
-                  ))}
-                </ul>
-              </div>
-              <LegendBlock
-                open={desktop || legendOpen}
-                toggle={!desktop}
-                onToggle={() => setLegendOpen((v) => !v)}
-                showOsm={showOsm}
-                onOsm={setShowOsm}
-              />
-            </div>
+            <LiveHazardList
+              connection={connection}
+              loaded={loaded}
+              total={list.length}
+              rows={rows}
+              lastEventAt={lastEventAt}
+              filters={filters}
+              onToggleFilter={toggleFilter}
+              selectedId={selectedId}
+              recentlyAdded={recentlyAdded}
+              taxonomy={taxonomy}
+              onSelect={select}
+              cleared={cleared}
+              desktop={desktop}
+              legendOpen={legendOpen}
+              onLegend={() => setLegendOpen((v) => !v)}
+              showOsm={showOsm}
+              onOsm={setShowOsm}
+            />
           )}
           {detailOpen && (
             <LegendBlock open={legendOpen} toggle onToggle={() => setLegendOpen((v) => !v)} showOsm={showOsm} onOsm={setShowOsm} />
           )}
         </div>
       </aside>
+    </div>
+  );
+}
+
+// The 15s clock stays under the list so a tick does not rebuild the map beside it.
+function LiveHazardList({
+  connection,
+  loaded,
+  total,
+  rows,
+  lastEventAt,
+  filters,
+  onToggleFilter,
+  selectedId,
+  recentlyAdded,
+  taxonomy,
+  onSelect,
+  cleared,
+  desktop,
+  legendOpen,
+  onLegend,
+  showOsm,
+  onOsm,
+}: {
+  connection: Connection;
+  loaded: boolean;
+  total: number;
+  rows: HazardSummary[];
+  lastEventAt: number | null;
+  filters: FilterId[];
+  onToggleFilter: (id: FilterId) => void;
+  selectedId: string | null;
+  recentlyAdded: string | null;
+  taxonomy: ReturnType<typeof useTaxonomy>["taxonomy"];
+  onSelect: (id: string) => void;
+  cleared: Map<string, number>;
+  desktop: boolean;
+  legendOpen: boolean;
+  onLegend: () => void;
+  showOsm: boolean;
+  onOsm: (next: boolean) => void;
+}) {
+  const now = useNow(15_000);
+  const midnight = new Date(now).setHours(0, 0, 0, 0);
+  const clearedToday = [...cleared.values()].filter((t) => t >= midnight).length;
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="shrink-0">
+        <LiveKicker connection={connection} count={loaded ? total : 0} />
+        {lastEventAt && connection === "live" && (
+          <p className="sr-only">Updated {relativeTime(new Date(lastEventAt).toISOString(), now)}</p>
+        )}
+      </div>
+      <div className="mt-3 flex shrink-0 flex-wrap gap-2" role="group" aria-label="Filter hazards">
+        {FILTERS.map((f) => {
+          const on = filters.includes(f.id);
+          return (
+            <button
+              key={f.id}
+              type="button"
+              aria-pressed={on}
+              onClick={() => onToggleFilter(f.id)}
+              className={`filter-chip inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3.5 text-[14px] font-medium tracking-[-0.011em] ${
+                on ? "border-[var(--signal)] bg-accent-tint text-accent shadow-[0_0_0_3px_var(--signal-soft)]" : "border-[var(--border-strong)] bg-transparent text-ink"
+              }`}
+            >
+              {f.label}
+              {on && <span aria-hidden="true">×</span>}
+            </button>
+          );
+        })}
+      </div>
+      {(connection === "reconnecting" || (connection === "down" && loaded)) && (
+        <div className="mt-3 shrink-0">
+          {connection === "down" ? (
+            <Notice tone="warn" title="Lost contact with the server">
+              Showing the last hazards received. Reconnecting automatically.
+            </Notice>
+          ) : (
+            <Notice tone="info" title="Live updates paused">
+              The event stream dropped. Reconnecting; the list resyncs when it comes back.
+            </Notice>
+          )}
+        </div>
+      )}
+      <h2 id="list-heading" tabIndex={-1} className="sr-only">
+        Active hazards
+      </h2>
+      <div className="scroll-quiet mt-1 min-h-0 flex-1 overflow-y-auto">
+        {!loaded && connection !== "down" && (
+          <p role="status" className="py-3 text-ink-3">
+            Loading hazards…
+          </p>
+        )}
+        {!loaded && connection === "down" && <p className="py-3 text-ink-3">Waiting for the server…</p>}
+        {loaded && rows.length === 0 && !filters.includes("cleared") && (
+          <div className="py-3">
+            <Notice tone="info" title={total === 0 ? "No active hazards yet" : "Nothing matches these filters"}>
+              {total === 0
+                ? "Nothing has been reported within 3 miles of the Graham Center. New reports appear here live, no refresh needed."
+                : "Turn a filter off to see the other hazards."}
+            </Notice>
+          </div>
+        )}
+        {filters.includes("cleared") && (
+          <p className="py-2 text-[13px] text-ink-3">{clearedToday} cleared today on this page.</p>
+        )}
+        <ul key={filters.join(",")}>
+          {rows.map((h, index) => (
+            <HazardRow
+              key={h.id}
+              index={index}
+              hazard={h}
+              selected={h.id === selectedId}
+              isNew={h.id === recentlyAdded}
+              now={now}
+              taxonomy={taxonomy}
+              onSelect={onSelect}
+            />
+          ))}
+        </ul>
+      </div>
+      <LegendBlock open={desktop || legendOpen} toggle={!desktop} onToggle={onLegend} showOsm={showOsm} onOsm={onOsm} />
     </div>
   );
 }
@@ -468,7 +511,7 @@ function HazardRow({
             {isNew && <span className="ml-1.5 rounded-full bg-accent-tint px-1.5 text-[11px] font-semibold text-accent">New</span>}
           </span>
           <span className="mt-0.5 block truncate text-[12px] text-ink-3">
-            {CATEGORY_META[h.category].label} · {HEIGHT_META[h.heightBand].label} · {milesBetween(h.lat, h.lng)} · {relativeTime(h.lastSeen, now)}
+            {CATEGORY_META[h.category].label} · {HEIGHT_META[h.heightBand].label} · {milesFromGraham(h.lat, h.lng)} · {relativeTime(h.lastSeen, now)}
           </span>
         </span>
         <span className="w-16 shrink-0 text-right">

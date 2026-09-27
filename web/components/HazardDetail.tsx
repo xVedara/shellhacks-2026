@@ -111,12 +111,16 @@ export default function HazardDetail({
   hazard,
   taxonomy,
   hideHeading = false,
+  now: nowFromParent,
 }: {
   hazard: Detail;
   taxonomy?: readonly HazardType[] | null;
   hideHeading?: boolean;
+  /** Parent clock. When set, this panel does not start a second interval. */
+  now?: number;
 }) {
-  const now = useNow(15_000);
+  const ticking = useNow(15_000, nowFromParent === undefined);
+  const now = nowFromParent ?? ticking;
   const m = hazard.measurements;
   return (
     <div className="space-y-4 text-ink">
