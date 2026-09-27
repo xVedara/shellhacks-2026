@@ -145,6 +145,13 @@ export async function renamePending(db: Db, namer: Namer, limit = 5, busy: () =>
     const set: Partial<HazardDoc> = { severity: n.severity, needsNaming: false, renameAttempts: attempts, renameAttemptAt: new Date() };
     if (!typeLocked && (!isTypeId(h.type) || h.type === OBSTACLE)) {
       const type = taxonomyEntry(n.type).id;
+      // A fallback "obstacle" that turns out to be a person or dog is never kept (the same rule as POST /hazards;
+      // a drop-off stays). Same filter as the rename below, so a reclassification that landed meanwhile wins.
+      if (NEVER_PINNED.has(type) && h.heightBand !== 'dropoff') {
+        const del = await hazards.deleteOne({ _id: h._id, type: h.type, needsNaming: true, lockedFields: h.lockedFields ?? { $exists: false } });
+        if (del.deletedCount) await db.collection('votes').deleteMany({ hazardId: h._id });
+        continue;
+      }
       Object.assign(set, { type, ...labelsFor(type, h.heightBand) });
       if (!locked.includes('category') && n.category !== h.category) {
         set.category = n.category;

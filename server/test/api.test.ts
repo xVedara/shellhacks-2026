@@ -281,6 +281,17 @@ describe('reclassify, report, users', () => {
     });
   });
 
+  it('renamer deletes a fallback obstacle that turns out to be a person, with its votes', async () => {
+    naming = null;
+    const { body } = await create();
+    await create({ lat: north(5), deviceId: 'dev-B' }); // an upvote on the same pin
+    expect(await db.collection('votes').countDocuments({ hazardId: new ObjectId(body.id) })).toBe(2);
+    naming = { type: 'person', category: 'moving', heightBand: 'ground', severity: 2 };
+    await renamePending(db, namer);
+    expect(await db.collection('hazards').countDocuments()).toBe(0);
+    expect(await db.collection('votes').countDocuments()).toBe(0);
+  });
+
   it('renames needsNaming hazards, keeping a people-chosen type', async () => {
     naming = null;
     const unknown = await create();
