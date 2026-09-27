@@ -1,12 +1,12 @@
 "use client";
 
 import { CATEGORIES, CATEGORY_META, HEIGHT_BANDS, HEIGHT_META, type Category, type HeightBand } from "@/lib/api";
-import { heightIconSrc, typeIconSrc } from "@/lib/marker";
+import { heightIconSrc, pinPad, typeIconSrc } from "@/lib/marker";
 import type { Connection } from "@/lib/hooks";
 
 export function PageBar({ title, children }: { title: string; children?: React.ReactNode }) {
   return (
-    <div className="flex min-h-12 shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-line bg-page px-4 py-2 md:px-6">
+    <div className="top-bar flex min-h-12 shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-line bg-page px-4 py-2 md:px-6">
       <h1 className="text-[20px] font-semibold leading-tight tracking-[-0.03em] text-heading">{title}</h1>
       <div className="ml-auto flex flex-wrap items-center gap-2">{children}</div>
     </div>
@@ -37,14 +37,19 @@ export function TypeIcon({
   selected?: boolean;
 }) {
   const meta = CATEGORY_META[category];
+  const pad = pinPad(selected);
   return (
     <span
-      className="relative inline-flex shrink-0"
-      style={{ width: size, height: size, ["--pin-cat" as string]: meta.color, ["--pin-ink" as string]: meta.ink }}
+      className="ss-pin-frame"
+      style={{
+        padding: pad,
+        ["--pin-cat" as string]: meta.color,
+        ["--pin-ink" as string]: meta.ink,
+      }}
     >
       <span
-        className={`ss-pin block h-full w-full ${selected ? "ss-pin--selected" : ""}`}
-        style={{ ["--pin-cat" as string]: meta.color, ["--pin-ink" as string]: meta.ink }}
+        className={`ss-pin block ${selected ? "ss-pin--selected" : ""}`}
+        style={{ width: size, height: size, ["--pin-cat" as string]: meta.color, ["--pin-ink" as string]: meta.ink }}
       >
         {/* eslint-disable-next-line @next/next/no-img-element -- static crop, sized exactly */}
         <img className="ss-pin__glyph" src={typeIconSrc(type)} alt="" width={size} height={size} draggable={false} />

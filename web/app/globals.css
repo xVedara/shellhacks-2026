@@ -108,6 +108,30 @@
 html {
   background: var(--page);
 }
+
+/* Phone chrome. viewport-fit=cover lets the canvas run under the notch;
+   the extra 12px is breathing room below that inset. The home-indicator
+   inset stays on the bottom sheet, not under the tabs. */
+.app-chrome {
+  padding-top: calc(12px + env(safe-area-inset-top, 0px));
+  padding-right: env(safe-area-inset-right, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+}
+@media (min-width: 768px) {
+  .app-chrome {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+.top-bar {
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+}
+@media (min-width: 768px) {
+  .top-bar {
+    padding-right: max(24px, env(safe-area-inset-right, 0px));
+    padding-left: max(24px, env(safe-area-inset-left, 0px));
+  }
+}
 body {
   color: var(--ink);
   background: var(--page);
@@ -226,7 +250,10 @@ body {
   height: var(--panel-h, 196px);
   flex-direction: column;
   overflow: hidden;
-  padding: 0 20px max(16px, env(safe-area-inset-bottom));
+  padding-top: 0;
+  padding-right: max(20px, env(safe-area-inset-right, 0px));
+  padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
+  padding-left: max(20px, env(safe-area-inset-left, 0px));
   border-radius: 20px 20px 0 0;
   background: var(--sheet-fill);
   color: var(--ink);
@@ -326,6 +353,16 @@ body {
 .ss-pin-wrap {
   background: none;
   border: none;
+}
+/* Holds the category edge, the M/T/P mark, and the selected ring inside the
+   layout box. Sheet scrollports clip anything that paints past their edge. */
+.ss-pin-frame {
+  display: inline-flex;
+  box-sizing: border-box;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
 }
 .ss-pin-hit {
   position: relative;
