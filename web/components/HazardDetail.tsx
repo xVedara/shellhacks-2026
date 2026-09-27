@@ -5,6 +5,7 @@ import {
   CATEGORY_META,
   HEIGHT_META,
   RECLASSIFY_THRESHOLD,
+  ApiError,
   api,
   cropSrc,
   formatLength,
@@ -30,7 +31,7 @@ function When({ iso, now }: { iso: string; now: number }) {
 }
 
 export function useHazardDetail(id: string | null, version?: string) {
-  const [state, setState] = useState<{ id: string | null; detail: Detail | null; error: string | null }>({
+  const [state, setState] = useState<{ id: string | null; detail: Detail | null; error: string | null; missing?: boolean }>({
     id: null,
     detail: null,
     error: null,
@@ -44,13 +45,15 @@ export function useHazardDetail(id: string | null, version?: string) {
       .catch((e: Error) => {
         if (!live) return;
         // A failed refresh should not blank a hazard we already showed.
-        setState((prev) => ({ id, detail: prev.id === id ? prev.detail : null, error: e.message }));
+        // `missing`: the server says the id does not exist, so retrying cannot help.
+        const missing = e instanceof ApiError && e.code === "not_found";
+        setState((prev) => ({ id, detail: prev.id === id ? prev.detail : null, error: e.message, missing }));
       });
     return () => {
       live = false;
     };
   }, [id, version]);
-  const current = state.id === id ? state : { id, detail: null, error: null };
+  const current = state.id === id ? state : { id, detail: null, error: null, missing: false };
   return { ...current, loading: !!id && !current.detail && !current.error };
 }
 
@@ -122,6 +125,8 @@ export default function HazardDetail({
   const ticking = useNow(15_000, nowFromParent === undefined);
   const now = nowFromParent ?? ticking;
   const m = hazard.measurements;
+  // Under the page's h1 (the /hazard card) the sections are h2; under a hazard h2 they are h3.
+  const Section = hideHeading ? "h2" : "h3";
   return (
     <div className="space-y-4 text-ink">
       {!hideHeading && <HazardHeading hazard={hazard} taxonomy={taxonomy} />}
@@ -172,9 +177,9 @@ export default function HazardDetail({
       </dl>
 
       <section aria-labelledby={`pending-${hazard.id}`}>
-        <h3 id={`pending-${hazard.id}`} className="mb-1.5 text-[13px] font-semibold text-heading">
+        <Section id={`pending-${hazard.id}`} className="mb-1.5 text-[13px] font-semibold text-heading">
           Pending reclassifications
-        </h3>
+        </Section>
         {hazard.pendingReclassifications.length === 0 ? (
           <p className="text-[13px] text-ink-3">None. A change applies when {RECLASSIFY_THRESHOLD} people propose it.</p>
         ) : (
@@ -195,9 +200,9 @@ export default function HazardDetail({
       </section>
 
       <section aria-labelledby={`votes-${hazard.id}`}>
-        <h3 id={`votes-${hazard.id}`} className="mb-1.5 text-[13px] font-semibold text-heading">
+        <Section id={`votes-${hazard.id}`} className="mb-1.5 text-[13px] font-semibold text-heading">
           Vote history ({hazard.votes.length})
-        </h3>
+        </Section>
         {hazard.votes.length === 0 ? (
           <p className="text-[13px] text-ink-3">No votes yet.</p>
         ) : (

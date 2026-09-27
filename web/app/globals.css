@@ -1,9 +1,18 @@
 @import "tailwindcss";
 
+/* Landscape phones: under 500px tall while still on the bottom-sheet layout. */
+@custom-variant short (@media (max-height: 500px) and (width < theme(--breakpoint-md)));
+
 /* StepSafe palette tokens.
    Dark is the default. Light is the same system inverted.
-   Orange #FF7900 is warning chrome. Temporary hazards use that same orange as a category color.
-   The selected ring is signal blue (--signal), so a selected Temporary pin stays distinguishable. */
+   Orange #FF7900 marks hazards only (categories, the hazard status dot). System warnings such as a
+   lost server are neutral: ink text, a strong border and a warning icon (--warn-*).
+   Controls, links, active states and the selected ring use brand blue #087FF5 (brandguide/README.md).
+   Primary buttons are blue with navy text: 4.66:1 (white on #087FF5 is only 3.91:1). Hover lightens the
+   blue to #3999F7, which raises it to 6.15:1.
+   Dark-mode link text is blue lifted 20% toward white (#3999F7): 5.8:1 on the card, 5.05:1 on the sheet
+   top, where #087FF5 text would be 4.40:1 on the card and 3.83:1 on the sheet top.
+   Cyan #13B9F2 stays only on the live-signal dot (--ok). */
 :root,
 :root[data-theme="dark"] {
   color-scheme: dark;
@@ -14,27 +23,28 @@
   --hover: #1a2c40;
   --line: rgb(255 255 255 / 0.08);
   --border-strong: rgb(255 255 255 / 0.22);
-  --field: rgb(255 255 255 / 0.22);
+  --field: rgb(255 255 255 / 0.4);
   --heading: #f5f5f5;
   --ink: #f5f5f5;
   --ink-2: #c5c8cc;
   --ink-3: #a1a5ab;
-  --accent: #13b9f2;
-  --accent-tint: rgb(19 185 242 / 0.16);
+  --accent: #3999f7;
+  --accent-tint: rgb(8 127 245 / 0.16);
   --blue: #087ff5;
-  --signal: #13b9f2;
-  --signal-soft: rgb(19 185 242 / 0.28);
-  --primary: #f5f5f5;
+  --signal: #087ff5;
+  --signal-soft: rgb(8 127 245 / 0.32);
+  --primary: #087ff5;
+  --primary-hover: #3999f7;
   --primary-ink: #081624;
-  --warn-ink: #ffb473;
-  --warn-tint: #2a1a0c;
+  --warn-ink: var(--ink);
+  --warn-tint: var(--raised);
   --ok: #13b9f2;
   --hazard: #ff7900;
   --float-shadow: 0 8px 24px rgb(0 0 0 / 0.28);
   --elev-hairline: inset 0 1px 0 rgb(255 255 255 / 0.08), 0 0 0 1px var(--line);
   --elev-sheet: inset 0 1px 0 rgb(255 255 255 / 0.1), 0 0 0 1px var(--line), 0 -18px 36px rgb(0 0 0 / 0.28);
   --sheet-fill: linear-gradient(180deg, #16283b 0%, var(--card) 96px);
-  --focus-glow: 0 0 0 6px rgb(19 185 242 / 0.32);
+  --focus-glow: 0 0 0 6px rgb(8 127 245 / 0.32);
   --tiles: brightness(0.78) contrast(1.05) saturate(0.82);
   --header: #081624;
 }
@@ -47,7 +57,7 @@
   --hover: #e7eaee;
   --line: rgb(8 22 36 / 0.1);
   --border-strong: rgb(8 22 36 / 0.22);
-  --field: rgb(8 22 36 / 0.28);
+  --field: rgb(8 22 36 / 0.5);
   --heading: #0a0a0a;
   --ink: #0a0a0a;
   --ink-2: #3e4651;
@@ -57,10 +67,11 @@
   --blue: #087ff5;
   --signal: #087ff5;
   --signal-soft: rgb(8 127 245 / 0.22);
-  --primary: #081624;
-  --primary-ink: #f5f5f5;
-  --warn-ink: #8a4200;
-  --warn-tint: #fff4ea;
+  --primary: #087ff5;
+  --primary-hover: #3999f7;
+  --primary-ink: #081624;
+  --warn-ink: var(--ink);
+  --warn-tint: var(--raised);
   --ok: #087ff5;
   --hazard: #ff7900;
   --float-shadow: 0 8px 24px rgb(8 22 36 / 0.1);
@@ -105,6 +116,13 @@
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
 }
 
+/* Side panel from 1024px up. 768–1023px keeps the full-width map and bottom sheet.
+   Pixels, not rem, so a non-16px browser font cannot move this. Same value as
+   DESKTOP_MIN_WIDTH in lib/desktop.ts. */
+@theme {
+  --breakpoint-md: 1024px;
+}
+
 html {
   background: var(--page);
 }
@@ -117,7 +135,13 @@ html {
   padding-right: env(safe-area-inset-right, 0px);
   padding-left: env(safe-area-inset-left, 0px);
 }
-@media (min-width: 768px) {
+@media (max-height: 500px) and (width < theme(--breakpoint-md)) {
+  /* One-row header on a landscape phone: every pixel goes to the map and the sheet. */
+  .app-chrome {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+}
+@media (min-width: theme(--breakpoint-md)) {
   .app-chrome {
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
@@ -126,7 +150,7 @@ html {
   padding-right: max(16px, env(safe-area-inset-right, 0px));
   padding-left: max(16px, env(safe-area-inset-left, 0px));
 }
-@media (min-width: 768px) {
+@media (min-width: theme(--breakpoint-md)) {
   .top-bar {
     padding-right: max(24px, env(safe-area-inset-right, 0px));
     padding-left: max(24px, env(safe-area-inset-left, 0px));
@@ -162,6 +186,24 @@ body {
     outline-offset: 2px;
     box-shadow: var(--focus-glow);
   }
+}
+/* The map itself is a tab stop (arrow keys pan). Its ring is drawn inside the map, because the header,
+   the sheet and the screen edge cover anything outside it, and on an overlay, because Leaflet's tile and
+   marker panes (z-index up to 700) paint over the container's own outline (WCAG 2.4.7). The overlay sits
+   below the Leaflet controls (1000) and ignores the pointer. */
+.leaflet-container:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+.leaflet-container:focus-visible::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 800;
+  pointer-events: none;
+  outline: 2px solid var(--blue);
+  outline-offset: -4px;
+  box-shadow: inset 0 0 0 6px rgb(8 127 245 / 0.32);
 }
 .leaflet-container :focus-visible,
 .leaflet-marker-icon:focus-visible {
@@ -208,10 +250,14 @@ body {
 .map-stage .leaflet-bar a.leaflet-disabled {
   color: var(--ink-3) !important;
 }
+/* The OpenStreetMap credit looks the same on every map, including the /verify thumbnail: themed pill,
+   underlined accent link (WCAG 1.4.1: not told apart by colour alone). */
 .map-stage .leaflet-control-attribution {
   margin-bottom: 0 !important;
   margin-left: 8px !important;
   max-width: min(240px, 58vw);
+}
+.leaflet-control-attribution {
   font-size: 11px;
   line-height: 16px;
   color: var(--ink-2) !important;
@@ -219,9 +265,28 @@ body {
   border: 1px solid var(--line);
   border-radius: 999px;
 }
-.map-stage .leaflet-control-attribution a {
+.leaflet-container .leaflet-control-attribution a {
   color: var(--accent) !important;
   text-decoration: underline;
+}
+
+/* Expanded sheet: the map strip is too short for the zoom and locate buttons, which
+   would slide under the header while still taking focus (WCAG 2.4.11). */
+.map-stage.controls-hidden .leaflet-control-zoom,
+.map-stage.controls-hidden .map-locate {
+  display: none;
+}
+/* A strip of map this thin (the expanded sheet) leaves pins half under the sheet, as small or hidden
+   targets that still take focus (WCAG 2.4.11, 2.5.8). Only the selected pin stays (.pins-thin), and not
+   even that one when the strip cannot show it whole (.map-covered). visibility also drops them from the
+   tab order. */
+.map-stage.pins-thin .leaflet-marker-icon:not(:has(.ss-pin--selected)),
+.map-stage.map-covered .leaflet-marker-icon {
+  visibility: hidden;
+}
+/* A focused pin rises above neighbours and clusters that would otherwise cover it (WCAG 2.4.11). */
+.leaflet-marker-icon:focus-visible {
+  z-index: 100000 !important;
 }
 
 .map-locate {
@@ -260,13 +325,60 @@ body {
   box-shadow: var(--elev-sheet);
   transition: height 280ms ease-out;
 }
+/* The skip links focus <main> and the panel: draw their rings inside, where the header and screen edge cannot
+   hide them. main's own outline would sit under the map panes and the sheet, so it is drawn on an overlay. */
+.sheet-panel:focus-visible {
+  outline-offset: -2px;
+}
+main:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+main:focus-visible::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1150;
+  pointer-events: none;
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
+}
+/* Tiny stage (landscape phone at 200% zoom): less padding so a hazard row fits. */
+.sheet-panel.is-tiny {
+  padding-bottom: max(8px, env(safe-area-inset-bottom, 0px));
+}
+/* A pin whose centre is under the sheet or off the map shows only a sliver: not a click or focus target.
+   Leaflet's .leaflet-marker-icon.leaflet-interactive also sets pointer-events (same specificity), so the
+   container class has to win or the sliver stays clickable. */
+.leaflet-container .leaflet-marker-icon.ss-pin-offstage {
+  pointer-events: none;
+}
+/* The open sheet on a tiny stage covers the map and lifts the credit under the header. Hide it so it
+   is not a tab stop (WCAG 2.4.11). Peek still leaves a strip, and the credit stays. */
+.map-stage.map-fully-covered .leaflet-control-attribution {
+  visibility: hidden;
+}
 .sheet-panel.is-dragging {
   transition: none;
 }
 .instrument-card {
   --panel-h: min(640px, 68%);
 }
-@media (min-width: 768px) {
+@media (max-height: 500px) and (width < theme(--breakpoint-md)) {
+  /* On a landscape phone the filters sit in the top 96px, where the gradient would thin the active chip's
+     contrast to about 4.5:1; a flat card keeps it at 4.79:1. */
+  .sheet-panel {
+    background: var(--card);
+  }
+}
+@media (max-height: 500px) and (width < theme(--breakpoint-md)) {
+  /* Landscape phone: leave the zoom and locate buttons their strip of map (MAP_CONTROLS_CLEARANCE);
+     the card scrolls instead. */
+  .instrument-card {
+    --panel-h: calc(100% - 176px);
+  }
+}
+@media (min-width: theme(--breakpoint-md)) {
   .sheet-panel {
     position: relative;
     top: auto;

@@ -35,7 +35,8 @@ const subscribeTheme = (cb: () => void) => {
 };
 const readTheme = () => (document.documentElement.dataset.theme === "light" ? "light" : "dark");
 
-export function ThemeToggle({ className = "" }: { className?: string }) {
+/** `compact`: icon only (phone header); the name stays "Dark theme" and the icon shows the state. */
+export function ThemeToggle({ className = "", compact = false }: { className?: string; compact?: boolean }) {
   const theme = useSyncExternalStore(subscribeTheme, readTheme, () => "dark");
 
   const toggle = () => {
@@ -48,15 +49,22 @@ export function ThemeToggle({ className = "" }: { className?: string }) {
     }
   };
 
+  const on = theme === "dark";
   return (
     <button
       type="button"
       onClick={toggle}
-      aria-pressed={theme === "dark"}
-      className={`inline-flex min-h-11 items-center gap-2 rounded-full px-3 text-[13px] font-medium text-ink-2 hover:bg-hover hover:text-ink ${className}`}
+      aria-pressed={on}
+      className={`inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-full text-[13px] font-medium text-ink-2 hover:bg-hover hover:text-ink ${compact ? "" : "px-3"} ${className}`}
     >
-      <Icon name={theme === "dark" ? "moon" : "sun"} />
-      Dark theme
+      <Icon name={on ? "moon" : "sun"} />
+      <span className={compact ? "sr-only" : ""}>Dark theme</span>
+      {!compact && (
+        // A switch track so the on/off state is visible, not only announced.
+        <span aria-hidden="true" className={`relative ml-auto h-5 w-9 shrink-0 rounded-full ${on ? "bg-[var(--blue)]" : "bg-ink-3"}`}>
+          <span className={`absolute left-0 top-0.5 h-4 w-4 rounded-full bg-white transition-transform motion-reduce:transition-none ${on ? "translate-x-[18px]" : "translate-x-0.5"}`} />
+        </span>
+      )}
     </button>
   );
 }
@@ -76,7 +84,7 @@ function Profile({ user, status, deviceId }: ReturnType<typeof useIdentity>) {
         {status === "ok" && user && (
           <>
             <span className="block truncate font-medium text-ink md:hidden">
-              {user.displayName} · {user.karma}
+              {user.displayName} · {user.karma} karma
             </span>
             <span className="hidden truncate font-medium text-ink md:block">{user.displayName}</span>
             <span className="hidden text-[12px] tabular-nums text-ink-3 md:block">{user.karma} karma</span>
@@ -98,9 +106,9 @@ export default function Header() {
   const identity = useIdentity();
 
   return (
-    <header className="app-chrome relative z-[1200] flex shrink-0 flex-col border-b border-line bg-[var(--header)] md:w-[248px] md:border-b-0 md:border-r">
-      <div className="flex min-h-12 items-center gap-2.5 px-4 md:px-5 md:pb-2 md:pt-4">
-        <Link href="/" className="flex min-h-11 shrink-0 items-center gap-2.5 rounded-md">
+    <header className="app-chrome relative z-[1200] flex shrink-0 flex-col border-b border-line bg-[var(--header)] short:flex-row short:items-center md:w-[248px] md:border-b-0 md:border-r">
+      <div className="flex min-h-12 items-center gap-2.5 px-4 short:contents md:px-5 md:pb-2 md:pt-4">
+        <Link href="/" className="flex min-h-11 shrink-0 items-center gap-2.5 rounded-md short:ml-4">
           <Image src="/logo-light.png" width={28} height={28} alt="" priority className="logo-light rounded-md" />
           <Image src="/logo-dark.png" width={28} height={28} alt="" priority className="logo-dark rounded-md" />
           <span className="min-w-0 leading-tight">
@@ -108,34 +116,45 @@ export default function Header() {
             <span className="hidden text-[12px] text-ink-3 md:block">Community hazard map</span>
           </span>
         </Link>
-        <div className="ml-auto md:hidden">
+        {/* Portrait phone: the theme and profile share the logo row, above the tabs. */}
+        {/* min-w-0 lets the name truncate (inside Profile); no overflow clip here, or the theme button's ring is cut. */}
+        <div className="ml-auto flex min-w-0 items-center gap-1 px-1 short:hidden md:hidden">
+          <ThemeToggle compact />
           <Profile {...identity} />
         </div>
       </div>
 
-      <nav aria-label="Main" className="px-2 md:mt-2 md:flex-1">
+      {/* Grow from the label width. The profile name shrinks first; tabs ellipsize only once the theme button would leave the screen. */}
+      <nav aria-label="Main" className="px-2 short:min-w-0 short:grow short:shrink short:basis-auto md:mt-2 md:flex-1">
         <ul className="flex gap-1 md:flex-col md:gap-1">
           {NAV.map((item) => {
             const current = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
             return (
-              <li key={item.href} className="flex-1 md:flex-none">
+              <li key={item.href} className="min-w-11 flex-1 short:flex-initial md:flex-none">
                 <Link
                   href={item.href}
                   aria-current={current ? "page" : undefined}
-                  className={`flex min-h-11 items-center justify-center gap-2 rounded-none border-b-2 px-2.5 text-[14px] font-medium md:justify-start md:rounded-md md:border-b-0 md:px-3 ${
+                  className={`flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-none border-b-2 px-2.5 text-[14px] font-medium md:justify-start md:rounded-md md:border-b-0 md:px-3 ${
                     current
                       ? "border-[var(--blue)] text-accent md:border-transparent md:bg-raised md:font-semibold md:shadow-[inset_2px_0_0_var(--blue)]"
                       : "border-transparent text-ink-2 hover:bg-hover hover:text-ink"
                   }`}
                 >
                   <Icon name={item.icon} />
-                  {item.label}
+                  <span className="min-w-0 truncate">{item.label}</span>
                 </Link>
               </li>
             );
           })}
         </ul>
       </nav>
+
+      {/* Landscape phone: one row, so the theme and profile come after the tabs, in reading and tab order. */}
+      {/* Shrink the name before the tabs. min-width keeps the theme button and avatar on screen. */}
+      <div className="hidden min-w-[5.5rem] shrink-[100] items-center gap-1 pl-1 pr-4 short:flex">
+        <ThemeToggle compact />
+        <Profile {...identity} />
+      </div>
 
       <div className="mt-auto hidden border-t border-line p-3 md:block">
         <ThemeToggle className="w-full justify-start px-2" />

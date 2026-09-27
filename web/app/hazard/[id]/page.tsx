@@ -2,46 +2,41 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import HazardDetail, { useHazardDetail } from "@/components/HazardDetail";
 import Map from "@/components/Map";
-import { Notice, TypeIcon, primaryButton } from "@/components/ui";
+import { Notice, TypeIcon, linkClass, primaryButton, secondaryButton } from "@/components/ui";
 import { CATEGORY_META, HEIGHT_META, relativeTime, typeDisplayName, type HazardDetail as Detail } from "@/lib/api";
 import { milesFromGraham } from "@/lib/geo";
+import { mapControlsHidden } from "@/lib/map-controls";
 import { useHazardRevision, useNow, useTaxonomy } from "@/lib/hooks";
+import { useSheetMetrics } from "@/lib/use-sheet";
 
 export default function HazardPage() {
   const { id } = useParams<{ id: string }>();
   const hazardId = decodeURIComponent(id);
   const revision = useHazardRevision(hazardId);
-  const { detail, error, loading } = useHazardDetail(hazardId, String(revision));
+  const { detail, error, loading, missing } = useHazardDetail(hazardId, String(revision));
   const { taxonomy } = useTaxonomy();
+  const stageRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLElement>(null);
-  const [sheet, setSheet] = useState(0);
-
-  useEffect(() => {
-    const el = panelRef.current;
-    if (!el) return;
-    const read = () => {
-      const desktop = matchMedia("(min-width: 768px)").matches;
-      setSheet(desktop ? 0 : el.getBoundingClientRect().height);
-    };
-    const ro = new ResizeObserver(read);
-    ro.observe(el);
-    const mq = matchMedia("(min-width: 768px)");
-    mq.addEventListener("change", read);
-    return () => {
-      ro.disconnect();
-      mq.removeEventListener("change", read);
-    };
-  }, [detail]);
+  const { desktop, stageH, sheet: measured } = useSheetMetrics(stageRef, panelRef);
+  const sheet = desktop ? 0 : (measured ?? 0);
 
   const name = detail ? detail.label || typeDisplayName(detail.type, taxonomy) : "Hazard";
   const miles = detail ? milesFromGraham(detail.lat, detail.lng) : "";
+  // The segment's metadata says "Hazard details"; once the record loads, the tab names the hazard.
+  useEffect(() => {
+    if (detail) document.title = `${name} | StepSafe`;
+    else if (missing) document.title = "Hazard not found | StepSafe";
+  }, [detail, missing, name]);
 
   return (
-    <div className="relative flex min-h-0 flex-1">
-      <div className="map-stage relative min-h-0 min-w-0 flex-1" style={{ ["--sheet" as string]: `${sheet}px` }}>
+    <div ref={stageRef} className="relative flex min-h-0 flex-1">
+      <div
+        className={`map-stage relative min-h-0 min-w-0 flex-1${mapControlsHidden(desktop, stageH, sheet) ? " controls-hidden" : ""}`}
+        style={{ ["--sheet" as string]: `${sheet}px` }}
+      >
         {detail ? (
           <Map
             hazards={[detail]}
@@ -52,22 +47,45 @@ export default function HazardPage() {
             sheet={sheet}
           />
         ) : (
-          <div className="flex h-full items-center justify-center text-ink-3" role="status">
+          <div className="flex h-full items-center justify-center text-ink-3" role="status" style={{ paddingBottom: sheet }}>
             {loading ? "Loading map…" : "Map unavailable"}
           </div>
         )}
       </div>
-      <aside ref={panelRef} className="sheet-panel instrument-card" aria-label="Hazard status">
+      {/* Without a record there is only a notice to show, so the phone sheet shrinks to fit it. */}
+      <aside
+        ref={panelRef}
+        className="sheet-panel instrument-card"
+        style={detail ? undefined : { ["--panel-h" as string]: "auto" }}
+        aria-label="Hazard status"
+      >
         <div className="sheet-face scroll-quiet min-h-0 flex-1 overflow-y-auto pb-2">
-          <Link href={`/?selected=${encodeURIComponent(hazardId)}`} className="inline-flex min-h-11 items-center text-[14px] font-medium text-accent">
-            Live map
-          </Link>
+          {/* A gone hazard's notice carries the way back, so the top link would repeat it. */}
+          {!missing && (
+            <Link href={`/?selected=${encodeURIComponent(hazardId)}`} className={`${linkClass} inline-flex min-h-11 items-center text-[14px]`}>
+              Back to the live map
+            </Link>
+          )}
+          {!detail && <h1 className="sr-only">Hazard</h1>}
           {loading && (
             <p role="status" className="text-ink-3">
               Loading hazard details…
             </p>
           )}
-          {error && <Notice tone="warn" title="Couldn’t load this hazard">{error}</Notice>}
+          {error && (
+            <Notice tone="warn" title={missing ? "This hazard is gone" : "Couldn’t load this hazard"}>
+              {!missing && <p>{error}</p>}
+              {missing ? (
+                <Link href="/" className={`${primaryButton} mt-2`}>
+                  Back to the live map
+                </Link>
+              ) : (
+                <button type="button" className={`${secondaryButton} mt-2`} onClick={() => window.location.reload()}>
+                  Try again
+                </button>
+              )}
+            </Notice>
+          )}
           {detail && <HazardRecord detail={detail} taxonomy={taxonomy} name={name} miles={miles} />}
         </div>
       </aside>
@@ -91,7 +109,7 @@ function HazardRecord({
   return (
     <>
       <p className="mt-1 flex items-center gap-2 text-[15px] font-semibold tracking-[-0.02em]">
-        <span className="h-2 w-2 rounded-full bg-ok" aria-hidden="true" />
+        <span className={`h-2 w-2 rounded-full ${detail.status === "cleared" ? "bg-ink-3" : "bg-alert"}`} aria-hidden="true" />
         {detail.status === "cleared" ? "Cleared" : "Hazard"}
       </p>
       <div className="mt-2 flex items-start gap-3">
@@ -123,11 +141,20 @@ function HazardRecord({
       <p className="mt-2.5 text-[13px] text-ink-3">
         {detail.sample ? "Sample hazard, seeded for the demo." : "Reported by a StepSafe walker."}
       </p>
-      <Link href="/verify" className={`${primaryButton} mt-3 w-full`}>
-        Verify
-      </Link>
-      <details className="mt-4 border-t border-line pt-2">
-        <summary className="flex min-h-11 cursor-pointer items-center text-[14px] font-medium">History and measurements</summary>
+      {/* A cleared hazard is out of the queue, so there is nothing to verify. */}
+      {detail.status !== "cleared" && (
+        <Link href={`/verify?id=${encodeURIComponent(detail.id)}`} className={`${primaryButton} mt-3 w-full`}>
+          Verify this hazard
+        </Link>
+      )}
+      <details className="group mt-4 border-t border-line pt-2">
+        {/* display:flex drops the native disclosure triangle, so draw one. */}
+        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 text-[14px] font-medium [&::-webkit-details-marker]:hidden">
+          History and measurements
+          <svg className="shrink-0 text-ink-3 transition-transform duration-200 group-open:rotate-180 motion-reduce:transition-none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </summary>
         <div className="pb-2 pt-2">
           <HazardDetail hazard={detail} taxonomy={taxonomy} hideHeading now={now} />
         </div>
