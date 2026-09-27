@@ -9,13 +9,37 @@ Built at ShellHacks 2026 at FIU Graham Center in Miami.
 ## Architecture
 
 ```
-iPhone head rig                      API server                         Web map
-ARKit LiDAR and Vision               Node and TypeScript                Next.js and Leaflet
-PathGuard                            POST /hazards                      live pins from GET /events
-ClosingDetector and YOLO11n          crop, lat, lng, height band, deviceId
-AlertManager                         MongoDB geo index, TTL, change stream
-Scout tab                            Gemini or Qwen through Ollama
-                                     GET /tts                           GET /hazards/near
+ ┌──────────────── iPhone Pro (head mount) ──────────────────┐
+ │  ARKit LiDAR depth ──► PathGuard                          │
+ │                        (ground / head / drop-off lane)    │
+ │  Camera ──► YOLO11n ──► BoxTracker ─┐                     │
+ │  LiDAR ───► ClosingDetector ────────┴─► crossing assist   │
+ │                         │                                 │
+ │                         ▼                                 │
+ │               AlertPolicy ──► AlertManager                │
+ │               (priority, mute) (spatial tone, haptics,    │      AirPods
+ │                                 voice) ───────────────────┼────► what's ahead / mute
+ │                                                           │
+ │  HazardNamer (still objects only) + Scout tab             │
+ └─────────┬────────────────────────────────▲────────────────┘
+           │ POST /hazards                  │ GET /hazards/near
+           │ (crop, lat/lng, band)          │ GET /tts (spoken name)
+           ▼                                │
+ ┌───────────────── API server (Fastify) ───┴────────────────┐
+ │  merge within 10 m ─or─ name the crop ──► taxonomy label  │
+ │                          │                                │
+ │               Gemini ────┘ (or Qwen via Ollama)           │
+ │               ElevenLabs ──► /tts cache                   │
+ └─────────┬──────────────────────▲──────────────────┬───────┘
+           │ reads / writes       │ change stream    │ GET /events (SSE)
+           ▼                      │                  │ GET /hazards, votes
+ ┌──────── MongoDB Atlas ─────────┴───────┐          │
+ │  hazards (2dsphere, TTL by category),  │          │
+ │  votes, users                          │          │
+ └────────────────────────────────────────┘          ▼
+ ┌──────────── Web map (Next.js + Leaflet / OSM) ────────────┐
+ │  live pins, hazard details, verify queue (vote/retype)    │
+ └───────────────────────────────────────────────────────────┘
 ```
 
 The phone detects an obstacle on the device. On-device alerts do not need a network.
