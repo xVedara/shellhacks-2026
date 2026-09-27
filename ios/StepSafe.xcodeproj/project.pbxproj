@@ -11,6 +11,7 @@
 		042640110DB021D4CD051997 /* AlertManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53CC7755FA3E2DEAAF29A7C1 /* AlertManager.swift */; };
 		09A66D5B22112C26ACF4AF02 /* CrossingScenarioTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF6AA8B3A6EDAB150F21873F /* CrossingScenarioTests.swift */; };
 		0A3E2B6AF638C53A3F6966C9 /* Geo.swift in Sources */ = {isa = PBXBuildFile; fileRef = A16E3AB89629CEEEBC438971 /* Geo.swift */; };
+		0D7B3358F8577CA26047623C /* LICENSE in Resources */ = {isa = PBXBuildFile; fileRef = 96EE2F787910EFD0498D4EFB /* LICENSE */; };
 		221B4E0CFE4D2B215E8D24FC /* CrossingScenarioBoxPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C712FB0F4C6D87FFC94B9508 /* CrossingScenarioBoxPolicyTests.swift */; };
 		24E9C93544221CE03188C3E5 /* AlertPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 734358435B5F3C063F69C2E0 /* AlertPolicyTests.swift */; };
 		274FB8C9D81D6A3FCB753F45 /* TTSPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EBE1E5BD27CD71C4C7A7B96 /* TTSPlayer.swift */; };
@@ -77,6 +78,7 @@
 		77F4BF4AB0B6BCDE2D023E9D /* PhraseBookTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhraseBookTests.swift; sourceTree = "<group>"; };
 		9179013510196CB698160697 /* CrossingMonteCarloTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrossingMonteCarloTests.swift; sourceTree = "<group>"; };
 		931296A1A1F89F0D9B96705B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		96EE2F787910EFD0498D4EFB /* LICENSE */ = {isa = PBXFileReference; name = LICENSE; path = ../../LICENSE; sourceTree = "<group>"; };
 		9EBE1E5BD27CD71C4C7A7B96 /* TTSPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSPlayer.swift; sourceTree = "<group>"; };
 		A16E3AB89629CEEEBC438971 /* Geo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Geo.swift; sourceTree = "<group>"; };
 		A9253312821DEDD9D845726B /* yolo11n.mlpackage */ = {isa = PBXFileReference; path = yolo11n.mlpackage; sourceTree = "<group>"; };
@@ -135,6 +137,7 @@
 				27F88CC2238BBF138080B767 /* ContentView.swift */,
 				DF9D950E58C20F8EC3D8C589 /* HazardNamer.swift */,
 				931296A1A1F89F0D9B96705B /* Info.plist */,
+				96EE2F787910EFD0498D4EFB /* LICENSE */,
 				0B49AF198A7E9AC5AEAB9F7D /* Localizer.swift */,
 				2B1D082AB0C2B99A8CC568D3 /* MapSync.swift */,
 				65B95E5208F0A0DD0DA7713B /* PhrasePlayer.swift */,
@@ -259,6 +262,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				BE120D23FEC5CCD503D3AFFC /* Assets.xcassets in Resources */,
+				0D7B3358F8577CA26047623C /* LICENSE in Resources */,
 				29F9B9F7541DB1B2680D3295 /* Phrases in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

@@ -77,11 +77,9 @@ StepSafe is licensed under the [GNU AGPL-3.0](LICENSE). The iOS app bundles the 
 
 ## Credits
 
-- Map data: © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors, [ODbL 1.0](https://opendatacommons.org/licenses/odbl/).
-- Map rendering: [Leaflet](https://leafletjs.com/) via `react-leaflet`.
-- Vision: [ElevenLabs](https://elevenlabs.io/) text-to-speech for alert and hazard-name voice.
-- Naming: [Google Gemini](https://ai.google.dev/) in production; a local [Qwen](https://ollama.com/library/qwen) vision model via [Ollama](https://ollama.com/) stands in for Gemini during local development (no key needed, unlimited local use).
+- Models, services, libraries, the Inter font, and build tools are listed in [CREDITS.md](CREDITS.md). iOS detail is in [ios/CREDITS.md](ios/CREDITS.md). Texts that have to ship with the app are in [LICENSES/](LICENSES/).
+- Map data © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors, [ODbL 1.0](https://opendatacommons.org/licenses/odbl/). `web/public/osm-graham.json` stays under the ODbL. That file is separate from the AGPL code.
 
 ## AI tools used
 
-Built with [Claude Code](https://claude.com/claude-code) (Anthropic) and [Cursor](https://cursor.com/) as coding assistants throughout the hackathon, per Devpost's AI-tool disclosure rule.
+Ara Babigian and Dev Goswami can explain how this code works. The build used Claude Code (Anthropic), Claude Opus (Anthropic) and Codex (OpenAI) for review, and Cursor cloud agents. Logos were made with GPT Image 2 (OpenAI). The short account is in [CREDITS.md](CREDITS.md).

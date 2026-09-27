@@ -79,7 +79,17 @@ function LiveMetric({ connection, lastEventAt }: { connection: Connection; lastE
   );
 }
 
-const OSM_KEY = "OpenStreetMap layer: crossings (white), curbs (grey), tactile paving (yellow). Data © OpenStreetMap contributors, ODbL.";
+function OsmLayerNotice({ className }: { className: string }) {
+  return (
+    <p className={className}>
+      OpenStreetMap layer: crossings (white), curbs (grey), tactile paving (yellow). Data © OpenStreetMap contributors,{" "}
+      <a href="https://opendatacommons.org/licenses/odbl/1-0/" className="underline">
+        ODbL
+      </a>
+      .
+    </p>
+  );
+}
 
 export default function MapPage() {
   const { hazards, connection, loaded, error, recentlyAdded, detailVersion, cleared, lastEventAt } = useLiveHazards();
@@ -188,7 +198,7 @@ export default function MapPage() {
               />
               <div className="float absolute bottom-3 left-3 z-[1000] hidden max-w-sm px-3.5 py-3 lg:block">
                 <Legend />
-                {showOsm && <p className="mt-2 border-t border-line pt-2 text-[12px] text-ink-3">{OSM_KEY}</p>}
+                {showOsm && <OsmLayerNotice className="mt-2 border-t border-line pt-2 text-[12px] text-ink-3" />}
               </div>
               {connection === "down" && !loaded && (
                 <div className="absolute inset-0 z-[1100] flex items-center justify-center bg-page/85 p-4">
@@ -255,7 +265,7 @@ export default function MapPage() {
                   <summary className="cursor-pointer text-[13px] font-medium text-ink">Map legend</summary>
                   <div className="mt-3">
                     <Legend />
-                    <p className="mt-2 text-[12px] text-ink-3">{OSM_KEY}</p>
+                    <OsmLayerNotice className="mt-2 text-[12px] text-ink-3" />
                   </div>
                 </details>
 
