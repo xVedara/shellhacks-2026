@@ -67,7 +67,9 @@ final class ScoutModel: ObservableObject, @unchecked Sendable { // main-confined
     struct Report { var id: String; var label: String; var merged: Bool }
 
     @Published var band = "ground"
-    @Published var status = "Tap an obstacle to report it"
+    static let prompt = "Tap an obstacle to report it"
+    static let waitingForGPS = "Waiting for GPS"
+    @Published var status = ScoutModel.prompt
     @Published var report: Report?
     /// Hazard types for the correction picker; nil until loaded.
     @Published var taxonomy: [HazardTypeEntry]?
@@ -135,7 +137,8 @@ final class ScoutModel: ObservableObject, @unchecked Sendable { // main-confined
     }
 
     func refresh() {
-        guard let fix = link.localizer.fix else { status = "Waiting for GPS"; return }
+        guard let fix = link.localizer.fix else { status = Self.waitingForGPS; return }
+        if status == Self.waitingForGPS { status = Self.prompt } // the fix arrived: back to the instruction
         let api = link.api, heading = link.localizer.heading
         Task {
             let rows = try? await api.near(lat: fix.lat, lng: fix.lng, radiusM: MapTuning.scoutRadiusM, heading: heading)
@@ -208,6 +211,7 @@ struct ScoutView: View {
     @State private var startedSession = false
     /// The hazard whose type is being corrected (sheet shown while set).
     @State private var picking: PickTarget?
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     struct PickTarget: Identifiable { let id: String; let name: String }
 
@@ -221,6 +225,7 @@ struct ScoutView: View {
         ScrollView {
             VStack(spacing: 14) {
                 Text("Scout").font(.largeTitle.bold()).foregroundStyle(.white)
+                    .accessibilityAddTraits(.isHeader)
                 ARPreview(session: model.sensors.session, cameraLive: cameraLive) { capture in
                     if !scout.busy { scout.submit(capture) }
                 }
@@ -250,6 +255,13 @@ struct ScoutView: View {
             if !model.running && SensorSession.isSupported { model.sensors.start(); startedSession = true }
             scout.refresh()
             scout.loadTaxonomy()
+        }
+        // The first fix can take a few seconds: retry while waiting, so "Waiting for GPS" never sticks.
+        .task {
+            repeat {
+                try? await Task.sleep(for: .seconds(2))
+                if scout.status == ScoutModel.waitingForGPS { scout.refresh() }
+            } while !Task.isCancelled && scout.status == ScoutModel.waitingForGPS
         }
         .sheet(item: $picking) { target in
             TypePicker(title: target.name, entries: scout.taxonomy ?? [], lang: scout.lang) { entry in
@@ -285,25 +297,31 @@ struct ScoutView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text("Nearby, 650 ft").font(.headline).foregroundStyle(.white)
+                    .accessibilityAddTraits(.isHeader)
                 Spacer()
                 Button { scout.refresh() } label: { Image(systemName: "arrow.clockwise").frame(width: 44, height: 44) }
                     .accessibilityLabel("Refresh nearby hazards")
             }
-            if scout.nearby.isEmpty { Text("No hazards nearby").foregroundStyle(Color.slate) }
+            if scout.nearby.isEmpty && scout.status != ScoutModel.waitingForGPS {
+                Text("No hazards nearby").foregroundStyle(Color.slate)
+            }
             ForEach(scout.nearby) { pin in
-                VStack(spacing: 8) {
-                HStack(spacing: 8) {
+                // Buttons drop below the text at accessibility sizes instead of squeezing it.
+                let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+                                                          : AnyLayout(HStackLayout(spacing: 8))
+                layout {
                     VStack(alignment: .leading) {
                         Text(scout.name(pin) + (pin.sample == true ? " (sample)" : "")).foregroundStyle(.white)
-                        Text("\(Int((pin.distanceM ?? 0) * 3.28084)) ft, \(pin.heightBand), confidence \(String(format: "%.1f", pin.confidence))")
+                        Text("\(Int((pin.distanceM ?? 0) * 3.28084)) ft, \(bandName(pin.heightBand)), confidence \(String(format: "%.1f", pin.confidence))")
                             .font(.footnote).foregroundStyle(Color.slate)
                     }
                     .accessibilityElement(children: .combine)
-                    Spacer()
-                    voteButton(pin, up: true)
-                    voteButton(pin, up: false)
-                    correctButton(PickTarget(id: pin.id, name: scout.name(pin)))
-                }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    HStack(spacing: 8) {
+                        voteButton(pin, up: true)
+                        voteButton(pin, up: false)
+                        correctButton(PickTarget(id: pin.id, name: scout.name(pin)))
+                    }
                 }
                 .padding(8)
                 .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
@@ -315,11 +333,20 @@ struct ScoutView: View {
         Button { scout.vote(pin, up: up) } label: {
             Image(systemName: up ? "hand.thumbsup.fill" : "hand.thumbsdown.fill")
                 .font(.title2)
-                .frame(width: 56, height: 56)
+                .frame(minWidth: 56, minHeight: 56) // grows with the symbol at large text sizes
                 .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
-                .foregroundStyle(up ? Color.control : Color.hazard)
+                .foregroundStyle(up ? Color.control : Color.white) // orange is for hazards, not controls
         }
         .accessibilityLabel(up ? "Still there: \(scout.name(pin))" : "Gone: \(scout.name(pin))")
+    }
+}
+
+/// Height band as people say it (the API sends ground / head / dropoff).
+private func bandName(_ band: String) -> String {
+    switch band {
+    case "head": return "head height"
+    case "dropoff": return "drop-off"
+    default: return "ground"
     }
 }
 

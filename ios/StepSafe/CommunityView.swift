@@ -105,7 +105,7 @@ final class CommunityModel: ObservableObject {
             status = nil
         } catch {
             guard !Task.isCancelled else { return }
-            status = t("Server unreachable", "Servidor no disponible")
+            status = t("Server unreachable, retrying", "Servidor no disponible, reintentando") // the offline poll retries
         }
     }
 
@@ -233,6 +233,7 @@ struct CommunityView: View {
     @State private var openedLaunchHazard = false
     @State private var mapPosition: MapCameraPosition = .automatic
     @State private var mapCentered = false
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     /// AppModel.running: the Walker session is live, so this tab makes no VoiceOver announcements.
     var walkerRunning: Bool
@@ -247,18 +248,21 @@ struct CommunityView: View {
     var body: some View {
         NavigationStack(path: $path) {
             VStack(spacing: 12) {
-                header
-                Picker(t("View", "Vista"), selection: $mode) {
-                    Text(t("List", "Lista")).tag("list")
-                    Text(t("Map", "Mapa")).tag("map")
+                Group {
+                    header
+                    Picker(t("View", "Vista"), selection: $mode) {
+                        Text(t("List", "Lista")).tag("list")
+                        Text(t("Map", "Mapa")).tag("map")
+                    }
+                    .pickerStyle(.segmented)
+                    if let status = model.status {
+                        Text(status).foregroundStyle(Color.slate).accessibilityAddTraits(.updatesFrequently)
+                    }
+                    if mode == "map" { map }
                 }
-                .pickerStyle(.segmented)
-                if let status = model.status {
-                    Text(status).foregroundStyle(Color.slate).accessibilityAddTraits(.updatesFrequently)
-                }
-                if mode == "map" { map } else { list }
+                .padding(.horizontal, 16)
+                if mode != "map" { list } // sets its own 16 pt margins, so its cards line up with the picker
             }
-            .padding(.horizontal, 16)
             .background(Color.navy.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: String.self) { HazardDetailView(id: $0, model: model) }
@@ -274,10 +278,12 @@ struct CommunityView: View {
     }
 
     private var header: some View {
-        HStack(alignment: .firstTextBaseline) {
+        let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+                                                  : AnyLayout(HStackLayout(alignment: .firstTextBaseline))
+        return layout {
             Text(t("Community", "Comunidad")).font(.largeTitle.bold()).foregroundStyle(.white)
                 .accessibilityAddTraits(.isHeader)
-            Spacer()
+                .frame(maxWidth: .infinity, alignment: .leading)
             if let u = model.user {
                 Text(t("You: \(Int(u.karma)) points", "Tú: \(Int(u.karma)) puntos"))
                     .font(.headline).foregroundStyle(Color.slate)
@@ -289,6 +295,11 @@ struct CommunityView: View {
     private var list: some View {
         List {
             Section {
+                if !model.loaded && model.status == nil {
+                    ProgressView(t("Loading hazards", "Cargando peligros"))
+                        .frame(maxWidth: .infinity)
+                        .listRowBackground(Color.white.opacity(0.06))
+                }
                 if model.pins.isEmpty && model.loaded {
                     Text(t("No hazards reported within 1 mile", "Sin peligros reportados a menos de 1 milla"))
                         .foregroundStyle(Color.slate)
@@ -307,6 +318,7 @@ struct CommunityView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .contentMargins(.horizontal, 16, for: .scrollContent)
         .scrollContentBackground(.hidden)
         .refreshable { await model.refresh() }
     }
@@ -314,12 +326,15 @@ struct CommunityView: View {
     private func row(_ pin: NearHazard) -> some View {
         let d = model.fix.map { Geo.distance($0, pin.fix) } ?? pin.distanceM
         let dir = model.fix.map { Community.direction(bearing: Geo.bearing(from: $0, to: pin.fix), heading: model.heading, lang: model.lang) }
+        // The Sample badge goes under the name at accessibility sizes, so the name never breaks mid-word beside it.
+        let titleRow = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+                                                    : AnyLayout(HStackLayout())
         return VStack(alignment: .leading, spacing: 4) {
-            HStack {
+            titleRow {
                 Text(model.name(type: pin.type, label: pin.label)).font(.title3.bold()).foregroundStyle(.white)
                 if pin.sample == true {
                     Text(t("Sample", "Muestra")).font(.caption.bold()).padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(Color.slate, in: Capsule()).foregroundStyle(.white)
+                        .background(Color.slate, in: Capsule()).foregroundStyle(Color.navy) // 7.29:1
                 }
             }
             Text([d.map { Community.distance($0, lang: model.lang) }, dir,
@@ -347,6 +362,8 @@ struct CommunityView: View {
                             .background(Color.hazard, in: Circle())
                             .overlay(Circle().stroke(.white, lineWidth: 2))
                             .foregroundStyle(Color.navy)
+                            .frame(width: 44, height: 44) // 28 pt pin, 44 pt hit area
+                            .contentShape(Circle())
                     }
                     .accessibilityLabel(model.rowLabel(pin))
                 }
@@ -374,6 +391,12 @@ struct HazardDetailView: View {
     @State private var detail: HazardDetail?
     @State private var failed = false
     @State private var picking = false
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    /// Paired action buttons sit side by side, stacked at accessibility text sizes so labels never wrap mid-word.
+    private var pair: AnyLayout {
+        typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(spacing: 12)) : AnyLayout(HStackLayout(spacing: 12))
+    }
 
     private func t(_ en: String, _ es: String) -> String { model.t(en, es) }
 
@@ -382,6 +405,9 @@ struct HazardDetailView: View {
             VStack(alignment: .leading, spacing: 14) {
                 if let d = detail { content(d) } else if failed {
                     Text(t("Could not load this hazard", "No se pudo cargar este peligro")).foregroundStyle(Color.slate)
+                    Button { failed = false; Task { await load() } } label: {
+                        actionLabel(t("Try again", "Reintentar"), "arrow.clockwise")
+                    }
                 } else {
                     ProgressView().frame(maxWidth: .infinity)
                 }
@@ -446,14 +472,16 @@ struct HazardDetailView: View {
 
         votes(d)
 
-        HStack(spacing: 12) {
+        pair {
             if model.taxonomy != nil {
                 Button { picking = true } label: { actionLabel(t("Wrong type", "Tipo incorrecto"), "pencil") }
             }
             Menu {
-                Button(t("Spam", "Spam")) { Task { await model.report(d.id, reason: "spam") } }
-                Button(t("Abuse", "Abuso")) { Task { await model.report(d.id, reason: "abuse") } }
-                Button(t("Other", "Otro")) { Task { await model.report(d.id, reason: "other") } }
+                Section(t("Report as", "Denunciar como")) {
+                    Button(t("Spam", "Spam")) { Task { await model.report(d.id, reason: "spam") } }
+                    Button(t("Abuse", "Abuso")) { Task { await model.report(d.id, reason: "abuse") } }
+                    Button(t("Other", "Otro")) { Task { await model.report(d.id, reason: "other") } }
+                }
             } label: { actionLabel(t("Report", "Denunciar"), "flag") }
             .accessibilityHint(t("Report spam or abuse", "Denunciar spam o abuso"))
         }
@@ -470,12 +498,12 @@ struct HazardDetailView: View {
         } else if d.status == "active", model.canVote(d.fix) {
             Text(t("Is it still there?", "¿Sigue ahí?")).font(.headline).foregroundStyle(.white)
                 .accessibilityAddTraits(.isHeader)
-            HStack(spacing: 12) {
+            pair {
                 Button { Task { await model.vote(d.id, at: d.fix, up: true); await load() } } label: {
                     actionLabel(t("Still there", "Sigue ahí"), "hand.thumbsup.fill", fill: .control)
                 }
                 Button { Task { await model.vote(d.id, at: d.fix, up: false); await load() } } label: {
-                    actionLabel(t("Gone", "Ya no está"), "hand.thumbsdown.fill", fill: .hazard)
+                    actionLabel(t("Gone", "Ya no está"), "hand.thumbsdown.fill") // orange is for hazards, not controls
                 }
             }
             .disabled(model.voting.contains(d.id))
@@ -489,10 +517,14 @@ struct HazardDetailView: View {
     }
 
     private func fact(_ key: String, _ value: String) -> some View {
-        HStack(alignment: .firstTextBaseline) {
+        // Key above value at accessibility sizes, so a long value never squeezes against its key.
+        let stacked = typeSize.isAccessibilitySize
+        let layout = stacked ? AnyLayout(VStackLayout(alignment: .leading, spacing: 0))
+                             : AnyLayout(HStackLayout(alignment: .firstTextBaseline))
+        return layout {
             Text(key).foregroundStyle(Color.slate)
-            Spacer()
-            Text(value).foregroundStyle(.white).multilineTextAlignment(.trailing)
+            if !stacked { Spacer(minLength: 8) }
+            Text(value).foregroundStyle(.white).multilineTextAlignment(stacked ? .leading : .trailing)
         }
         .accessibilityElement(children: .combine)
     }
