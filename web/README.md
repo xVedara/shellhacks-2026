@@ -96,6 +96,8 @@ keyboard-reachable pins (Enter opens) and a parallel list, labelled controls, `a
 for new hazards and action results, instrument facts as `<dl>`, the theme toggle is a button with
 `aria-pressed`. Action targets are at least 44px. `prefers-reduced-motion` drops the new-pin pulse, the
 sheet resize, list and filter motion, and the selected-pin scale. Works at 390px wide.
+The audit target is WCAG 2.2 AA. Each route has its own title ("Verify queue | StepSafe"),
+`app/not-found.tsx` is the 404 page, and the layout stays usable at 200% zoom, including landscape phones.
 
 ## Known gaps
 
