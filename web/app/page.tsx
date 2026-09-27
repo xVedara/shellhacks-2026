@@ -131,6 +131,8 @@ export default function MapPage() {
   const mapCovered = mapPinsClass(desktop, stageH - sheet) === " map-covered";
   /** First contact failed: nothing to show, and the offline notice covers the map. */
   const blocking = connection === "down" && !loaded;
+  /* Tiny expanded sheet covers the whole stage: the map and its credit would stay tab stops under the header. */
+  const mapFullyCovered = !desktop && stageH - sheet < 24;
   const tiny = !desktop && stageH < TINY_STAGE;
   const showOnMap = () => {
     setDetent("peek");
@@ -202,7 +204,7 @@ export default function MapPage() {
       </SkipLink>
       {/* The zoom and locate buttons need a clear strip of map above the sheet. */}
       <div
-        className={`map-stage relative min-h-0 min-w-0 flex-1${mapControlsHidden(desktop, stageH, sheet) ? " controls-hidden" : ""}${mapPinsClass(desktop, stageH - sheet)}`}
+        className={`map-stage relative min-h-0 min-w-0 flex-1${mapControlsHidden(desktop, stageH, sheet) ? " controls-hidden" : ""}${mapPinsClass(desktop, stageH - sheet)}${mapFullyCovered ? " map-fully-covered" : ""}`}
         style={{ ["--sheet" as string]: `${sheet}px` }}
       >
         <Map
@@ -215,7 +217,7 @@ export default function MapPage() {
           showOsm={showOsm}
           label="Map of reported hazards around FIU Graham Center"
           sheet={sheet}
-          blocked={blocking}
+          blocked={blocking || mapFullyCovered}
         />
         {/* The notice needs about 120px of map; on a thinner strip the sheet's "Offline · retrying" says it. */}
         {blocking && stageH - sheet >= 120 && (

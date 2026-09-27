@@ -24,7 +24,7 @@ export type MapProps = {
   label: string;
   /** Phone sheet height in px. The selected pin is shifted up by about half of this. */
   sheet?: number;
-  /** An overlay covers the map (first contact failed): the map leaves the tab order, the controls stay. */
+  /** The map is covered (offline overlay, or the tiny sheet over the whole stage): it leaves the tab order. */
   blocked?: boolean;
 };
 

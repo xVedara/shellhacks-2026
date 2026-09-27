@@ -80,7 +80,7 @@ function Profile({ user, status, deviceId }: ReturnType<typeof useIdentity>) {
         {status === "ok" && user ? initial : "?"}
       </span>
       <p className="min-w-0 text-[13px] leading-tight">
-        {status === "loading" && <span className="text-ink-3">Loading profile…</span>}
+        {status === "loading" && <span className="block truncate text-ink-3">Loading profile…</span>}
         {status === "ok" && user && (
           <>
             <span className="block truncate font-medium text-ink md:hidden">
@@ -108,11 +108,11 @@ export default function Header() {
   return (
     <header className="app-chrome relative z-[1200] flex shrink-0 flex-col border-b border-line bg-[var(--header)] short:flex-row short:items-center md:w-[248px] md:border-b-0 md:border-r">
       <div className="flex min-h-12 items-center gap-2.5 px-4 short:contents md:px-5 md:pb-2 md:pt-4">
-        <Link href="/" className="flex min-h-11 shrink-0 items-center gap-2.5 rounded-md short:ml-4">
-          <Image src="/logo-light.png" width={28} height={28} alt="" priority className="logo-light rounded-md" />
-          <Image src="/logo-dark.png" width={28} height={28} alt="" priority className="logo-dark rounded-md" />
+        <Link href="/" className="flex min-h-11 shrink-0 items-center gap-2.5 rounded-md short:ml-4 short:min-w-0 short:shrink">
+          <Image src="/logo-light.png" width={28} height={28} alt="" priority className="logo-light shrink-0 rounded-md" />
+          <Image src="/logo-dark.png" width={28} height={28} alt="" priority className="logo-dark shrink-0 rounded-md" />
           <span className="min-w-0 leading-tight">
-            <span className="block text-[16px] font-semibold tracking-[-0.03em] text-heading">StepSafe</span>
+            <span className="block truncate text-[16px] font-semibold tracking-[-0.03em] text-heading">StepSafe</span>
             <span className="hidden text-[12px] text-ink-3 md:block">Community hazard map</span>
           </span>
         </Link>
@@ -124,23 +124,25 @@ export default function Header() {
         </div>
       </div>
 
-      <nav aria-label="Main" className="px-2 short:flex-1 md:mt-2 md:flex-1">
+      <nav aria-label="Main" className="px-2 short:min-w-0 short:flex-1 md:mt-2 md:flex-1">
         <ul className="flex gap-1 md:flex-col md:gap-1">
           {NAV.map((item) => {
             const current = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
             return (
-              <li key={item.href} className="flex-1 md:flex-none">
+              <li key={item.href} className="min-w-0 flex-1 md:flex-none">
                 <Link
                   href={item.href}
                   aria-current={current ? "page" : undefined}
-                  className={`flex min-h-11 items-center justify-center gap-2 rounded-none border-b-2 px-2.5 text-[14px] font-medium md:justify-start md:rounded-md md:border-b-0 md:px-3 ${
+                  className={`flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-none border-b-2 px-2.5 text-[14px] font-medium md:justify-start md:rounded-md md:border-b-0 md:px-3 ${
                     current
                       ? "border-[var(--blue)] text-accent md:border-transparent md:bg-raised md:font-semibold md:shadow-[inset_2px_0_0_var(--blue)]"
                       : "border-transparent text-ink-2 hover:bg-hover hover:text-ink"
                   }`}
                 >
-                  <Icon name={item.icon} />
-                  {item.label}
+                  <span className="inline-flex shrink-0">
+                    <Icon name={item.icon} />
+                  </span>
+                  <span className="min-w-0 truncate">{item.label}</span>
                 </Link>
               </li>
             );

@@ -347,9 +347,16 @@ main:focus-visible::after {
 .sheet-panel.is-tiny {
   padding-bottom: max(8px, env(safe-area-inset-bottom, 0px));
 }
-/* A pin whose centre is under the sheet or off the map shows only a sliver: not a click or focus target. */
-.leaflet-marker-icon.ss-pin-offstage {
+/* A pin whose centre is under the sheet or off the map shows only a sliver: not a click or focus target.
+   Leaflet's `.leaflet-marker-icon.leaflet-interactive` sets pointer-events:auto at the same specificity
+   and loads later, so the interactive class has to be in this selector. */
+.leaflet-marker-icon.leaflet-interactive.ss-pin-offstage {
   pointer-events: none;
+}
+/* The open sheet on a tiny stage covers the map and lifts the credit under the header. Hide it so it
+   is not a tab stop (WCAG 2.4.11). Peek still leaves a strip, and the credit stays. */
+.map-stage.map-fully-covered .leaflet-control-attribution {
+  visibility: hidden;
 }
 .sheet-panel.is-dragging {
   transition: none;
