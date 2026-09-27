@@ -196,13 +196,14 @@ export function useHazardRevision(id: string): number {
   return revision;
 }
 
-/** Current time, re-read every `ms` so relative labels and "last hour" counts stay honest. */
-export function useNow(ms = 30_000) {
+/** Current time, re-read every `ms` so relative labels stay honest. `enabled` is false when a parent already owns the clock. */
+export function useNow(ms = 30_000, enabled = true) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
+    if (!enabled) return;
     const t = setInterval(() => setNow(Date.now()), ms);
     return () => clearInterval(t);
-  }, [ms]);
+  }, [ms, enabled]);
   return now;
 }
 
