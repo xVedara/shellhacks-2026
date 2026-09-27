@@ -55,13 +55,23 @@ function milesBetween(lat: number, lng: number) {
   return `${(meters / 1609.344).toFixed(1)} mi`;
 }
 
+function connectionWord(connection: Connection) {
+  if (connection === "down") return "Offline";
+  if (connection === "live") return "Live";
+  if (connection === "reconnecting") return "Paused";
+  return "Connecting";
+}
+
 function LiveKicker({ connection, count }: { connection: Connection; count: number }) {
-  const word = connection === "down" ? "Offline failsafe" : connection === "live" ? "Live" : connection === "reconnecting" ? "Paused" : "Connecting";
+  const word = connectionWord(connection);
   return (
     <div>
       <p className="flex min-h-6 items-center gap-2 text-[15px] font-semibold tracking-[-0.02em]">
         <LiveDot connection={connection} />
-        <span role="status">{word}</span>
+        <span>
+          <span role="status">{word}</span>
+          {connection === "down" && <span aria-hidden="true"> failsafe</span>}
+        </span>
         {connection !== "down" && <span className="font-normal text-ink-3">· {count} nearby</span>}
       </p>
       <p className="mt-0.5 text-[13px] text-ink-3">Within 3 mi of FIU Graham Center</p>
@@ -280,6 +290,9 @@ export default function MapPage() {
             </div>
           ) : detailOpen ? (
             <div className="flex min-h-0 flex-1 flex-col">
+              <p className="sr-only" role="status">
+                {connectionWord(connection)}
+              </p>
               <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 pb-2">
                 <button type="button" className={secondaryButton} onClick={closePanel}>
                   All hazards

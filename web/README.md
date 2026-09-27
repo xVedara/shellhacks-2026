@@ -51,7 +51,7 @@ free text.
 - Category is a colored edge and a small M / T / P mark: moving `#FFC23D`, temporary `#FF7900`,
   permanent `#D93A1E`. The letter is the category mark, not the pin's label.
 - Height uses those three height tiles in the legend, and the height name in the row text.
-- Size = confidence (22 to 40 px). The selected pin scales up and wears a signal-blue `#13B9F2` ring.
+- Size = confidence (22 to 40 px). The selected pin scales up and wears a signal-blue ring (`--signal`: `#13B9F2` on the dark theme, `#087FF5` on the light theme).
 - Overlapping pins collapse into a count cluster; choosing it zooms in.
 - `sample: true` hazards carry a dashed "SAMPLE" tag on the map, in the list, in detail and in the
   verify queue, plus a "Seeded for the demo" notice. Seed data is never shown as a real report.
@@ -78,7 +78,7 @@ Design: navy canvas, hairline surfaces, pill buttons at least 44px tall. Sidebar
 from 768px (logo, Live map, Verify, theme, profile); a top bar with those two tabs on phones.
 The live map is full bleed. Inter throughout, sentence case, tabular numbers. Colors are semantic
 roles in `app/globals.css`. Orange `#FF7900` is warning chrome. The selected ring is signal blue
-`#13B9F2`. Category colors are separate from that ring.
+(`--signal`). Category colors are separate from that ring.
 
 **Theme.** Dark is the default (`#081624` canvas). The sidebar toggle switches to the light theme
 and stores the choice in `localStorage` key `stepsafe.theme` (wrapped in try/catch; a blocked store

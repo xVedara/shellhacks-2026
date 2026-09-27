@@ -3,7 +3,7 @@
 /* StepSafe palette tokens.
    Dark is the default. Light is the same system inverted.
    Orange #FF7900 is warning chrome. Temporary hazards use that same orange as a category color.
-   The selected ring is signal blue #13B9F2, so a selected Temporary pin stays distinguishable. */
+   The selected ring is signal blue (--signal), so a selected Temporary pin stays distinguishable. */
 :root,
 :root[data-theme="dark"] {
   color-scheme: dark;
@@ -366,7 +366,7 @@ body {
   box-shadow:
     0 0 0 2px var(--pin-cat, #ff7900),
     0 0 0 4px var(--card),
-    0 0 0 7px #13b9f2;
+    0 0 0 7px var(--signal);
   animation: pin-select 220ms ease-out both;
 }
 @keyframes pin-select {

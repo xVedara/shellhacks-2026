@@ -101,7 +101,10 @@ function PanToSelected({
         map.panTo(centerAboveSheet(map, lat, lng, sheet), { animate: false });
         return;
       }
-      if (!map.getBounds().pad(-0.2).contains([lat, lng])) map.panTo([lat, lng]);
+      if (!map.getBounds().pad(-0.2).contains([lat, lng])) {
+        const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        map.panTo([lat, lng], { animate: !reduce });
+      }
     };
     place();
     map.on("resize", place);
