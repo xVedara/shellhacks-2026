@@ -16,7 +16,7 @@ export default function HazardPage() {
   const { id } = useParams<{ id: string }>();
   const hazardId = decodeURIComponent(id);
   const revision = useHazardRevision(hazardId);
-  const { detail, error, loading } = useHazardDetail(hazardId, String(revision));
+  const { detail, error, loading, missing } = useHazardDetail(hazardId, String(revision));
   const { taxonomy } = useTaxonomy();
   const stageRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLElement>(null);
@@ -65,11 +65,17 @@ export default function HazardPage() {
             </p>
           )}
           {error && (
-            <Notice tone="warn" title="Couldn’t load this hazard">
+            <Notice tone="warn" title={missing ? "This hazard is gone" : "Couldn’t load this hazard"}>
               <p>{error}</p>
-              <button type="button" className={`${secondaryButton} mt-2`} onClick={() => window.location.reload()}>
-                Try again
-              </button>
+              {missing ? (
+                <Link href="/" className={`${primaryButton} mt-2`}>
+                  Back to the live map
+                </Link>
+              ) : (
+                <button type="button" className={`${secondaryButton} mt-2`} onClick={() => window.location.reload()}>
+                  Try again
+                </button>
+              )}
             </Notice>
           )}
           {detail && <HazardRecord detail={detail} taxonomy={taxonomy} name={name} miles={miles} />}

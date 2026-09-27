@@ -64,7 +64,8 @@ export default function VerifyPage() {
   const currentId = reviewable(pinnedId) ? pinnedId : reviewable(requestedId) ? requestedId : (queue[0]?.id ?? null);
   // Say why the linked hazard is not the one on screen (a skip is the volunteer's own choice).
   const requestedNote =
-    loaded && requestedId && currentId !== requestedId && !skipped.has(requestedId)
+    // Hidden while a vote or skip message shows: that message already says what happened.
+    loaded && requestedId && currentId !== requestedId && !skipped.has(requestedId) && !message
       ? voted.has(requestedId)
         ? "You already checked that hazard from this device. Showing the next one in the queue."
         : "That hazard is no longer active. Showing the next one in the queue."
@@ -152,205 +153,207 @@ export default function VerifyPage() {
     <div className="min-h-0 flex-1 overflow-y-auto">
       <PageBar title="Verify queue">
         {/* U/D/S still fire when a keyboard is paired with a coarse pointer, so the off switch stays on screen (WCAG 2.1.4). */}
-        <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 text-[13px] font-medium text-ink">
-          <input
-            type="checkbox"
-            checked={shortcutsOn}
-            onChange={(e) => setShortcutsOn(e.target.checked)}
-            className="h-4 w-4 accent-[var(--blue)]"
-          />
-          Keyboard shortcuts
-        </label>
+        {current && (
+          <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 text-[13px] font-medium text-ink">
+            <input
+              type="checkbox"
+              checked={shortcutsOn}
+              onChange={(e) => setShortcutsOn(e.target.checked)}
+              className="h-4 w-4 accent-[var(--blue)]"
+            />
+            Keyboard shortcuts
+          </label>
+        )}
         <ConnectionBadge connection={connection} />
       </PageBar>
-    <div className="w-full max-w-[1200px] p-4 lg:px-6 lg:py-5">
-      <div className="mb-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-        <p className="text-ink-2">
-          Least-confident hazards first. Is it still there?
-          {shortcutsOn && (
-            <span className="pointer-coarse:hidden">
-              {" "}Shortcuts: <kbd className="kbd">U</kbd> upvote, <kbd className="kbd">D</kbd> downvote, <kbd className="kbd">S</kbd> skip
-              (when no button or link is focused).
-            </span>
-          )}
-        </p>
-        {loaded && (
-          <div className="panel min-w-56 px-3.5 py-3">
-            <p className="text-[13px] text-ink-2">
-              <span className="text-[20px] font-semibold tabular-nums text-heading">{queue.length}</span> left to review
-            </p>
-            {all.length > 0 && (
-              <div
-                className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-line"
-                role="progressbar"
-                aria-label="Hazards checked from this device"
-                aria-valuemin={0}
-                aria-valuemax={all.length}
-                aria-valuenow={checked}
-              >
-                <div className="h-full rounded-full bg-accent" style={{ width: `${(checked / all.length) * 100}%` }} />
-              </div>
+      <div className="w-full max-w-[1200px] p-4 lg:px-6 lg:py-5">
+        <div className="mb-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+          <p className="text-ink-2">
+            Least-confident hazards first. Is it still there?
+            {shortcutsOn && current && (
+              <span className="pointer-coarse:hidden">
+                {" "}Shortcuts: <kbd className="kbd">U</kbd> upvote, <kbd className="kbd">D</kbd> downvote, <kbd className="kbd">S</kbd> skip
+                (when no button or link is focused).
+              </span>
             )}
-            <p className="mt-1 text-[12px] text-ink-3">
-              {checked} of {all.length} checked from this device
-            </p>
+          </p>
+          {loaded && (
+            <div className="panel min-w-56 px-3.5 py-3">
+              <p className="text-[13px] text-ink-2">
+                <span className="text-[20px] font-semibold tabular-nums text-heading">{queue.length}</span> left to review
+              </p>
+              {all.length > 0 && (
+                <div
+                  className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-line"
+                  role="progressbar"
+                  aria-label="Hazards checked from this device"
+                  aria-valuemin={0}
+                  aria-valuemax={all.length}
+                  aria-valuenow={checked}
+                >
+                  <div className="h-full rounded-full bg-accent" style={{ width: `${(checked / all.length) * 100}%` }} />
+                </div>
+              )}
+              <p className="mt-1 text-[12px] text-ink-3">
+                {checked} of {all.length} checked from this device
+              </p>
+            </div>
+          )}
+        </div>
+
+        {requestedNote && (
+          <div className="mb-4">
+            <Notice tone="info" title={requestedNote} />
           </div>
         )}
-      </div>
-
-      {requestedNote && (
-        <div className="mb-4">
-          <Notice tone="info" title={requestedNote} />
+        <div aria-live="polite" className={message ? "mb-4" : undefined}>
+          {message && <Notice tone={message.tone} title={message.text} />}
         </div>
-      )}
-      <div aria-live="polite" className={message ? "mb-4" : undefined}>
-        {message && <Notice tone={message.tone} title={message.text} />}
-      </div>
 
-      {!loaded && connection !== "down" && (
-        <p role="status" className="text-ink-3">
-          Loading hazards…
-        </p>
-      )}
-      {!loaded && connection === "down" && (
-        <Notice tone="warn" title="Can’t reach the StepSafe server">
-          Tried <code className="break-all text-ink">{API_URL}</code>. {error && `(${error}) `}Retrying every 5 seconds.
-        </Notice>
-      )}
-      {loaded && all.length === 0 && (
-        <Notice tone="info" title="Nothing to verify yet">
-          No active hazards within 3 miles of the Graham Center. New reports show up here automatically.
-        </Notice>
-      )}
-      {loaded && all.length > 0 && !current && (
-        <div className="panel p-4">
-          <Notice tone="info" title={skippedLeft ? `You skipped the remaining ${skippedLeft}.` : "You’re all caught up."}>
-            {skippedLeft ? (
-              <button type="button" className={`${secondaryButton} mt-2`} onClick={() => setSkipped(new Set())}>
-                Review skipped hazards
-              </button>
-            ) : (
-              <p>
-                This device has voted on every active hazard. New reports appear here live.{" "}
-                <Link href="/" className={linkClass}>
-                  Back to the map
-                </Link>
-              </p>
-            )}
+        {!loaded && connection !== "down" && (
+          <p role="status" className="text-ink-3">
+            Loading hazards…
+          </p>
+        )}
+        {!loaded && connection === "down" && (
+          <Notice tone="warn" title="Can’t reach the StepSafe server">
+            Tried <code className="break-all text-ink">{API_URL}</code>. {error && `(${error}) `}Retrying every 5 seconds.
           </Notice>
-        </div>
-      )}
+        )}
+        {loaded && all.length === 0 && (
+          <Notice tone="info" title="Nothing to verify yet">
+            No active hazards within 3 miles of the Graham Center. New reports show up here automatically.
+          </Notice>
+        )}
+        {loaded && all.length > 0 && !current && (
+          <div className="panel p-4">
+            <Notice tone="info" title={skippedLeft ? `You skipped the remaining ${skippedLeft}.` : "You’re all caught up."}>
+              {skippedLeft ? (
+                <button type="button" className={`${secondaryButton} mt-2`} onClick={() => setSkipped(new Set())}>
+                  Review skipped hazards
+                </button>
+              ) : (
+                <p>
+                  This device has voted on every active hazard. New reports appear here live.{" "}
+                  <Link href="/" className={linkClass}>
+                    Back to the map
+                  </Link>
+                </p>
+              )}
+            </Notice>
+          </div>
+        )}
 
-      {current && (
-        <article
-          id="verify-card"
-          aria-labelledby="verify-heading"
-          className="panel grid gap-4 p-4 md:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] md:grid-rows-[auto_auto_1fr] md:gap-x-6 md:p-5"
-        >
-          <div className="space-y-4 md:row-span-3">
-            {detailLoading && <p role="status" className="text-ink-3">Loading photo and details…</p>}
-            {detailError && <Notice tone="warn" title="Couldn’t load details">{detailError}</Notice>}
-            {detail && detail.id === current.id && (
-              <>
-                <div id="verify-heading">
-                  <HazardHeading hazard={detail} taxonomy={taxonomy} />
+        {current && (
+          <article
+            id="verify-card"
+            aria-labelledby="verify-heading"
+            className="panel grid gap-4 p-4 md:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] md:grid-rows-[auto_auto_1fr] md:gap-x-6 md:p-5"
+          >
+            <div className="space-y-4 md:row-span-3">
+              {detailLoading && <p role="status" className="text-ink-3">Loading photo and details…</p>}
+              {detailError && <Notice tone="warn" title="Couldn’t load details">{detailError}</Notice>}
+              {detail && detail.id === current.id && (
+                <>
+                  <div id="verify-heading">
+                    <HazardHeading hazard={detail} taxonomy={taxonomy} />
+                  </div>
+                  {detail.sample && (
+                    <Notice tone="info" title="Sample hazard">
+                      Seeded for the demo, not a real report. Votes still count for the demo.
+                    </Notice>
+                  )}
+                  <Crop hazard={detail} className="max-h-96" taxonomy={taxonomy} />
+                </>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              <div className="h-56 overflow-hidden rounded-lg border border-line md:h-64">
+                <Map
+                  hazards={[current]}
+                  center={[current.lat, current.lng]}
+                  zoom={18}
+                  selectedId={current.id}
+                  compact
+                  label={`Location of the hazard under review`}
+                />
+              </div>
+              <dl className="grid grid-cols-3 overflow-hidden rounded-lg border border-line text-[13px] text-ink [&>div+div]:border-l [&>div]:border-line">
+                <div className="px-3 py-2">
+                  <dt className="label">Confidence</dt>
+                  <dd className="text-[16px] font-semibold tabular-nums text-heading">{current.confidence.toFixed(1)}</dd>
                 </div>
-                {detail.sample && (
-                  <Notice tone="info" title="Sample hazard">
-                    Seeded for the demo, not a real report. Votes still count for the demo.
-                  </Notice>
-                )}
-                <Crop hazard={detail} className="max-h-96" taxonomy={taxonomy} />
-              </>
-            )}
-          </div>
-
-          <div className="space-y-3">
-            <div className="h-56 overflow-hidden rounded-lg border border-line md:h-64">
-              <Map
-                hazards={[current]}
-                center={[current.lat, current.lng]}
-                zoom={18}
-                selectedId={current.id}
-                compact
-                label={`Location of the hazard under review`}
-              />
+                <div className="px-3 py-2">
+                  <dt className="label">Clearance</dt>
+                  <dd className="mt-0.5 font-medium">{measured(detail?.measurements?.clearanceM)}</dd>
+                </div>
+                <div className="px-3 py-2">
+                  <dt className="label">Width left</dt>
+                  <dd className="mt-0.5 font-medium">{measured(detail?.measurements?.widthM)}</dd>
+                </div>
+              </dl>
+              <Link
+                href={`/hazard/${encodeURIComponent(current.id)}`}
+                className={`${linkClass} inline-flex min-h-11 items-center text-[13px]`}
+              >
+                Full details and vote history
+              </Link>
             </div>
-            <dl className="grid grid-cols-3 overflow-hidden rounded-lg border border-line text-[13px] text-ink [&>div+div]:border-l [&>div]:border-line">
-              <div className="px-3 py-2">
-                <dt className="label">Confidence</dt>
-                <dd className="text-[16px] font-semibold tabular-nums text-heading">{current.confidence.toFixed(1)}</dd>
-              </div>
-              <div className="px-3 py-2">
-                <dt className="label">Clearance</dt>
-                <dd className="mt-0.5 font-medium">{measured(detail?.measurements?.clearanceM)}</dd>
-              </div>
-              <div className="px-3 py-2">
-                <dt className="label">Width left</dt>
-                <dd className="mt-0.5 font-medium">{measured(detail?.measurements?.widthM)}</dd>
-              </div>
-            </dl>
-            <Link
-              href={`/hazard/${encodeURIComponent(current.id)}`}
-              className={`${linkClass} inline-flex min-h-11 items-center text-[13px]`}
-            >
-              Full details and vote history
-            </Link>
-          </div>
 
-          {/* Direct child of the article so it can stick to the bottom of a phone screen. */}
-          <div className="sticky bottom-0 z-[1100] -mx-4 grid grid-cols-3 gap-2 border-t border-line bg-card p-3 pb-[max(12px,env(safe-area-inset-bottom))] md:static md:mx-0 md:border-0 md:bg-transparent md:p-0">
-            <button type="button" disabled={busy || !ready} aria-keyshortcuts={shortcutsOn ? "U" : undefined} onClick={() => vote("up")} className={`${voteButton} border-primary bg-primary text-primary-ink hover:bg-[var(--primary-hover)]`}>
-              <span><span aria-hidden="true">▲ </span>Still there</span>
-              <span className="text-[12px] font-normal">Upvote{shortcutsOn && <span className="hidden md:inline"> · U</span>}</span>
-            </button>
-            <button type="button" disabled={busy || !ready} aria-keyshortcuts={shortcutsOn ? "D" : undefined} onClick={() => vote("down")} className={`${voteButton} border-field bg-card text-ink hover:bg-hover`}>
-              <span><span aria-hidden="true">▼ </span>Gone</span>
-              <span className="text-[12px] font-normal text-ink-3">Not a hazard{shortcutsOn && <span className="hidden md:inline"> · D</span>}</span>
-            </button>
-            <button type="button" disabled={busy} aria-keyshortcuts={shortcutsOn ? "S" : undefined} onClick={skip} className={`${voteButton} border-line bg-card text-ink hover:bg-hover`}>
-              <span>Skip</span>
-              <span className="text-[12px] font-normal text-ink-3">Decide later{shortcutsOn && <span className="hidden md:inline"> · S</span>}</span>
-            </button>
-          </div>
-
-          <div className="space-y-3 md:col-start-2">
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                aria-expanded={panel === "reclassify"}
-                aria-controls="reclassify-panel"
-                onClick={() => setPanel(panel === "reclassify" ? null : "reclassify")}
-                className={secondaryButton}
-              >
-                Reclassify…
+            {/* Direct child of the article so it can stick to the bottom of a phone screen. */}
+            <div className="sticky bottom-0 z-[1100] -mx-4 grid grid-cols-3 gap-2 border-t border-line bg-card p-3 pb-[max(12px,env(safe-area-inset-bottom))] md:static md:mx-0 md:border-0 md:bg-transparent md:p-0">
+              <button type="button" disabled={busy || !ready} aria-keyshortcuts={shortcutsOn ? "U" : undefined} onClick={() => vote("up")} className={`${voteButton} border-primary bg-primary text-primary-ink hover:bg-[var(--primary-hover)]`}>
+                <span><span aria-hidden="true">▲ </span>Still there</span>
+                <span className="text-[12px] font-normal">Upvote{shortcutsOn && <span className="hidden md:inline"> · U</span>}</span>
               </button>
-              <button
-                type="button"
-                aria-expanded={panel === "report"}
-                aria-controls="report-panel"
-                onClick={() => setPanel(panel === "report" ? null : "report")}
-                className={secondaryButton}
-              >
-                Report…
+              <button type="button" disabled={busy || !ready} aria-keyshortcuts={shortcutsOn ? "D" : undefined} onClick={() => vote("down")} className={`${voteButton} border-field bg-card text-ink hover:bg-hover`}>
+                <span><span aria-hidden="true">▼ </span>Gone</span>
+                <span className="text-[12px] font-normal text-ink-3">Not a hazard{shortcutsOn && <span className="hidden md:inline"> · D</span>}</span>
+              </button>
+              <button type="button" disabled={busy} aria-keyshortcuts={shortcutsOn ? "S" : undefined} onClick={skip} className={`${voteButton} border-field bg-card text-ink hover:bg-hover`}>
+                <span>Skip</span>
+                <span className="text-[12px] font-normal text-ink-3">Decide later{shortcutsOn && <span className="hidden md:inline"> · S</span>}</span>
               </button>
             </div>
 
-            {panel === "reclassify" && (
-              <ReclassifyForm
-                key={current.id}
-                hazardId={current.id}
-                current={current}
-                taxonomy={taxonomy}
-                taxonomyError={taxonomyError}
-                taxonomyRetry={retryTaxonomy}
-              />
-            )}
-            {panel === "report" && <ReportForm key={current.id} hazardId={current.id} />}
-          </div>
-        </article>
-      )}
-    </div>
+            <div className="space-y-3 md:col-start-2">
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  aria-expanded={panel === "reclassify"}
+                  aria-controls="reclassify-panel"
+                  onClick={() => setPanel(panel === "reclassify" ? null : "reclassify")}
+                  className={secondaryButton}
+                >
+                  Reclassify…
+                </button>
+                <button
+                  type="button"
+                  aria-expanded={panel === "report"}
+                  aria-controls="report-panel"
+                  onClick={() => setPanel(panel === "report" ? null : "report")}
+                  className={secondaryButton}
+                >
+                  Report…
+                </button>
+              </div>
+
+              {panel === "reclassify" && (
+                <ReclassifyForm
+                  key={current.id}
+                  hazardId={current.id}
+                  current={current}
+                  taxonomy={taxonomy}
+                  taxonomyError={taxonomyError}
+                  taxonomyRetry={retryTaxonomy}
+                />
+              )}
+              {panel === "report" && <ReportForm key={current.id} hazardId={current.id} />}
+            </div>
+          </article>
+        )}
+      </div>
     </div>
   );
 }
@@ -537,7 +540,7 @@ function ReportForm({ hazardId }: { hazardId: string }) {
             ["other", "Other problem"],
           ] as const
         ).map(([value, text]) => (
-          <label key={value} className="flex items-center gap-2 text-[13px] text-ink">
+          <label key={value} className="flex min-h-11 items-center gap-2 text-[13px] text-ink">
             <input type="radio" name="reason" value={value} checked={reason === value} onChange={() => setReason(value)} className="h-4 w-4 accent-[var(--blue)]" />
             {text}
           </label>

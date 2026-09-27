@@ -84,7 +84,7 @@ function Profile({ user, status, deviceId }: ReturnType<typeof useIdentity>) {
         {status === "ok" && user && (
           <>
             <span className="block truncate font-medium text-ink md:hidden">
-              {user.displayName} · {user.karma}
+              {user.displayName} · {user.karma} karma
             </span>
             <span className="hidden truncate font-medium text-ink md:block">{user.displayName}</span>
             <span className="hidden text-[12px] tabular-nums text-ink-3 md:block">{user.karma} karma</span>

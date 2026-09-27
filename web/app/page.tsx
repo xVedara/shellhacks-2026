@@ -9,16 +9,14 @@ import { API_URL, CATEGORY_META, GRAHAM_CENTER, HEIGHT_META, relativeTime, typeD
 import { milesFromGraham } from "@/lib/geo";
 import { mapControlsHidden } from "@/lib/map-controls";
 import { useLiveHazards, useNow, useTaxonomy, type Connection } from "@/lib/hooks";
+import { clearedSince, visibleRows, type Show } from "@/lib/filter-rows";
 import { useSheetMetrics } from "@/lib/use-sheet";
 import { useVotedIds } from "@/lib/use-voted";
 
 type Detent = "peek" | "medium" | "expanded";
-type FilterId = "active" | "awaiting" | "cleared";
-
-const FILTERS: { id: FilterId; label: string }[] = [
-  { id: "active", label: "Active" },
-  { id: "awaiting", label: "Awaiting" },
-  { id: "cleared", label: "Cleared" },
+const SHOW_OPTIONS: { id: Show; label: string; heading: string }[] = [
+  { id: "all", label: "All active", heading: "Active hazards" },
+  { id: "awaiting", label: "Awaiting my check", heading: "Hazards you have not checked" },
 ];
 
 const DETENTS: Detent[] = ["peek", "medium", "expanded"];
@@ -58,9 +56,10 @@ function LiveKicker({ connection, count }: { connection: Connection; count: numb
         <LiveDot connection={connection} />
         <span>
           <span role="status">{word}</span>
-          {connection === "down" && <span aria-hidden="true"> failsafe</span>}
         </span>
-        {connection !== "down" && <span className="font-normal text-ink-3">· {count} nearby</span>}
+        <span className="font-normal text-ink-3">
+          · {connection === "down" ? (count ? "showing the last hazards received" : "retrying") : `${count} nearby`}
+        </span>
       </p>
       <p className="mt-0.5 text-[13px] text-ink-3">Within 3 mi of FIU Graham Center</p>
     </div>
@@ -73,7 +72,7 @@ export default function MapPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [panel, setPanel] = useState<"list" | "detail">("list");
   const [detent, setDetent] = useState<Detent>("peek");
-  const [filters, setFilters] = useState<FilterId[]>(["active"]);
+  const [show, setShow] = useState<Show>("all");
   const [legendChoice, setLegendChoice] = useState<boolean | null>(null);
   const [showOsm, setShowOsm] = useState(false);
   const [dragH, setDragH] = useState<number | null>(null);
@@ -95,13 +94,7 @@ export default function MapPage() {
   const { detail, error: detailError, loading: detailLoading } = useHazardDetail(selectedId, detailVersion(selectedId));
   const newest = recentlyAdded ? hazards.get(recentlyAdded) : undefined;
 
-  const rows = useMemo(() => {
-    if (filters.length === 0) return list;
-    const active = filters.includes("active");
-    const awaiting = filters.includes("awaiting");
-    if (!active && !awaiting) return [];
-    return awaiting ? list.filter((h) => !voted.has(h.id)) : list;
-  }, [filters, list, voted]);
+  const rows = useMemo(() => visibleRows(list, show, voted), [list, show, voted]);
 
   if (linkedId && selectedId !== linkedId && detent === "peek" && panel === "list") {
     setSelectedId(linkedId);
@@ -176,10 +169,6 @@ export default function MapPage() {
     setDragH(null);
     if (!moved) setDetent(detents[(detents.indexOf(shown) + 1) % detents.length]);
     else snap(height);
-  };
-
-  const toggleFilter = (id: FilterId) => {
-    setFilters((curr) => (curr.includes(id) ? curr.filter((f) => f !== id) : [...curr, id]));
   };
 
   return (
@@ -335,8 +324,8 @@ export default function MapPage() {
               total={list.length}
               rows={rows}
               lastEventAt={lastEventAt}
-              filters={filters}
-              onToggleFilter={toggleFilter}
+              show={show}
+              onShow={setShow}
               selectedId={selectedId}
               recentlyAdded={recentlyAdded}
               taxonomy={taxonomy}
@@ -361,8 +350,8 @@ function LiveHazardList({
   total,
   rows,
   lastEventAt,
-  filters,
-  onToggleFilter,
+  show,
+  onShow,
   selectedId,
   recentlyAdded,
   taxonomy,
@@ -378,8 +367,8 @@ function LiveHazardList({
   total: number;
   rows: HazardSummary[];
   lastEventAt: number | null;
-  filters: FilterId[];
-  onToggleFilter: (id: FilterId) => void;
+  show: Show;
+  onShow: (next: Show) => void;
   selectedId: string | null;
   recentlyAdded: string | null;
   taxonomy: ReturnType<typeof useTaxonomy>["taxonomy"];
@@ -391,8 +380,8 @@ function LiveHazardList({
   onOsm: (next: boolean) => void;
 }) {
   const now = useNow(15_000);
-  const midnight = new Date(now).setHours(0, 0, 0, 0);
-  const clearedToday = [...cleared.values()].filter((t) => t >= midnight).length;
+  const clearedToday = clearedSince(cleared.values(), new Date(now).setHours(0, 0, 0, 0));
+  const option = SHOW_OPTIONS.find((o) => o.id === show) ?? SHOW_OPTIONS[0];
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {/* On a landscape phone the status and the filters share one row to leave room for hazards. */}
@@ -403,25 +392,26 @@ function LiveHazardList({
             <p className="sr-only">Updated {relativeTime(new Date(lastEventAt).toISOString(), now)}</p>
           )}
         </div>
-        <div className="mt-3 flex shrink-0 flex-wrap gap-2 short:mt-0" role="group" aria-label="Filter hazards">
-          {FILTERS.map((f) => {
-            const on = filters.includes(f.id);
+        {/* One choice at a time, so native radios: arrow keys move between them. The API only returns active
+            hazards, so cleared ones are a count beside the choice, not a filter. */}
+        <fieldset className="mt-3 flex shrink-0 flex-wrap items-center gap-2 short:mt-0">
+          <legend className="sr-only">Show</legend>
+          {SHOW_OPTIONS.map((o) => {
+            const on = show === o.id;
             return (
-              <button
-                key={f.id}
-                type="button"
-                aria-pressed={on}
-                onClick={() => onToggleFilter(f.id)}
-                className={`filter-chip inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3.5 text-[14px] font-medium tracking-[-0.011em] ${
+              <label
+                key={o.id}
+                className={`filter-chip inline-flex min-h-11 cursor-pointer items-center rounded-full border px-3.5 text-[14px] font-medium tracking-[-0.011em] has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[var(--blue)] has-[:focus-visible]:[outline-style:solid] ${
                   on ? "border-[var(--signal)] bg-accent-tint text-accent" : "border-[var(--border-strong)] bg-transparent text-ink"
                 }`}
               >
-                {f.label}
-                {on && <span aria-hidden="true">×</span>}
-              </button>
+                <input type="radio" name="show" value={o.id} checked={on} onChange={() => onShow(o.id)} className="sr-only" />
+                {o.label}
+              </label>
             );
           })}
-        </div>
+          {clearedToday > 0 && <span className="text-[13px] text-ink-3">{clearedToday} cleared today</span>}
+        </fieldset>
       </div>
       {(connection === "reconnecting" || (connection === "down" && loaded)) && (
         <div className="mt-3 shrink-0">
@@ -437,7 +427,7 @@ function LiveHazardList({
         </div>
       )}
       <h2 id="list-heading" tabIndex={-1} className="sr-only">
-        Active hazards
+        {option.heading}
       </h2>
       <div className="scroll-quiet mt-1 min-h-0 flex-1 overflow-y-auto">
         {!loaded && connection !== "down" && (
@@ -446,19 +436,16 @@ function LiveHazardList({
           </p>
         )}
         {!loaded && connection === "down" && <p className="py-3 text-ink-3">Waiting for the server…</p>}
-        {loaded && rows.length === 0 && !filters.includes("cleared") && (
+        {loaded && rows.length === 0 && (
           <div className="py-3">
-            <Notice tone="info" title={total === 0 ? "No active hazards yet" : "Nothing matches these filters"}>
+            <Notice tone="info" title={total === 0 ? "No active hazards yet" : "You have checked every hazard"}>
               {total === 0
                 ? "Nothing has been reported within 3 miles of the Graham Center. New reports appear here live, no refresh needed."
-                : "Turn a filter off to see the other hazards."}
+                : "Choose All active to see them again."}
             </Notice>
           </div>
         )}
-        {filters.includes("cleared") && (
-          <p className="py-2 text-[13px] text-ink-3">{clearedToday} cleared today on this page.</p>
-        )}
-        <ul key={filters.join(",")}>
+        <ul key={show}>
           {rows.map((h, index) => (
             <HazardRow
               key={h.id}

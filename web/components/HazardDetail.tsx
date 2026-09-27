@@ -5,6 +5,7 @@ import {
   CATEGORY_META,
   HEIGHT_META,
   RECLASSIFY_THRESHOLD,
+  ApiError,
   api,
   cropSrc,
   formatLength,
@@ -30,7 +31,7 @@ function When({ iso, now }: { iso: string; now: number }) {
 }
 
 export function useHazardDetail(id: string | null, version?: string) {
-  const [state, setState] = useState<{ id: string | null; detail: Detail | null; error: string | null }>({
+  const [state, setState] = useState<{ id: string | null; detail: Detail | null; error: string | null; missing?: boolean }>({
     id: null,
     detail: null,
     error: null,
@@ -44,13 +45,15 @@ export function useHazardDetail(id: string | null, version?: string) {
       .catch((e: Error) => {
         if (!live) return;
         // A failed refresh should not blank a hazard we already showed.
-        setState((prev) => ({ id, detail: prev.id === id ? prev.detail : null, error: e.message }));
+        // `missing`: the server says the id does not exist, so retrying cannot help.
+        const missing = e instanceof ApiError && e.code === "not_found";
+        setState((prev) => ({ id, detail: prev.id === id ? prev.detail : null, error: e.message, missing }));
       });
     return () => {
       live = false;
     };
   }, [id, version]);
-  const current = state.id === id ? state : { id, detail: null, error: null };
+  const current = state.id === id ? state : { id, detail: null, error: null, missing: false };
   return { ...current, loading: !!id && !current.detail && !current.error };
 }
 
