@@ -130,7 +130,7 @@ export default function Header() {
           {NAV.map((item) => {
             const current = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
             return (
-              <li key={item.href} className="min-w-0 flex-1 short:flex-none md:flex-none">
+              <li key={item.href} className="min-w-11 flex-1 short:flex-initial md:flex-none">
                 <Link
                   href={item.href}
                   aria-current={current ? "page" : undefined}
