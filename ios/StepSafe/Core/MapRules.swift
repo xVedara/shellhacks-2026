@@ -190,6 +190,17 @@ enum Community {
         c == c.rounded() ? String(Int(c)) : String(format: "%.1f", c)
     }
 
+    /// Server heightBand as shown on screen: "Ground", "Head height", "Drop-off". An unknown band is not guessed.
+    static func band(_ b: String, lang: String = "en") -> String {
+        let es = lang == "es"
+        switch b {
+        case "ground": return es ? "Suelo" : "Ground"
+        case "head": return es ? "Altura de la cabeza" : "Head height"
+        case "dropoff": return es ? "Desnivel" : "Drop-off"
+        default: return es ? "Altura desconocida" : "Unknown height"
+        }
+    }
+
     /// One VoiceOver line per row: "Sample. Low branch, 40 feet, 2 o'clock, confidence 3".
     static func rowLabel(name: String, sample: Bool, confidence c: Double, walker: Geo.Fix?, pin: Geo.Fix,
                          distanceM: Double?, heading: Double?, lang: String = "en") -> String {

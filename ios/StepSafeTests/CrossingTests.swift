@@ -131,11 +131,10 @@ final class CrossingTests: XCTestCase {
         XCTAssertNil(run(seconds: 2.5, scene: pedestrian(1.6), cam: walker)) // passes beside: no alert
     }
 
-    func testRecordedHeadOnTeslaInParkingAisleAlerts() throws {
-        // Replay of recording 18-16-49Z f700-740 (tags 721/726/731): walking 1.1 m/s down a parking aisle, a Tesla
-        // drives at the walker and veers past. YOLO boxes (app filter, conf >= 0.4) + ARKit pose, 5 Hz. Its box-centre
-        // miss drifts to 1.8-3.3 m (the car's side comes into view), so from f725 it reads "passing" and, with no curb,
-        // SensorSession drops it (:246). The in-path rule must keep it on several frames, not just f724.
+    /// Replays a recorded fixture (JSON: i, t, intrinsics, image size, column-major transform, portrait boxes) through
+    /// BoxTracker as VehicleDetector drives it -> per frame, the track ids of non-passing (spoken without a curb)
+    /// vehicles, and the frame each track id was first seen.
+    func replayFixture(_ json: String) throws -> (alerts: [(i: Int, ids: [Int])], firstFrame: [Int: Int]) {
         struct Frame: Decodable { let i: Int; let t: Double; let k: [Float]; let wh: [Float]; let T: [Float]; let b: [[Fixture]] }
         enum Fixture: Decodable {
             case s(String), n(Double)
@@ -146,10 +145,11 @@ final class CrossingTests: XCTestCase {
             var num: Double { if case .n(let v) = self { return v }; return 0 }
             var str: String { if case .s(let v) = self { return v }; return "" }
         }
-        let frames = try JSONDecoder().decode([Frame].self, from: Data(Self.teslaFixture.utf8))
+        let frames = try JSONDecoder().decode([Frame].self, from: Data(json.utf8))
         var tracker = BoxTracker()
         var lastCam: (t: Double, p: SIMD3<Float>)?
-        var alerted: [Int] = []
+        var alerted: [(i: Int, ids: [Int])] = []
+        var firstFrame: [Int: Int] = [:]
         for f in frames {
             let T = f.T
             let rot = simd_float3x3(SIMD3(T[0], T[1], T[2]), SIMD3(T[4], T[5], T[6]), SIMD3(T[8], T[9], T[10]))
@@ -158,18 +158,123 @@ final class CrossingTests: XCTestCase {
                                         rotation: rot, position: pos)
             let boxes = f.b.map { BoxTracker.Box(label: $0[0].str, rect: CGRect(x: $0[1].num, y: $0[2].num, width: $0[3].num,
                                                                                height: $0[4].num), confidence: Float($0[5].num)) }
-            _ = tracker.update(boxes, time: f.t, camera: cam)
+            for tr in tracker.update(boxes, time: f.t, camera: cam) where firstFrame[1_000_000 + tr.id] == nil {
+                firstFrame[1_000_000 + tr.id] = f.i
+            }
             var vel = SIMD2<Float>.zero // as VehicleDetector: last frame's displacement
             if let l = lastCam, f.t > l.t { vel = SIMD2(pos.x - l.p.x, pos.z - l.p.z) / Float(f.t - l.t) }
             lastCam = (f.t, pos)
             let look = -rot.columns.2
-            // SensorSession.swift:246 keeps passing vehicles only at a curb; this aisle has none.
-            if tracker.assess(time: f.t, walker: SIMD2(pos.x, pos.z), walkerVelocity: vel,
-                              forward: simd_normalize(SIMD2(look.x, look.z))).contains(where: { !$0.passing }) { alerted.append(f.i) }
+            // SensorSession.swift:246 keeps passing vehicles only at a curb; these scenes have none.
+            let ids = tracker.assess(time: f.t, walker: SIMD2(pos.x, pos.z), walkerVelocity: vel,
+                                     forward: simd_normalize(SIMD2(look.x, look.z))).filter { !$0.passing }.map(\.trackId)
+            if !ids.isEmpty { alerted.append((f.i, ids)) }
         }
+        return (alerted, firstFrame)
+    }
+
+    func testRecordedHeadOnTeslaInParkingAisleAlerts() throws {
+        // Replay of recording 18-16-49Z f700-740 (tags 721/726/731): walking 1.1 m/s down a parking aisle, a Tesla
+        // drives at the walker and veers past. YOLO boxes (app filter, conf >= 0.4) + ARKit pose, 5 Hz. Its box-centre
+        // miss drifts to 1.8-3.3 m (the car's side comes into view), so from f725 it reads "passing" and, with no curb,
+        // SensorSession drops it (:246). The in-path rule must keep it on several frames, not just f724.
+        let alerted = try replayFixture(Self.teslaFixture).alerts.map(\.i)
         XCTAssertGreaterThanOrEqual(alerted.count, 3, "alert frames \(alerted)")
         XCTAssertTrue(alerted.contains(733), "alert frames \(alerted)") // 4-5 m out, TTC ~1 s
     }
+
+    func testRecordedNightFlyByWhileStandingAlertsByFrame138() throws {
+        // Replay of recording 03-39-39Z f128-142 (night, yolo11s_wise01 boxes): standing, head still, a dark car crosses
+        // 2-3 m in front, seen f136-138 (~0.8 s). Growth T 9 at f138, but 0.6 s of samples arrive only at f139 when it
+        // recedes: the fast standing path must alert at f138, on the car first seen at f136, and nowhere else.
+        let r = try replayFixture(Self.nightFlyByFixture)
+        XCTAssertEqual(r.alerts.map(\.i), [138], "alert frames \(r.alerts)")
+        for id in r.alerts.flatMap(\.ids) { XCTAssertEqual(r.firstFrame[id], 136, "track \(id)") }
+    }
+
+    /// Standing still at the origin: one car box per frame (clamped to the image; nil = not detected) ->
+    /// times at which a non-passing vehicle is reported.
+    func standingAlerts(_ frames: [(t: Double, box: BoxTracker.Box?, cam: BoxTracker.Camera, fwd: SIMD2<Float>)]) -> [Double] {
+        var tracker = BoxTracker()
+        var out: [Double] = []
+        for f in frames {
+            var boxes: [BoxTracker.Box] = []
+            if var b = f.box {
+                let x0 = max(b.rect.minX, 0), x1 = min(b.rect.maxX, 1), y0 = max(b.rect.minY, 0), y1 = min(b.rect.maxY, 1)
+                b.rect = CGRect(x: x0, y: y0, width: x1 - x0, height: y1 - y0)
+                if x1 > x0, y1 > y0 { boxes = [b] }
+            }
+            _ = tracker.update(boxes, time: f.t, camera: f.cam)
+            if tracker.assess(time: f.t, walker: .zero, walkerVelocity: .zero, forward: f.fwd).contains(where: { !$0.passing }) {
+                out.append(f.t)
+            }
+        }
+        return out
+    }
+
+    func testStandingNodAtBottomTruncatedParkedCarStaysSilent() {
+        // Standing 1.9 m from a parked car, first seen as the head nods down (0 -> -8 deg in 0.4 s, 20 deg/s; yaw and
+        // roll still, so look-and-hold holds). The image edge cuts the car's bottom (kept 0.015 inside the edge, as YOLO
+        // does, so isClipped does not drop it; this rig's portrait y runs bottom-up), and the visible height grows as
+        // the head nods: fast growth, close, TTC < 3 s. Only the fast path's still-pitch guard stops it.
+        let frames = (0...2).map { k -> (t: Double, box: BoxTracker.Box?, cam: BoxTracker.Camera, fwd: SIMD2<Float>) in
+            let (box, c) = carBox(SIMD3(0, 0, -1.9), cam: camera(SIMD3(0, 1.6, 0), pitchDeg: -4 * Float(k)))
+            var b = box
+            if let r = b?.rect {
+                let y0 = max(r.minY, 0.015), y1 = min(r.maxY, 0.985)
+                b?.rect = CGRect(x: r.minX, y: y0, width: r.width, height: y1 - y0)
+            }
+            return (Double(k) * 0.2, b, c, SIMD2(0, -1))
+        }
+        XCTAssertEqual(frames.compactMap(\.box).filter { $0.rect.minY <= 0.02 || $0.rect.maxY >= 0.98 }.count, 3) // truncated
+        XCTAssertEqual(standingAlerts(frames), [])
+    }
+
+    func testStandingNearLaneCarPassingBesideStaysSilent() {
+        // Standing at the curb looking along the sidewalk (12 deg toward the road); a car oncoming in the near lane,
+        // 2.5 m to the side at 3 m/s, first detected 4.4 m out (night). Its box is side-clipped the whole time, so it has
+        // no world position and no miss. It never spans the look direction: the fast path's in-path guard stops it.
+        let frames = (0...2).map { k -> (t: Double, box: BoxTracker.Box?, cam: BoxTracker.Camera, fwd: SIMD2<Float>) in
+            let (box, c) = carBox(SIMD3(2.5, 0, -4.4 + 3 * 0.2 * Float(k)), cam: camera(SIMD3(0, 1.6, 0), yawDeg: 12, pitchDeg: 0))
+            let a: Float = 12 * .pi / 180
+            return (Double(k) * 0.2, box, c, SIMD2(sin(a), -cos(a)))
+        }
+        XCTAssertEqual(standingAlerts(frames), [])
+    }
+
+    func testStandingSlowCarWithNoisyThreeSamplesStaysSilent() {
+        // Standing; a car straight ahead at 3.95, 3.65, 3.2 m in 0.4 s: growth T ~7 on 3 samples (1 degree of freedom)
+        // and an own speed ~1.8 m/s, but slope - 2.5 SE leaves < 1.5 m/s. The fast path's pessimistic floor stops it
+        // (the 0.6 s path decides once more samples exist).
+        let zs: [Float] = [3.95, 3.65, 3.2]
+        let frames = zs.enumerated().map { k, z -> (t: Double, box: BoxTracker.Box?, cam: BoxTracker.Camera, fwd: SIMD2<Float>) in
+            let (box, c) = carBox(SIMD3(0, 0, -z), cam: camera(SIMD3(0, 1.6, 0), pitchDeg: 0))
+            return (Double(k) * 0.2, box, c, SIMD2(0, -1))
+        }
+        XCTAssertEqual(standingAlerts(frames), [])
+    }
+
+    /// Recorded boxes for testRecordedNightFlyByWhileStandingAlertsByFrame138 (recording 2026-09-27T03-39-39Z,
+    /// frames 128-142, yolo11s_wise01, same layout as teslaFixture).
+    static let nightFlyByFixture = """
+[
+{"i":128,"t":25.6103,"k":[1337.202,1337.202,961.869,718.688],"wh":[1920,1440],"T":[-0.180201,-0.983606,-0.006774,0,0.010048,-0.008727,0.999911,0,-0.983578,0.180117,0.011456,0,2.610445,-1.195315,31.526878,1.0],"b":[["car",0.44417,0.37313,0.05604,0.04109,0.853],["car",0.00021,0.37844,0.08521,0.03563,0.759]]},
+{"i":129,"t":25.8103,"k":[1336.588,1336.588,961.863,718.784],"wh":[1920,1440],"T":[-0.181334,-0.983402,-0.006176,0,0.008379,-0.007825,0.999934,0,-0.983386,0.18127,0.009659,0,2.611198,-1.195214,31.528473,1.0],"b":[["car",0.44208,0.37297,0.05688,0.04063,0.871],["car",0.00021,0.37734,0.08312,0.03578,0.733]]},
+{"i":130,"t":26.0104,"k":[1336.505,1336.505,961.844,718.786],"wh":[1920,1440],"T":[-0.180009,-0.983629,-0.008456,0,0.012624,-0.010905,0.999861,0,-0.983584,0.179878,0.01438,0,2.610333,-1.194866,31.530243,1.0],"b":[["car",0.44562,0.37344,0.05667,0.03984,0.831],["car",0.00042,0.37969,0.08813,0.03547,0.534]]},
+{"i":131,"t":26.2105,"k":[1336.57,1336.57,961.859,718.781],"wh":[1920,1440],"T":[-0.179921,-0.983639,-0.009064,0,0.01307,-0.011604,0.999847,0,-0.983594,0.179775,0.014944,0,2.610145,-1.195143,31.531128,1.0],"b":[["car",0.44729,0.37266,0.05563,0.04047,0.825],["car",0.00042,0.38172,0.08875,0.03328,0.603]]},
+{"i":132,"t":26.4106,"k":[1336.63,1336.63,961.884,718.761],"wh":[1920,1440],"T":[-0.177008,-0.984179,-0.007662,0,0.01877,-0.01116,0.999762,0,-0.98403,0.176822,0.020448,0,2.609409,-1.194701,31.53075,1.0],"b":[["car",0.45187,0.37703,0.05854,0.03875,0.848],["car",0.00125,0.38234,0.09542,0.03484,0.516]]},
+{"i":133,"t":26.6106,"k":[1336.529,1336.529,961.85,718.728],"wh":[1920,1440],"T":[-0.181017,-0.983457,-0.006683,0,0.021012,-0.010661,0.999722,0,-0.983256,0.180826,0.022594,0,2.609235,-1.194668,31.528879,1.0],"b":[["car",0.45396,0.37359,0.05688,0.03953,0.875],["car",0.00021,0.37906,0.09792,0.03531,0.622]]},
+{"i":134,"t":26.8107,"k":[1336.561,1336.561,961.861,718.722],"wh":[1920,1440],"T":[-0.179427,-0.983759,-0.004854,0,0.031911,-0.010751,0.999433,0,-0.983254,0.17917,0.033322,0,2.606153,-1.195021,31.525736,1.0],"b":[["car",0.46458,0.37281,0.05688,0.04047,0.882],["car",0.00042,0.37922,0.11021,0.03594,0.493]]},
+{"i":135,"t":27.0108,"k":[1336.597,1336.597,961.901,718.721],"wh":[1920,1440],"T":[-0.179997,-0.983661,-0.003565,0,0.034465,-0.009928,0.999357,0,-0.983063,0.179758,0.035689,0,2.60686,-1.195159,31.525387,1.0],"b":[["car",0.46708,0.37375,0.05729,0.03969,0.866],["car",0.00063,0.37891,0.11396,0.03578,0.722]]},
+{"i":136,"t":27.2109,"k":[1336.547,1336.547,961.894,718.766],"wh":[1920,1440],"T":[-0.178905,-0.983863,-0.002573,0,0.030367,-0.008136,0.999506,0,-0.983398,0.178738,0.031333,0,2.606731,-1.19498,31.528009,1],"b":[["car",0.46333,0.37391,0.05625,0.04031,0.881],["car",0.0,0.37875,0.11146,0.03703,0.706],["car",0.00063,0.49078,0.30729,0.28469,0.492]]},
+{"i":137,"t":27.411,"k":[1336.52,1336.52,961.843,718.804],"wh":[1920,1440],"T":[-0.183457,-0.983026,-0.001782,0,0.02024,-0.005589,0.999779,0,-0.982819,0.18338,0.020922,0,2.608099,-1.196198,31.527374,1.0],"b":[["car",0.45375,0.37156,0.05646,0.03891,0.845],["car",0.00125,0.41453,0.77375,0.41031,0.476],["car",0.0,0.375,0.09875,0.03656,0.456]]},
+{"i":138,"t":27.611,"k":[1336.556,1336.556,961.892,718.838],"wh":[1920,1440],"T":[-0.185518,-0.982633,-0.003849,0,0.00843,-0.005508,0.999949,0,-0.982605,0.185476,0.009306,0,2.609866,-1.197634,31.527992,1.0],"b":[["car",0.44333,0.37016,0.055,0.03906,0.861],["car",0.00083,0.37453,0.0825,0.03516,0.575],["car",0.00042,0.41,0.99875,0.57297,0.509]]},
+{"i":139,"t":27.8111,"k":[1336.615,1336.615,961.839,718.83],"wh":[1920,1440],"T":[-0.18345,-0.983015,-0.005325,0,0.000414,-0.005494,0.999985,0,-0.983029,0.183445,0.001415,0,2.609796,-1.198518,31.527578,1.0],"b":[["car",0.33354,0.39906,0.66563,0.47891,0.79],["car",0.43229,0.37125,0.05792,0.03953,0.781],["car",0.00042,0.37531,0.07292,0.03594,0.439]]},
+{"i":140,"t":28.0112,"k":[1337.121,1337.121,961.832,718.796],"wh":[1920,1440],"T":[-0.183858,-0.982944,-0.004166,0,-0.005748,-0.003163,0.999978,0,-0.982936,0.183878,-0.005068,0,2.612511,-1.199304,31.528257,1.0],"b":[["car",0.42812,0.37141,0.0575,0.03969,0.83],["car",0.69937,0.40625,0.29979,0.35359,0.811],["car",0.00042,0.37375,0.06792,0.03516,0.597]]},
+{"i":141,"t":28.2113,"k":[1337.121,1337.121,961.849,718.802],"wh":[1920,1440],"T":[-0.187819,-0.982195,-0.004047,0,-0.011927,-0.001839,0.999927,0,-0.982131,0.187853,-0.01137,0,2.616315,-1.199868,31.530176,1.0],"b":[["car",0.42354,0.36844,0.05708,0.03812,0.857],["car",0.00021,0.37062,0.06083,0.035,0.649]]},
+{"i":142,"t":28.4114,"k":[1337.062,1337.062,961.881,718.79],"wh":[1920,1440],"T":[-0.211721,-0.97733,0.00039,0,-0.041596,0.00941,0.99909,0,-0.976445,0.211512,-0.042646,0,2.619697,-1.201444,31.52887,1.0],"b":[["car",0.39708,0.34859,0.05521,0.04094,0.64]]}
+]
+"""
 
     /// Recorded boxes for testRecordedHeadOnTeslaInParkingAisleAlerts (recording 2026-09-26T18-16-49Z, frames 700-740):
     /// i, t, intrinsics [fx fy cx cy], image [w h], column-major transform, boxes [label x y w h conf] (portrait).
