@@ -7,7 +7,7 @@ import L from "leaflet";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { AttributionControl, CircleMarker, MapContainer, Marker, Polyline, TileLayer, Tooltip, ZoomControl, useMap } from "react-leaflet";
 import type { HazardSummary } from "@/lib/api";
-import { clusterByPixel } from "@/lib/cluster";
+import { clusterByPixel, pushClear } from "@/lib/cluster";
 import { hazardAccessibleName, markerHtml, markerSize, pinBox } from "@/lib/marker";
 import { sameHazardMarker, type HazardMarkerProps } from "@/lib/pin-equal";
 
@@ -46,6 +46,9 @@ function hazardIcon(h: HazardSummary, selected: boolean, highlighted: boolean) {
     `</span>`;
   return L.divIcon({ html, className: "ss-pin-wrap", iconSize: [box, box], iconAnchor: [box / 2, box / 2] });
 }
+
+/** Selected pin radius with its ring (about 31px) plus the cluster's 22px radius, plus a little air. */
+const SELECTED_CLEARANCE = 56;
 
 function clusterIcon(count: number) {
   const size = 44;
@@ -197,6 +200,8 @@ const HazardMarker = memo(function HazardMarker({
   const ref = useRef<L.Marker>(null);
   const name = hazardAccessibleName(h);
   const icon = useMemo(() => hazardIcon(h, selected, highlighted), [h, selected, highlighted]);
+  // A pin with nothing to do (verify thumbnail, the single pin on /hazard) is a picture, not a tab stop.
+  const interactive = !compact && !!onSelect;
 
   useEffect(() => {
     const marker = ref.current;
@@ -205,8 +210,8 @@ const HazardMarker = memo(function HazardMarker({
     const el = marker.getElement();
     el?.setAttribute("title", name);
     el?.setAttribute("aria-label", name);
-    if (compact) el?.setAttribute("role", "img");
-  }, [name, icon, compact]);
+    if (!interactive) el?.setAttribute("role", "img");
+  }, [name, icon, interactive]);
 
   return (
     <Marker
@@ -214,8 +219,8 @@ const HazardMarker = memo(function HazardMarker({
       position={[h.lat, h.lng]}
       icon={icon}
       title={name}
-      keyboard={!compact}
-      interactive={!compact}
+      keyboard={interactive}
+      interactive={interactive}
       zIndexOffset={selected ? 1000 : 0}
       eventHandlers={{
         click: () => onSelect?.(h.id),
@@ -263,7 +268,8 @@ function ClusteredHazards({
       if (selected && rest.length) {
         const p = map.latLngToContainerPoint([selected.lat, selected.lng]);
         split.push({ hazards: [selected], x: p.x, y: p.y });
-        split.push({ hazards: rest, x: group.x, y: group.y });
+        // Slide the leftover cluster out from under the selected pin so it stays a whole 44px target.
+        split.push({ hazards: rest, ...pushClear(group, p, SELECTED_CLEARANCE) });
       } else {
         split.push({ hazards: group.items, x: group.x, y: group.y });
       }
@@ -349,6 +355,8 @@ function MapLocateNote({ map, onNote }: { map: L.Map | null; onNote: (note: stri
   return null;
 }
 
+const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
 export default function LeafletMap({
   hazards,
   center,
@@ -362,6 +370,8 @@ export default function LeafletMap({
   sheet = 0,
 }: MapProps) {
   const [map, setMap] = useState<L.Map | null>(null);
+  // Read once: Leaflet takes these options only when the map is created.
+  const [calm] = useState(reducedMotion);
   return (
     <div role="region" aria-label={label} className="relative h-full w-full">
       <MapContainer
@@ -375,6 +385,9 @@ export default function LeafletMap({
         scrollWheelZoom={!compact}
         doubleClickZoom={!compact}
         keyboard={!compact}
+        zoomAnimation={!calm}
+        fadeAnimation={!calm}
+        markerZoomAnimation={!calm}
       >
         <BindMap onMap={setMap} />
         <TileLayer

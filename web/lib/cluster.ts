@@ -33,3 +33,13 @@ export function clusterByPixel<T>(items: PixelItem<T>[], radius: number): PixelG
   }
   return groups;
 }
+
+/** `point` moved directly away from `from` until it is at least `min` px away (straight up if they coincide). */
+export function pushClear(point: { x: number; y: number }, from: { x: number; y: number }, min: number) {
+  const dx = point.x - from.x;
+  const dy = point.y - from.y;
+  const d = Math.hypot(dx, dy);
+  if (d >= min) return { x: point.x, y: point.y };
+  const [ux, uy] = d ? [dx / d, dy / d] : [0, -1];
+  return { x: from.x + ux * min, y: from.y + uy * min };
+}
