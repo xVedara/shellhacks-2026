@@ -8,7 +8,7 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
   title: "StepSafe community map",
-  description: "Detect. Alert. Move Freely. Live hazards reported by StepSafe walkers, checked by remote volunteers.",
+  description: "Travel safe. Together. Live hazards reported by StepSafe walkers, checked by remote volunteers.",
   // Blue logo in light mode, navy in dark (brandguide/README.md).
   icons: {
     icon: [
