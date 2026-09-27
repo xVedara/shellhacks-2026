@@ -8,38 +8,73 @@ Built at ShellHacks 2026 at FIU Graham Center in Miami.
 
 ## Architecture
 
-```
- ┌──────────────── iPhone Pro (head mount) ──────────────────┐
- │  ARKit LiDAR depth ──► PathGuard                          │
- │                        (ground / head / drop-off lane)    │
- │  Camera ──► YOLO11n ──► BoxTracker ─┐                     │
- │  LiDAR ───► ClosingDetector ────────┴─► crossing assist   │
- │                         │                                 │
- │                         ▼                                 │
- │               AlertPolicy ──► AlertManager                │
- │               (priority, mute) (spatial tone, haptics,    │      AirPods
- │                                 voice) ───────────────────┼────► what's ahead / mute
- │                                                           │
- │  HazardNamer (still objects only) + Scout tab             │
- └─────────┬────────────────────────────────▲────────────────┘
-           │ POST /hazards                  │ GET /hazards/near
-           │ (crop, lat/lng, band)          │ GET /tts (spoken name)
-           ▼                                │
- ┌───────────────── API server (Fastify) ───┴────────────────┐
- │  merge within 10 m ─or─ name the crop ──► taxonomy label  │
- │                          │                                │
- │               Gemini ────┘ (or Qwen via Ollama)           │
- │               ElevenLabs ──► /tts cache                   │
- └─────────┬──────────────────────▲──────────────────┬───────┘
-           │ reads / writes       │ change stream    │ GET /events (SSE)
-           ▼                      │                  │ GET /hazards, votes
- ┌──────── MongoDB Atlas ─────────┴───────┐          │
- │  hazards (2dsphere, TTL by category),  │          │
- │  votes, users                          │          │
- └────────────────────────────────────────┘          ▼
- ┌──────────── Web map (Next.js + Leaflet / OSM) ────────────┐
- │  live pins, hazard details, verify queue (vote/retype)    │
- └───────────────────────────────────────────────────────────┘
+Alerts play on the phone with no network. The phone uses the network to report a still hazard, to poll nearby pins, and to fetch a spoken name.
+
+### Product flow
+
+ARKit LiDAR depth feeds PathGuard and ClosingDetector. The camera feeds VehicleDetector, which runs YOLO11n, then BoxTracker. Those detections meet in AlertPolicy, then AlertManager. AlertManager plays a spatial tone, a haptic, and a voice clip. AirPods can ask what is ahead or mute. A still PathGuard hazard leaves the phone through HazardNamer. A Scout report uses the same `POST /hazards`. Closing alerts stay on the phone.
+
+```mermaid
+flowchart TD
+  subgraph onDevice ["On device, no network"]
+    lidar["ARKit LiDAR depth"]
+    camera["Camera"]
+    pathGuard["PathGuard"]
+    closing["ClosingDetector"]
+    yolo["VehicleDetector YOLO11n"]
+    boxes["BoxTracker"]
+    policy["AlertPolicy"]
+    manager["AlertManager: tone, haptic, voice, AirPods"]
+    lidar --> pathGuard
+    lidar --> closing
+    camera --> yolo
+    yolo --> boxes
+    pathGuard --> policy
+    closing --> policy
+    boxes --> policy
+    policy --> manager
+  end
+  subgraph phoneApi ["On the phone, needs the API"]
+    namer["HazardNamer"]
+    scout["Scout tab"]
+    sync["MapSync"]
+    ttsPlayer["TTSPlayer"]
+  end
+  subgraph api ["API server, needs the network"]
+    postHazards["POST /hazards"]
+    mergeName["merge within 10 m, or name the crop"]
+    models["Gemini or Ollama"]
+    mongo["MongoDB"]
+    ttsRoute["GET /tts"]
+    events["GET /events"]
+    near["GET /hazards/near"]
+    detail["GET /hazards/:id"]
+  end
+  subgraph site ["Web, needs the API"]
+    liveMap["Live map"]
+    verifyPage["Verify"]
+    hazardPage["Hazard"]
+  end
+  pathGuard -->|"still object"| namer
+  namer -->|"POST /hazards"| postHazards
+  scout -->|"POST /hazards"| postHazards
+  namer --> ttsPlayer
+  ttsPlayer -->|"GET /tts"| ttsRoute
+  ttsPlayer -->|"clip or on-device speech"| manager
+  postHazards --> mergeName
+  mergeName -->|"within 10 m"| mongo
+  mergeName -->|"no nearby pin"| models
+  models --> mongo
+  mongo -->|"event: hazard"| events
+  mongo --> near
+  mongo --> detail
+  events --> liveMap
+  events --> verifyPage
+  events --> hazardPage
+  near --> liveMap
+  near --> verifyPage
+  near -->|"poll"| sync
+  detail --> hazardPage
 ```
 
 The phone detects an obstacle on the device. On-device alerts do not need a network.
@@ -50,17 +85,99 @@ The server merges the report into a nearby pin, or names the crop. A `GEMINI_API
 
 The phone requests a spoken hazard name from `GET /tts`. With no `ELEVENLABS_API_KEY`, that route returns 503 and the phone uses on-device speech.
 
-The web map receives the pin on `GET /events` using Server-Sent Events. Other walkers receive it on the next `GET /hazards/near`.
+The web live map and the verify queue receive the pin on `GET /events` (Server-Sent Events, `event: hazard`) and load `GET /hazards/near`. The hazard page follows `GET /events` for one id and loads `GET /hazards/:id`. It does not call `GET /hazards/near`. Other walkers receive the pin on the next `GET /hazards/near`.
 
-## Repo layout
+### Codebase
 
-```
-ios/         StepSafe iOS app. Swift, SwiftUI, ARKit, and Core Haptics.
-server/      Node and TypeScript API. Fastify, MongoDB, Gemini or Ollama, and ElevenLabs.
-web/         Community map. Next.js, TypeScript, Tailwind, Leaflet, and OpenStreetMap.
-scripts/     dev-up.sh starts the local stack. seed-demo.ts loads demo hazards.
-docs/        DEMO.md is the live demo script.
-brandguide/  Logos, colors, and voice. See brandguide/README.md.
+`ios/` is the StepSafe app: Swift, SwiftUI, ARKit, and Core Haptics. `server/` is the Node API. `server/src/index.ts` starts the process, picks the namer, and passes it into `src/app.ts`. `web/` is the Next.js map. The map component is `web/components/Map.tsx`, which loads `LeafletMap.tsx`. The live map, verify, and hazard pages all use it. `scripts/dev-up.sh` starts the local stack and runs `scripts/seed-demo.ts`. `docs/` holds `DEMO.md` and `DEVPOST.md`. `brandguide/` holds logos, colors, and voice. See [brandguide/README.md](brandguide/README.md). `docs/` and `brandguide/` are not on the walk.
+
+ContentView sends each SensorSession output to AlertManager and to ServerLink. AlertManager asks AlertPolicy before it plays. ServerLink is not on the alert path.
+
+```mermaid
+flowchart LR
+  subgraph iosApp ["ios/"]
+    direction TB
+    sensor["SensorSession"]
+    pathGuard["PathGuard"]
+    closing["ClosingDetector"]
+    yolo["VehicleDetector"]
+    boxes["BoxTracker"]
+    content["ContentView"]
+    policy["AlertPolicy"]
+    manager["AlertManager"]
+    phrases["PhrasePlayer"]
+    link["ServerLink"]
+    namer["HazardNamer"]
+    scout["ScoutView"]
+    client["APIClient"]
+    sync["MapSync"]
+    ttsPlayer["TTSPlayer"]
+    sensor --> pathGuard
+    sensor --> closing
+    sensor --> yolo
+    yolo --> boxes
+    pathGuard --> content
+    closing --> content
+    boxes --> content
+    content --> manager
+    manager --> policy
+    manager --> phrases
+    content --> link
+    link --> namer
+    link --> sync
+    link --> ttsPlayer
+    namer --> client
+    scout --> client
+    sync --> client
+    ttsPlayer --> client
+  end
+  subgraph srv ["server/"]
+    direction TB
+    entry["src/index.ts"]
+    routes["src/app.ts"]
+    naming["src/namer.ts"]
+    gemini["src/gemini.ts"]
+    tts["src/tts.ts"]
+    db["src/db.ts"]
+    entry --> routes
+    entry --> naming
+    naming --> gemini
+    routes --> tts
+    routes --> db
+  end
+  subgraph webApp ["web/"]
+    direction TB
+    live["app/page.tsx"]
+    verify["app/verify/page.tsx"]
+    hazard["app/hazard/[id]/page.tsx"]
+    detailUi["components/HazardDetail.tsx"]
+    http["lib/api.ts"]
+    hooks["lib/hooks.ts"]
+    live --> hooks
+    verify --> hooks
+    verify --> http
+    hazard --> hooks
+    hazard --> detailUi
+    detailUi --> http
+    hooks --> http
+  end
+  subgraph extra ["scripts, docs, brandguide"]
+    direction TB
+    scripts["scripts/dev-up.sh"]
+    seed["scripts/seed-demo.ts"]
+    docsNode["docs/"]
+    brand["brandguide/"]
+    scripts --> seed
+  end
+  client -->|"POST /hazards"| routes
+  client -->|"GET /hazards/near"| routes
+  client -->|"GET /tts"| routes
+  hooks -->|"GET /events"| routes
+  http -->|"GET /hazards/near"| routes
+  http -->|"GET /hazards/:id"| routes
+  http -->|"POST /hazards/:id/votes"| routes
+  scripts -->|"starts"| routes
+  scripts -->|"starts"| live
 ```
 
 - [`server/README.md`](server/README.md) covers the API, env vars, the naming provider, and how to run and test.
