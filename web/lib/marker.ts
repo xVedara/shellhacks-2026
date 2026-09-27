@@ -5,6 +5,15 @@ import { CATEGORY_META, HEIGHT_META, type HazardSummary } from "./api.ts";
 /** Pin diameter in px: bigger means more community confidence. */
 export const markerSize = (confidence: number) => Math.round(Math.min(40, Math.max(22, 24 + confidence * 3)));
 
+/**
+ * Gutter around the glyph. The category edge, the M/T/P mark, and the selected
+ * ring paint outside the glyph; this keeps that chrome inside the layout box
+ * so a scrolling sheet cannot clip the left edge.
+ */
+export const pinPad = (selected: boolean) => (selected ? 12 : 8);
+
+export const pinBox = (size: number, selected: boolean) => size + pinPad(selected) * 2;
+
 export const typeIconSrc = (type: string) => `/hazard-icons/${encodeURIComponent(type)}.png`;
 
 export const heightIconSrc = (band: HazardSummary["heightBand"]) => `/hazard-icons/height-${band}.png`;
@@ -13,7 +22,9 @@ export const heightIconSrc = (band: HazardSummary["heightBand"]) => `/hazard-ico
 export function markerHtml(h: Pick<HazardSummary, "category" | "type">, size: number, selected = false) {
   const { letter, color, ink } = CATEGORY_META[h.category];
   const src = typeIconSrc(h.type);
-  return `<span class="ss-pin${selected ? " ss-pin--selected" : ""}" style="width:${size}px;height:${size}px;--pin-cat:${color};--pin-ink:${ink}"><img class="ss-pin__glyph" src="${src}" alt="" width="${size}" height="${size}" draggable="false" /><span class="ss-pin__mark">${letter}</span></span>`;
+  const pad = pinPad(selected);
+  const box = pinBox(size, selected);
+  return `<span class="ss-pin-frame" style="width:${box}px;height:${box}px;padding:${pad}px;--pin-cat:${color};--pin-ink:${ink}"><span class="ss-pin${selected ? " ss-pin--selected" : ""}" style="width:${size}px;height:${size}px;--pin-cat:${color};--pin-ink:${ink}"><img class="ss-pin__glyph" src="${src}" alt="" width="${size}" height="${size}" draggable="false" /><span class="ss-pin__mark">${letter}</span></span></span>`;
 }
 
 /** Includes the category mark and "Sample" in the order they are drawn, so the accessible name contains the visible label. */

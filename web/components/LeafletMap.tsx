@@ -8,7 +8,7 @@ import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { AttributionControl, CircleMarker, MapContainer, Marker, Polyline, TileLayer, Tooltip, ZoomControl, useMap } from "react-leaflet";
 import type { HazardSummary } from "@/lib/api";
 import { clusterByPixel } from "@/lib/cluster";
-import { hazardAccessibleName, markerHtml, markerSize } from "@/lib/marker";
+import { hazardAccessibleName, markerHtml, markerSize, pinBox } from "@/lib/marker";
 import { sameHazardMarker, type HazardMarkerProps } from "@/lib/pin-equal";
 
 export type MapProps = {
@@ -38,12 +38,13 @@ type OsmFeature = {
 
 function hazardIcon(h: HazardSummary, selected: boolean, highlighted: boolean) {
   const size = markerSize(h.confidence) + (selected ? 8 : 0);
+  const box = pinBox(size, selected);
   const html =
-    `<span class="ss-pin-hit${highlighted ? " ss-pin--new" : ""}">` +
+    `<span class="ss-pin-hit${highlighted ? " ss-pin--new" : ""}" style="width:${box}px;height:${box}px">` +
     markerHtml(h, size, selected) +
     (h.sample ? ` <span class="ss-pin__sample">Sample</span>` : "") +
     `</span>`;
-  return L.divIcon({ html, className: "ss-pin-wrap", iconSize: [size, size], iconAnchor: [size / 2, size / 2] });
+  return L.divIcon({ html, className: "ss-pin-wrap", iconSize: [box, box], iconAnchor: [box / 2, box / 2] });
 }
 
 function clusterIcon(count: number) {
