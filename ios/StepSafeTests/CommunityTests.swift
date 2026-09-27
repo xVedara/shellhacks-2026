@@ -131,4 +131,11 @@ final class CommunityTests: XCTestCase {
         XCTAssertNil(p.feed("data: not json"))
         XCTAssertNil(p.feed(#"data: {"op":"upsert"}"#))
     }
+
+    func testBandNames() {
+        XCTAssertEqual(Community.band("ground"), "Ground")
+        XCTAssertEqual(Community.band("head"), "Head height")
+        XCTAssertEqual(Community.band("dropoff", lang: "es"), "Desnivel")
+        XCTAssertEqual(Community.band("overhead"), "Unknown height") // never falls back to "Ground"
+    }
 }

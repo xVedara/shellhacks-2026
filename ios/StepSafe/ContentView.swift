@@ -80,7 +80,9 @@ extension Color {
     static let navy = Color(red: 8 / 255, green: 22 / 255, blue: 36 / 255)
     static let hazard = Color(red: 1, green: 121 / 255, blue: 0)           // #FF7900, hazards only
     static let control = Color(red: 8 / 255, green: 127 / 255, blue: 245 / 255) // #087FF5
-    static let slate = Color(red: 102 / 255, green: 113 / 255, blue: 126 / 255)
+    /// Slate #9AA5B1, secondary text (brandguide/README.md): 7.29:1 on navy, 6.29:1 on a card. The old #66717E was
+    /// only 3.67:1 on navy, below the 4.5:1 text minimum.
+    static let slate = Color(red: 154 / 255, green: 165 / 255, blue: 177 / 255)
 }
 
 struct ContentView: View {
@@ -130,6 +132,7 @@ struct ContentView: View {
                 .foregroundStyle(Color.slate)
         }
         .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
     }
 
     private func problem(_ text: String) -> some View {
@@ -146,6 +149,7 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("Debug").font(.headline).foregroundStyle(.white)
+                    .accessibilityAddTraits(.isHeader)
                 Spacer()
                 Text(String(format: "%.1f fps", model.fps)).monospacedDigit().foregroundStyle(Color.slate)
                     .accessibilityLabel(String(format: "Analysis %.0f frames per second", model.fps))
@@ -182,6 +186,7 @@ struct BigButton: View {
     let systemImage: String
     let filled: Bool
     let action: () -> Void
+    @Environment(\.isEnabled) private var isEnabled
 
     var body: some View {
         Button(action: action) {
@@ -191,6 +196,7 @@ struct BigButton: View {
                 .foregroundStyle(filled ? Color.white : Color.control)
                 .background(filled ? Color.control : Color.clear, in: RoundedRectangle(cornerRadius: 16))
                 .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.control, lineWidth: 2))
+                .opacity(isEnabled ? 1 : 0.4) // explicit colors above override the system's dimmed look
         }
         .accessibilityLabel(title)
     }

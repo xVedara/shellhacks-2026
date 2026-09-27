@@ -1,3 +1,4 @@
+import Combine
 import MapKit
 import SwiftUI
 import UIKit
@@ -17,10 +18,10 @@ final class CommunityModel: ObservableObject {
     @Published var loaded = false
     /// Hazard ids with a vote being sent (both buttons disabled).
     @Published private(set) var voting: Set<String> = []
-    /// Hazard id -> "up"/"down": one vote per hazard per device.
-    @Published private(set) var voted: [String: String] = UserDefaults.standard.dictionary(forKey: CommunityModel.votedKey) as? [String: String] ?? [:]
-
-    static let votedKey = "communityVotes"
+    /// One vote per hazard per device, the same store Scout uses.
+    let votes = VoteStore.shared
+    /// The last refresh failed (shown with a Try again button; SSE-up failures are not retried on their own).
+    @Published var unreachable = false
     let api: APIClient
     let lang = TTSChoice.lang()
     private let localizer = Localizer()
@@ -32,8 +33,16 @@ final class CommunityModel: ObservableObject {
     /// While the Walker session runs, VoiceOver announcements from this tab stay quiet so they never talk
     /// over its hazard alerts (the status text still updates).
     var walkerRunning = false
+    /// False while another tab shows: late results (an SSE hazard, a vote answer) are not spoken there.
+    var tabVisible = false
 
-    init(api: APIClient) { self.api = api }
+    private var voteWatch: AnyCancellable?
+
+    init(api: APIClient) {
+        self.api = api
+        // A vote from the Scout tab refreshes an open Community view (the store has one copy; this re-reads it).
+        voteWatch = votes.objectWillChange.receive(on: DispatchQueue.main).sink { [weak self] in self?.objectWillChange.send() }
+    }
 
     func t(_ en: String, _ es: String) -> String { lang == "es" ? es : en }
 
@@ -103,9 +112,12 @@ final class CommunityModel: ObservableObject {
             resort()
             loaded = true
             status = nil
+            unreachable = false
         } catch {
             guard !Task.isCancelled else { return }
+            // SSE-up failures are not retried (the 15 s poll runs only while disconnected).
             status = t("Server unreachable", "Servidor no disponible")
+            unreachable = true
         }
     }
 
@@ -152,9 +164,9 @@ final class CommunityModel: ObservableObject {
                 pins[i] = h
             } else {
                 pins.append(h)
-                if Community.isFresh(lastSeen: h.lastSeen), !walkerRunning {
-                    UIAccessibility.post(notification: .announcement,
-                                         argument: t("New hazard reported, ", "Nuevo peligro reportado, ") + Community.distance(d, lang: lang))
+                if Community.isFresh(lastSeen: h.lastSeen) {
+                    postVoiceOverAnnouncement(t("New hazard reported, ", "Nuevo peligro reportado, ") + Community.distance(d, lang: lang),
+                                              walkerRunning: walkerRunning, tabVisible: tabVisible)
                 }
             }
             pins.sort { ($0.distanceM ?? .infinity) < ($1.distanceM ?? .infinity) }
@@ -173,12 +185,13 @@ final class CommunityModel: ObservableObject {
 
     /// "Marked still there by you" / "Marked gone by you", or nil before this device voted.
     func votedText(_ id: String) -> String? {
-        voted[id].map { $0 == "up" ? t("Marked still there by you", "Marcado como presente por ti")
+        votes.vote(id).map { $0 == "up" ? t("Marked still there by you", "Marcado como presente por ti")
                                    : t("Marked gone by you", "Marcado como ya no está por ti") }
     }
 
     func vote(_ id: String, at pin: Geo.Fix, up: Bool) async {
-        guard voted[id] == nil, !voting.contains(id) else { return }
+        guard !voting.contains(id) else { return }
+        if let done = votedText(id) { announce(done); return } // a tap on a view that was not refreshed yet
         guard canVote(pin) else {
             announce(fixUsable ? t("Get closer to confirm", "Acércate para confirmar") : t("Waiting for GPS", "Esperando GPS"))
             return
@@ -187,8 +200,7 @@ final class CommunityModel: ObservableObject {
         defer { voting.remove(id) }
         do {
             _ = try await api.vote(id, up: up, source: "scout")
-            voted[id] = up ? "up" : "down"
-            UserDefaults.standard.set(voted, forKey: Self.votedKey)
+            votes.record(id, up: up)
             announce(votedText(id)!)
             user = try? await api.user()
             await refresh()
@@ -221,8 +233,15 @@ final class CommunityModel: ObservableObject {
 
     func announce(_ text: String) {
         status = text
-        if !walkerRunning { UIAccessibility.post(notification: .announcement, argument: text) }
+        postVoiceOverAnnouncement(text, walkerRunning: walkerRunning, tabVisible: tabVisible)
     }
+}
+
+/// Drop the post while Walker is scanning, or while the caller's tab is not visible.
+/// Nothing is queued: a late Scout report must not talk over safety alerts.
+func postVoiceOverAnnouncement(_ text: String, walkerRunning: Bool, tabVisible: Bool = true) {
+    guard tabVisible, !walkerRunning else { return }
+    UIAccessibility.post(notification: .announcement, argument: text)
 }
 
 struct CommunityView: View {
@@ -231,14 +250,23 @@ struct CommunityView: View {
     @AppStorage("communityMode") private var mode = "list"
     @State private var path: [String] = []
     @State private var openedLaunchHazard = false
-    @State private var mapPosition: MapCameraPosition = .automatic
-    @State private var mapCentered = false
+    /// Hazards stacked on one spot of the map, offered as a choice (nil: no sheet).
+    @State private var stacked: StackedSpot?
+
+    struct StackedSpot: Identifiable {
+        let ids: [String]
+        var id: String { ids.joined(separator: ",") }
+    }
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     /// AppModel.running: the Walker session is live, so this tab makes no VoiceOver announcements.
     var walkerRunning: Bool
+    /// RootView's tab == .community.
+    var visible: Bool
 
-    init(api: APIClient, walkerRunning: Bool) {
+    init(api: APIClient, walkerRunning: Bool, visible: Bool = true) {
         self.walkerRunning = walkerRunning
+        self.visible = visible
         _model = StateObject(wrappedValue: CommunityModel(api: api))
     }
 
@@ -247,37 +275,107 @@ struct CommunityView: View {
     var body: some View {
         NavigationStack(path: $path) {
             VStack(spacing: 12) {
-                header
-                Picker(t("View", "Vista"), selection: $mode) {
-                    Text(t("List", "Lista")).tag("list")
-                    Text(t("Map", "Mapa")).tag("map")
+                Group {
+                    header
+                    Picker(t("View", "Vista"), selection: $mode) {
+                        Text(t("List", "Lista")).tag("list")
+                        Text(t("Map", "Mapa")).tag("map")
+                    }
+                    .pickerStyle(.segmented)
+                    if let status = model.status {
+                        HStack {
+                            Text(status).foregroundStyle(Color.slate).accessibilityAddTraits(.updatesFrequently)
+                            if model.unreachable {
+                                Button(t("Try again", "Reintentar")) { Task { await model.refresh() } }
+                                    .font(.headline)
+                                    .frame(minHeight: 44)
+                            }
+                        }
+                    }
+                    if mode == "map" { map }
                 }
-                .pickerStyle(.segmented)
-                if let status = model.status {
-                    Text(status).foregroundStyle(Color.slate).accessibilityAddTraits(.updatesFrequently)
-                }
-                if mode == "map" { map } else { list }
+                .padding(.horizontal, 16)
+                if mode != "map" { list } // sets its own 16 pt margins, so its cards line up with the picker
             }
-            .padding(.horizontal, 16)
             .background(Color.navy.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: String.self) { HazardDetailView(id: $0, model: model) }
         }
         .onChange(of: walkerRunning, initial: true) { model.walkerRunning = walkerRunning }
+        .onChange(of: visible, initial: true) { model.tabVisible = visible }
         .onAppear {
             model.start()
             // `-openHazard <id>` opens one detail at launch (demo and screenshots).
             if !openedLaunchHazard, let id = UserDefaults.standard.string(forKey: "openHazard") { path = [id] }
+            // `-showStack <id,id>` opens the "Hazards at this spot" chooser at launch (screenshots, no map tap needed).
+            if !openedLaunchHazard, let ids = UserDefaults.standard.string(forKey: "showStack") {
+                stacked = StackedSpot(ids: ids.split(separator: ",").map(String.init))
+            }
             openedLaunchHazard = true
         }
         .onDisappear { model.stop() }
+        .sheet(item: $stacked) { spot in stackSheet(spot) }
+    }
+
+    /// Opaque navy sheet (the system dialog put blue text on glass over the map at about 1.5:1).
+    private func stackSheet(_ spot: StackedSpot) -> some View {
+        let pins = model.pins.filter { spot.ids.contains($0.id) }
+        return NavigationStack {
+            List {
+                if pins.isEmpty {
+                    Text(t("These hazards are no longer on the map", "Estos peligros ya no están en el mapa"))
+                        .foregroundStyle(Color.slate)
+                        .listRowBackground(Color.white.opacity(0.06))
+                }
+                ForEach(pins) { pin in
+                    let name = model.name(type: pin.type, label: pin.label)
+                    let category = HazardMap.category(pin.category, lang: model.lang)
+                    let distance = pin.distanceM.map { Community.distance($0, lang: model.lang) }
+                    Button {
+                        stacked = nil
+                        path.append(pin.id)
+                    } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(name).font(.headline).foregroundStyle(.white)
+                                // Category and distance: stacked hazards often share a name.
+                                Text([category, distance].compactMap { $0 }.joined(separator: ", "))
+                                    .foregroundStyle(Color.slate)
+                            }
+                            Spacer(minLength: 8)
+                            Image(systemName: "chevron.right").font(.footnote.bold()).foregroundStyle(Color.slate)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        // The button's one label, as a sentence: "Sample. Trash bin, permanent, 440 feet".
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel((pin.sample == true ? t("Sample. ", "Muestra. ") : "")
+                                            + [name, category.lowercased(), distance].compactMap { $0 }.joined(separator: ", "))
+                    }
+                    .accessibilityHint(t("Opens details", "Abre los detalles"))
+                    .listRowBackground(Color.white.opacity(0.06))
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(Color.navy)
+            .navigationTitle(t("Hazards at this spot", "Peligros en este punto"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button(t("Cancel", "Cancelar")) { stacked = nil } }
+            }
+        }
+        // White toolbar text: the app's blue tint on the glass Cancel capsule was about 3:1.
+        .tint(.white)
+        .presentationDetents([.medium, .large])
+        .presentationBackground(Color.navy)
     }
 
     private var header: some View {
-        HStack(alignment: .firstTextBaseline) {
+        let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+                                                  : AnyLayout(HStackLayout(alignment: .firstTextBaseline))
+        return layout {
             Text(t("Community", "Comunidad")).font(.largeTitle.bold()).foregroundStyle(.white)
                 .accessibilityAddTraits(.isHeader)
-            Spacer()
+                .frame(maxWidth: .infinity, alignment: .leading)
             if let u = model.user {
                 Text(t("You: \(Int(u.karma)) points", "Tú: \(Int(u.karma)) puntos"))
                     .font(.headline).foregroundStyle(Color.slate)
@@ -289,6 +387,11 @@ struct CommunityView: View {
     private var list: some View {
         List {
             Section {
+                if !model.loaded && model.status == nil {
+                    ProgressView(t("Loading hazards", "Cargando peligros"))
+                        .frame(maxWidth: .infinity)
+                        .listRowBackground(Color.white.opacity(0.06))
+                }
                 if model.pins.isEmpty && model.loaded {
                     Text(t("No hazards reported within 1 mile", "Sin peligros reportados a menos de 1 milla"))
                         .foregroundStyle(Color.slate)
@@ -307,6 +410,7 @@ struct CommunityView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .contentMargins(.horizontal, 16, for: .scrollContent)
         .scrollContentBackground(.hidden)
         .refreshable { await model.refresh() }
     }
@@ -314,12 +418,15 @@ struct CommunityView: View {
     private func row(_ pin: NearHazard) -> some View {
         let d = model.fix.map { Geo.distance($0, pin.fix) } ?? pin.distanceM
         let dir = model.fix.map { Community.direction(bearing: Geo.bearing(from: $0, to: pin.fix), heading: model.heading, lang: model.lang) }
+        // The Sample badge goes under the name at accessibility sizes, so the name never breaks mid-word beside it.
+        let titleRow = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+                                                    : AnyLayout(HStackLayout())
         return VStack(alignment: .leading, spacing: 4) {
-            HStack {
+            titleRow {
                 Text(model.name(type: pin.type, label: pin.label)).font(.title3.bold()).foregroundStyle(.white)
                 if pin.sample == true {
                     Text(t("Sample", "Muestra")).font(.caption.bold()).padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(Color.slate, in: Capsule()).foregroundStyle(.white)
+                        .background(Color.slate, in: Capsule()).foregroundStyle(Color.navy) // 7.29:1
                 }
             }
             Text([d.map { Community.distance($0, lang: model.lang) }, dir,
@@ -331,40 +438,40 @@ struct CommunityView: View {
     }
 
     private var map: some View {
-        Map(position: $mapPosition) {
-            UserAnnotation()
-            if let fix = model.fix {
-                MapCircle(center: CLLocationCoordinate2D(latitude: fix.lat, longitude: fix.lng), radius: Community.radiusM)
-                    .foregroundStyle(Color.control.opacity(0.08))
-                    .stroke(Color.control.opacity(0.6), lineWidth: 1.5)
+        HazardMap(pins: model.pins.map { pin in
+                      HazardMap.Pin(id: pin.id, coordinate: CLLocationCoordinate2D(latitude: pin.lat, longitude: pin.lng),
+                                    letter: String(pin.category.prefix(1)).uppercased(),
+                                    title: model.name(type: pin.type, label: pin.label), spoken: model.rowLabel(pin))
+                  },
+                  center: model.fix.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lng) },
+                  radiusM: Community.radiusM, loaded: model.loaded, lang: model.lang,
+                  onSelect: { path.append($0) }, onStack: { stacked = StackedSpot(ids: $0) })
+            // On the map normally; under it at accessibility sizes, where the taller legend would cover markers.
+            .overlay(alignment: .top) {
+                if !typeSize.isAccessibilitySize { HazardMapLegend(lang: model.lang).padding(.top, 8) }
             }
-            ForEach(model.pins) { pin in
-                Annotation(model.name(type: pin.type, label: pin.label), coordinate: CLLocationCoordinate2D(latitude: pin.lat, longitude: pin.lng)) {
-                    Button { path.append(pin.id) } label: {
-                        Text(String(pin.category.prefix(1)).uppercased())
-                            .font(.caption.bold())
-                            .frame(width: 28, height: 28)
-                            .background(Color.hazard, in: Circle())
-                            .overlay(Circle().stroke(.white, lineWidth: 2))
-                            .foregroundStyle(Color.navy)
-                    }
-                    .accessibilityLabel(model.rowLabel(pin))
-                }
+            .overlay { mapState } // the list's loading and empty states, on the map too
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .safeAreaInset(edge: .bottom) {
+                if typeSize.isAccessibilitySize { HazardMapLegend(lang: model.lang).frame(maxWidth: .infinity, alignment: .leading) }
             }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .padding(.bottom, 8)
-        .onAppear { mapCentered = false; centerMap() }
-        .onChange(of: model.fix) { if !mapCentered { centerMap() } }
+            .padding(.bottom, 8)
     }
 
-    /// Opens on the user with the whole 1-mile radius in view, plus 10% padding on each side.
-    private func centerMap() {
-        guard let fix = model.fix else { return }
-        let span = Community.radiusM * 2 * 1.2
-        mapPosition = .region(MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: fix.lat, longitude: fix.lng),
-                                                 latitudinalMeters: span, longitudinalMeters: span))
-        mapCentered = true
+    @ViewBuilder
+    private var mapState: some View {
+        if !model.loaded && model.status == nil {
+            ProgressView(t("Loading hazards", "Cargando peligros"))
+                .padding(12)
+                .background(Color.navy.opacity(0.9), in: RoundedRectangle(cornerRadius: 12))
+        } else if model.loaded && model.pins.isEmpty {
+            Text(t("No hazards reported within 1 mile", "Sin peligros reportados a menos de 1 milla"))
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+                .padding(12)
+                .background(Color.navy.opacity(0.9), in: RoundedRectangle(cornerRadius: 12))
+                .padding(16)
+        }
     }
 }
 
@@ -374,6 +481,14 @@ struct HazardDetailView: View {
     @State private var detail: HazardDetail?
     @State private var failed = false
     @State private var picking = false
+    /// Bumped by Try again; `.task(id:)` reloads, and cancels the load when the view goes away.
+    @State private var attempt = 0
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    /// Paired action buttons sit side by side, stacked at accessibility text sizes so labels never wrap mid-word.
+    private var pair: AnyLayout {
+        typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(spacing: 12)) : AnyLayout(HStackLayout(spacing: 12))
+    }
 
     private func t(_ en: String, _ es: String) -> String { model.t(en, es) }
 
@@ -382,16 +497,21 @@ struct HazardDetailView: View {
             VStack(alignment: .leading, spacing: 14) {
                 if let d = detail { content(d) } else if failed {
                     Text(t("Could not load this hazard", "No se pudo cargar este peligro")).foregroundStyle(Color.slate)
+                    Button { failed = false; attempt += 1 } label: {
+                        actionLabel(t("Try again", "Reintentar"), "arrow.clockwise")
+                    }
                 } else {
-                    ProgressView().frame(maxWidth: .infinity)
+                    ProgressView(t("Loading hazard", "Cargando peligro")).frame(maxWidth: .infinity)
                 }
             }
             .padding(16)
         }
+        // Room past the last action so it scrolls fully clear of the floating tab bar at large text sizes.
+        .contentMargins(.bottom, 96, for: .scrollContent)
         .background(Color.navy.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
-        .task { await load() }
+        .task(id: attempt) { await load() }
         .sheet(isPresented: $picking) {
             if let d = detail {
                 TypePicker(title: model.name(type: d.type, label: d.label), entries: model.taxonomy ?? [], lang: model.lang,
@@ -434,7 +554,7 @@ struct HazardDetailView: View {
                 fact(t("Distance", "Distancia"), Community.distance(dist, lang: model.lang) + ", "
                      + Community.direction(bearing: Geo.bearing(from: fix, to: d.fix), heading: model.heading, lang: model.lang))
             }
-            fact(t("Height", "Altura"), band(d.heightBand))
+            fact(t("Height", "Altura"), Community.band(d.heightBand, lang: model.lang))
             if let c = d.measurements?.clearanceM { fact(t("Clearance", "Espacio libre"), Community.distance(c, lang: model.lang)) }
             if let w = d.measurements?.widthM { fact(t("Width", "Ancho"), Community.distance(w, lang: model.lang)) }
             fact(t("Severity", "Gravedad"), "\(Community.confidence(d.severity)) / 3")
@@ -446,14 +566,16 @@ struct HazardDetailView: View {
 
         votes(d)
 
-        HStack(spacing: 12) {
+        pair {
             if model.taxonomy != nil {
                 Button { picking = true } label: { actionLabel(t("Wrong type", "Tipo incorrecto"), "pencil") }
             }
             Menu {
-                Button(t("Spam", "Spam")) { Task { await model.report(d.id, reason: "spam") } }
-                Button(t("Abuse", "Abuso")) { Task { await model.report(d.id, reason: "abuse") } }
-                Button(t("Other", "Otro")) { Task { await model.report(d.id, reason: "other") } }
+                Section(t("Report as", "Denunciar como")) {
+                    Button(t("Spam", "Spam")) { Task { await model.report(d.id, reason: "spam") } }
+                    Button(t("Abuse", "Abuso")) { Task { await model.report(d.id, reason: "abuse") } }
+                    Button(t("Other", "Otro")) { Task { await model.report(d.id, reason: "other") } }
+                }
             } label: { actionLabel(t("Report", "Denunciar"), "flag") }
             .accessibilityHint(t("Report spam or abuse", "Denunciar spam o abuso"))
         }
@@ -470,17 +592,20 @@ struct HazardDetailView: View {
         } else if d.status == "active", model.canVote(d.fix) {
             Text(t("Is it still there?", "¿Sigue ahí?")).font(.headline).foregroundStyle(.white)
                 .accessibilityAddTraits(.isHeader)
-            HStack(spacing: 12) {
+            pair {
                 Button { Task { await model.vote(d.id, at: d.fix, up: true); await load() } } label: {
                     actionLabel(t("Still there", "Sigue ahí"), "hand.thumbsup.fill", fill: .control)
                 }
                 Button { Task { await model.vote(d.id, at: d.fix, up: false); await load() } } label: {
-                    actionLabel(t("Gone", "Ya no está"), "hand.thumbsdown.fill", fill: .hazard)
+                    actionLabel(t("Gone", "Ya no está"), "hand.thumbsdown.fill") // orange is for hazards, not controls
                 }
             }
             .disabled(model.voting.contains(d.id))
+            .opacity(model.voting.contains(d.id) ? 0.4 : 1) // explicit fills ignore the system disabled fade
         } else if d.status == "active", !model.fixUsable {
-            Text(t("Waiting for GPS", "Esperando GPS")).foregroundStyle(Color.slate)
+            if model.status != t("Waiting for GPS", "Esperando GPS") { // the status line below already says it
+                Text(t("Waiting for GPS", "Esperando GPS")).foregroundStyle(Color.slate)
+            }
         } else if d.status == "active" {
             Text(t("Get closer to confirm. Votes need you within 1 mile.",
                    "Acércate para confirmar. Para votar debes estar a menos de 1 milla."))
@@ -489,10 +614,14 @@ struct HazardDetailView: View {
     }
 
     private func fact(_ key: String, _ value: String) -> some View {
-        HStack(alignment: .firstTextBaseline) {
+        // Key above value at accessibility sizes, so a long value never squeezes against its key.
+        let stacked = typeSize.isAccessibilitySize
+        let layout = stacked ? AnyLayout(VStackLayout(alignment: .leading, spacing: 0))
+                             : AnyLayout(HStackLayout(alignment: .firstTextBaseline))
+        return layout {
             Text(key).foregroundStyle(Color.slate)
-            Spacer()
-            Text(value).foregroundStyle(.white).multilineTextAlignment(.trailing)
+            if !stacked { Spacer(minLength: 8) }
+            Text(value).foregroundStyle(.white).multilineTextAlignment(stacked ? .leading : .trailing)
         }
         .accessibilityElement(children: .combine)
     }
@@ -503,14 +632,6 @@ struct HazardDetailView: View {
             .frame(maxWidth: .infinity, minHeight: 56)
             .background(fill, in: RoundedRectangle(cornerRadius: 12))
             .foregroundStyle(.white)
-    }
-
-    private func band(_ b: String) -> String {
-        switch b {
-        case "head": return t("Head height", "Altura de la cabeza")
-        case "dropoff": return t("Drop-off", "Desnivel")
-        default: return t("Ground", "Suelo")
-        }
     }
 
     private func relative(_ date: Date) -> String {

@@ -1,6 +1,8 @@
 import ARKit
+import Combine
 import SceneKit
 import SwiftUI
+import UIKit
 
 /// Walker (audio-first, slice 1 screen), Scout (sighted, phone in hand; PLAN.md 3.2) and Community tabs.
 struct RootView: View {
@@ -18,7 +20,7 @@ struct RootView: View {
             ScoutView(model: model, cameraLive: tab == .scout)
                 .tabItem { Label("Scout", systemImage: "camera.viewfinder") }
                 .tag(Tab.scout)
-            CommunityView(api: model.link.api, walkerRunning: model.running)
+            CommunityView(api: model.link.api, walkerRunning: model.running, visible: tab == .community)
                 .tabItem { Label(TTSChoice.lang() == "es" ? "Comunidad" : "Community", systemImage: "person.3") }
                 .tag(Tab.community)
         }
@@ -67,26 +69,54 @@ final class ScoutModel: ObservableObject, @unchecked Sendable { // main-confined
     struct Report { var id: String; var label: String; var merged: Bool }
 
     @Published var band = "ground"
-    @Published var status = "Tap an obstacle to report it"
+    @Published var status = ScoutStatus.prompt
     @Published var report: Report?
     /// Hazard types for the correction picker; nil until loaded.
     @Published var taxonomy: [HazardTypeEntry]?
     @Published var taxonomyFailed = false
     let lang = TTSChoice.lang()
     @Published var nearby: [NearHazard] = []
+    /// /near: idle until a fix exists, then loading, loaded, or failed. Empty is only `loaded`.
+    enum NearbyPhase { case idle, loading, loaded, failed }
+    @Published private(set) var nearbyPhase: NearbyPhase = .idle
     @Published var busy = false
+    /// Same gate as Community: stay quiet while Walker is scanning.
+    var walkerRunning = false
+    /// False on the other tabs. The report task can finish after Scout is no longer showing.
+    var scoutVisible = false
 
     private let link: ServerLink
-    init(link: ServerLink) { self.link = link }
+    /// True until the first fix is observed. The GPS retry and the prompt restore read this, not `status`.
+    private var awaitingFirstFix = true
+    private var nearToken = 0
+    /// Last report text considered for VoiceOver, so one transition is not spoken twice.
+    private var spoken: String?
+    private var voteWatch: AnyCancellable?
+
+    init(link: ServerLink, scoutVisible: Bool = false, walkerRunning: Bool = false) {
+        self.link = link
+        self.scoutVisible = scoutVisible
+        self.walkerRunning = walkerRunning
+        // A vote from the Community tab refreshes these rows (the store has one copy; this re-reads it).
+        voteWatch = VoteStore.shared.objectWillChange.receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.objectWillChange.send() }
+    }
+
+    var hasFix: Bool { link.localizer.fix != nil }
+    /// True while /near is in flight. A later GPS wake must not start a second request.
+    var nearPending: Bool { nearbyPhase == .loading }
 
     func submit(_ capture: ScoutCapture) {
         guard let fix = capture.world.flatMap(link.localizer.locate) ?? link.localizer.fix else {
-            status = "No GPS fix yet, try again outdoors"
+            status = .noFixForReport
             return
         }
+        awaitingFirstFix = false
         busy = true
         report = nil
-        status = "Reporting, naming can take 15 seconds"
+        spoken = nil // a new report speaks even when the words match the last one
+        status = .message("Reporting, naming can take 15 seconds")
+        speak(status.text)
         let band = band, heading = link.localizer.heading, api = link.api, map = link.map
         Task {
             do {
@@ -95,12 +125,17 @@ final class ScoutModel: ObservableObject, @unchecked Sendable { // main-confined
                 DispatchQueue.main.async {
                     if !r.id.isEmpty { map.markOwn(r.id) } // never passively downvote our own pin
                     self.report = r.id.isEmpty ? nil : Report(id: r.id, label: r.label, merged: r.merged) // no pin to correct
-                    self.status = r.id.isEmpty ? "Not pinned: \(r.label)" : r.merged ? "Added to existing pin: \(r.label)" : "Reported: \(r.label)"
+                    self.status = .message(r.id.isEmpty ? "Not pinned: \(r.label)" : r.merged ? "Added to existing pin: \(r.label)" : "Reported: \(r.label)")
                     self.busy = false
+                    self.speak(self.status.text)
                     self.refresh()
                 }
             } catch {
-                DispatchQueue.main.async { self.status = "Report failed: \(error.localizedDescription)"; self.busy = false }
+                DispatchQueue.main.async {
+                    self.status = .message("Report failed: \(error.localizedDescription)")
+                    self.busy = false
+                    self.speak(self.status.text)
+                }
             }
         }
     }
@@ -127,32 +162,100 @@ final class ScoutModel: ObservableObject, @unchecked Sendable { // main-confined
         Task {
             let r = try? await api.reclassify(id, type: entry.id)
             DispatchQueue.main.async {
-                self.status = r.map { $0.applied ? "Type changed to \(name)" : "Proposed \(name) (\($0.agreeing) of 3 agree)" }
-                    ?? "Correction failed"
+                self.status = .message(r.map { $0.applied ? "Type changed to \(name)" : "Proposed \(name) (\($0.agreeing) of 3 agree)" }
+                    ?? "Correction failed")
+                self.spoken = nil
+                self.speak(self.status.text)
                 self.refresh()
             }
         }
     }
 
     func refresh() {
-        guard let fix = link.localizer.fix else { status = "Waiting for GPS"; return }
+        guard let fix = link.localizer.fix else {
+            // No fix yet. Callers keep retrying off `hasFix`, so a rewritten status must not matter here.
+            if awaitingFirstFix && !busy && report == nil { status = .waitingForGPS }
+            return
+        }
+        if awaitingFirstFix {
+            awaitingFirstFix = false
+            if !busy && report == nil { status = .prompt } // first fix: back to the instruction
+        }
+        nearToken += 1
+        let token = nearToken
+        nearbyPhase = .loading
         let api = link.api, heading = link.localizer.heading
         Task {
-            let rows = try? await api.near(lat: fix.lat, lng: fix.lng, radiusM: MapTuning.scoutRadiusM, heading: heading)
-            DispatchQueue.main.async { if let rows { self.nearby = rows } }
+            do {
+                let rows = try await api.near(lat: fix.lat, lng: fix.lng, radiusM: MapTuning.scoutRadiusM, heading: heading)
+                DispatchQueue.main.async {
+                    guard token == self.nearToken else { return }
+                    self.nearby = rows
+                    self.nearbyPhase = .loaded
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    guard token == self.nearToken else { return }
+                    self.nearbyPhase = .failed
+                }
+            }
         }
     }
 
+    /// Posted at a terminal report change, not from `body`, so a re-render does not repeat it.
+    /// Remembered even when dropped, so a report that finishes during Walker is not spoken later.
+    private func speak(_ text: String) {
+        guard text != spoken else { return }
+        spoken = text
+        postVoiceOverAnnouncement(text, walkerRunning: walkerRunning, tabVisible: scoutVisible)
+    }
+
+    /// Hazard ids with a vote being sent (both buttons disabled), as in Community.
+    @Published private(set) var voting: Set<String> = []
+
+    /// One vote per hazard per device, the same store Community uses.
+    let votes = VoteStore.shared
+
+    /// "up" / "down" once this device voted on the hazard, from either tab.
+    func myVote(_ id: String) -> String? { votes.vote(id) }
+
+    /// Same rules as the Community detail: one vote per hazard, a fresh accurate fix, disabled while sending,
+    /// and the result spoken through the Walker and tab gate.
     func vote(_ pin: NearHazard, up: Bool) {
+        guard !voting.contains(pin.id) else { return }
+        let name = name(pin)
+        if let mine = myVote(pin.id) { // a tap on a row that was not refreshed yet
+            announce(.message((mine == "up" ? "Already marked still there by you: " : "Already marked gone by you: ") + name))
+            return
+        }
+        guard let q = link.localizer.fixQuality,
+              Community.canVote(from: link.localizer.fix, accuracyM: q.accuracyM, ageS: q.ageS, to: pin.fix) else {
+            // Same distinctions as Community: no fix yet, a fix too weak or old to count, or too far away.
+            let fix = link.localizer.fixQuality
+            announce(.message(fix == nil ? "Waiting for GPS to vote on \(name)"
+                              : !Community.fixUsable(accuracyM: fix!.accuracyM, ageS: fix!.ageS)
+                                ? "GPS too weak to vote on \(name). Try again in the open"
+                                : "Get closer to vote on \(name)"))
+            return
+        }
+        voting.insert(pin.id)
         let api = link.api
         Task {
-            let r = try? await api.vote(pin.id, up: up, source: "scout")
+            let ok = (try? await api.vote(pin.id, up: up, source: "scout")) != nil
             DispatchQueue.main.async {
-                self.status = r.map { "Voted \(up ? "up" : "down") on \(self.name(pin)): confidence \(String(format: "%.1f", $0.confidence)), \($0.status)" }
-                    ?? "Vote failed"
+                self.voting.remove(pin.id)
+                if ok { self.votes.record(pin.id, up: up) }
+                self.announce(.message(ok ? (up ? "Marked still there by you: " : "Marked gone by you: ") + name
+                                          : "Vote failed: \(name)"))
                 self.refresh()
             }
         }
+    }
+
+    private func announce(_ s: ScoutStatus) {
+        status = s
+        spoken = nil // the same words after a new action are still news
+        speak(s.text)
     }
 }
 
@@ -169,7 +272,8 @@ struct ARPreview: UIViewRepresentable {
         view.automaticallyUpdatesLighting = false
         view.addGestureRecognizer(UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.tap)))
         view.isAccessibilityElement = true
-        view.accessibilityLabel = "Camera. Double tap to report what is in the middle of the view"
+        view.accessibilityLabel = "Camera"
+        view.accessibilityHint = "Double tap to report what is in the middle of the view"
         view.accessibilityTraits = .button
         setLive(view, cameraLive)
         return view
@@ -208,19 +312,21 @@ struct ScoutView: View {
     @State private var startedSession = false
     /// The hazard whose type is being corrected (sheet shown while set).
     @State private var picking: PickTarget?
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     struct PickTarget: Identifiable { let id: String; let name: String }
 
     init(model: AppModel, cameraLive: Bool = true) {
         self.model = model
         self.cameraLive = cameraLive
-        _scout = StateObject(wrappedValue: ScoutModel(link: model.link))
+        _scout = StateObject(wrappedValue: ScoutModel(link: model.link, scoutVisible: cameraLive, walkerRunning: model.running))
     }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 14) {
                 Text("Scout").font(.largeTitle.bold()).foregroundStyle(.white)
+                    .accessibilityAddTraits(.isHeader)
                 ARPreview(session: model.sensors.session, cameraLive: cameraLive) { capture in
                     if !scout.busy { scout.submit(capture) }
                 }
@@ -233,7 +339,7 @@ struct ScoutView: View {
                 }
                 .pickerStyle(.segmented)
                 .accessibilityLabel("Height of the hazard")
-                Text(scout.status)
+                Text(scout.status.text)
                     .font(.title3).foregroundStyle(.white).multilineTextAlignment(.center)
                     .accessibilityAddTraits(.updatesFrequently)
                 if let report = scout.report { correctButton(PickTarget(id: report.id, name: report.label), wide: true) }
@@ -250,6 +356,17 @@ struct ScoutView: View {
             if !model.running && SensorSession.isSupported { model.sensors.start(); startedSession = true }
             scout.refresh()
             scout.loadTaxonomy()
+        }
+        .onChange(of: model.running, initial: true) { scout.walkerRunning = model.running }
+        .onChange(of: cameraLive, initial: true) { scout.scoutVisible = cameraLive }
+        // Poll the localizer, not `status`. A tap before the first fix rewrites the status string
+        // and must not stop this. When a fix is in and /near is not already pending, refresh once.
+        .task {
+            while !Task.isCancelled && !scout.hasFix {
+                do { try await Task.sleep(for: .seconds(2)) } catch { return }
+            }
+            guard !Task.isCancelled, scout.hasFix, !scout.nearPending else { return }
+            scout.refresh()
         }
         .sheet(item: $picking) { target in
             TypePicker(title: target.name, entries: scout.taxonomy ?? [], lang: scout.lang) { entry in
@@ -272,9 +389,11 @@ struct ScoutView: View {
                 Label(wide ? "Correct type" : "", systemImage: "pencil")
                     .labelStyle(wide ? AnyLabelStyle(.titleAndIcon) : AnyLabelStyle(.iconOnly))
                     .font(wide ? .title3.bold() : .title2)
+                    .padding(wide ? 0 : 10)
                     .frame(maxWidth: wide ? .infinity : nil)
                     .frame(minWidth: 56, minHeight: 56)
-                    .background(wide ? Color.control : Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+                    .frame(maxHeight: wide ? nil : .infinity) // same height as the thumbs wells beside it
+                    .background(wide ? Color.control : Color.navy, in: RoundedRectangle(cornerRadius: 12))
                     .foregroundStyle(.white)
             }
             .accessibilityLabel("Correct type: \(target.name)")
@@ -284,26 +403,58 @@ struct ScoutView: View {
     private var nearbyList: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Nearby, 650 ft").font(.headline).foregroundStyle(.white)
+                Text("Nearby, 650 feet").font(.headline).foregroundStyle(.white)
+                    .accessibilityAddTraits(.isHeader)
                 Spacer()
                 Button { scout.refresh() } label: { Image(systemName: "arrow.clockwise").frame(width: 44, height: 44) }
                     .accessibilityLabel("Refresh nearby hazards")
+                    .disabled(scout.nearPending)
             }
-            if scout.nearby.isEmpty { Text("No hazards nearby").foregroundStyle(Color.slate) }
+            if scout.nearbyPhase == .loading {
+                ProgressView("Loading hazards")
+                    .tint(Color.slate)
+                    .foregroundStyle(Color.slate)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else if scout.nearbyPhase == .failed {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Could not load nearby hazards").foregroundStyle(Color.slate)
+                    Button("Try again") { scout.refresh() }
+                        .font(.headline)
+                        .frame(minHeight: 44)
+                        .foregroundStyle(Color.control)
+                }
+            } else if scout.nearbyPhase == .loaded, scout.nearby.isEmpty {
+                Text("No hazards nearby").foregroundStyle(Color.slate)
+            }
             ForEach(scout.nearby) { pin in
-                VStack(spacing: 8) {
-                HStack(spacing: 8) {
-                    VStack(alignment: .leading) {
-                        Text(scout.name(pin) + (pin.sample == true ? " (sample)" : "")).foregroundStyle(.white)
-                        Text("\(Int((pin.distanceM ?? 0) * 3.28084)) ft, \(pin.heightBand), confidence \(String(format: "%.1f", pin.confidence))")
+                // Buttons drop below the text at accessibility sizes instead of squeezing it.
+                let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+                                                          : AnyLayout(HStackLayout(spacing: 8))
+                layout {
+                    // Same formatting as the Community list: Sample badge, "220 feet · ground · confidence 3".
+                    VStack(alignment: .leading, spacing: 4) {
+                        let titleRow = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+                                                                    : AnyLayout(HStackLayout())
+                        titleRow {
+                            Text(scout.name(pin)).foregroundStyle(.white)
+                            if pin.sample == true {
+                                Text("Sample").font(.caption.bold()).padding(.horizontal, 6).padding(.vertical, 2)
+                                    .background(Color.slate, in: Capsule()).foregroundStyle(Color.navy)
+                            }
+                        }
+                        Text([pin.distanceM.map { Community.distance($0) }, Community.band(pin.heightBand).lowercased(),
+                              "confidence " + Community.confidence(pin.confidence)]
+                            .compactMap { $0 }.joined(separator: " · "))
                             .font(.footnote).foregroundStyle(Color.slate)
                     }
                     .accessibilityElement(children: .combine)
-                    Spacer()
-                    voteButton(pin, up: true)
-                    voteButton(pin, up: false)
-                    correctButton(PickTarget(id: pin.id, name: scout.name(pin)))
-                }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    HStack(spacing: 8) {
+                        voteButton(pin, up: true)
+                        voteButton(pin, up: false)
+                        correctButton(PickTarget(id: pin.id, name: scout.name(pin)))
+                    }
+                    .fixedSize(horizontal: false, vertical: true) // three wells, one height
                 }
                 .padding(8)
                 .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
@@ -312,14 +463,41 @@ struct ScoutView: View {
     }
 
     private func voteButton(_ pin: NearHazard, up: Bool) -> some View {
-        Button { scout.vote(pin, up: up) } label: {
+        let mine = scout.myVote(pin.id)
+        let sending = scout.voting.contains(pin.id)
+        return Button { scout.vote(pin, up: up) } label: {
             Image(systemName: up ? "hand.thumbsup.fill" : "hand.thumbsdown.fill")
                 .font(.title2)
-                .frame(width: 56, height: 56)
-                .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
-                .foregroundStyle(up ? Color.control : Color.hazard)
+                .padding(10) // the glyph stays inside its well at accessibility sizes
+                .frame(minWidth: 56, minHeight: 56) // grows with the symbol at large text sizes
+                .frame(maxHeight: .infinity)
+                // Navy well inside the card: #087FF5 is 4.66:1 on it (2.96:1 on the old white-10% surface).
+                .background(Color.navy, in: RoundedRectangle(cornerRadius: 12))
+                .foregroundStyle(up ? Color.control : Color.white) // orange is for hazards, not controls
         }
+        .disabled(sending || mine != nil)
+        .opacity(sending || (mine != nil && mine != (up ? "up" : "down")) ? 0.4 : 1) // your vote stays bright
         .accessibilityLabel(up ? "Still there: \(scout.name(pin))" : "Gone: \(scout.name(pin))")
+        .accessibilityValue(mine == (up ? "up" : "down") ? "Marked by you" : "")
+    }
+}
+
+/// Scout status line. GPS states are cases, not strings, so code never compares display text.
+enum ScoutStatus: Equatable {
+    case prompt
+    case waitingForGPS
+    /// A camera tap arrived before the first fix.
+    case noFixForReport
+    /// Report, vote and correction results.
+    case message(String)
+
+    var text: String {
+        switch self {
+        case .prompt: return "Tap an obstacle to report it"
+        case .waitingForGPS: return "Waiting for GPS"
+        case .noFixForReport: return "No GPS fix yet, try again outdoors"
+        case .message(let m): return m
+        }
     }
 }
 
@@ -390,6 +568,9 @@ struct TypePicker: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button(t("Cancel", "Cancelar"), action: cancel) } }
         }
+        // White text for Cancel, the picker values and the type rows: the app's blue tint was 2.7-3.5:1 on the
+        // sheet's glass and gray.
+        .tint(.white)
     }
 }
 
