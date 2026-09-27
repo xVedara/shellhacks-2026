@@ -269,10 +269,14 @@ final class MapRulesTests: XCTestCase {
 
     func voter() -> PassiveVoter { var v = PassiveVoter(); v.enabled = true; return v }
 
-    func testPassiveDownvoteOffByDefault() {
-        XCTAssertFalse(Tuning.passiveDownvotesEnabled)
+    func testPassiveDownvoteOnByDefault() {
+        XCTAssertTrue(Tuning.passiveDownvotesEnabled)
+        var v = PassiveVoter()
+        XCTAssertTrue(v.enabled)
+        XCTAssertEqual(walk(&v, [pin("p", 0, 0)]), ["p"]) // a perfect approach, nothing seen: one vote
         var off = PassiveVoter()
-        XCTAssertEqual(walk(&off, [pin("p", 0, 0)]), []) // a perfect approach, flag off: never votes
+        off.enabled = false
+        XCTAssertEqual(walk(&off, [pin("p", 0, 0)]), []) // switched off: never votes
     }
 
     func testPassiveDownvoteAllConditions() {

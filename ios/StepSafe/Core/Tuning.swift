@@ -133,8 +133,9 @@ enum Tuning {
     static let vehicleInPathMarginM: Float = 1.0
 
     // MARK: Community map
-    /// Passive walker downvotes (MapRules PassiveVoter). Off: a false downvote erases a real hazard.
-    static let passiveDownvotesEnabled = false
+    /// Passive walker downvotes (MapRules PassiveVoter): on. The server weighs each one 0.6, so a reporter's weight-1
+    /// pin clears only after two different walkers pass it and see nothing (Ara 2026-09-26).
+    static let passiveDownvotesEnabled = true
 
     // MARK: Controls
     static let doublePressWindow: Double = 2

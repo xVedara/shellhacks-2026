@@ -76,6 +76,12 @@ const lng = { type: 'number', minimum: -180, maximum: 180 };
 const idParams = { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] };
 
 export const voteWeight = (karma: number) => 1 + Math.log(1 + Math.max(karma, 0));
+/**
+ * A walker down-vote is only ever the phone's passive "walked right past, saw nothing" (walkers have no down button).
+ * Fixed weight, not karma-scaled: a reporter's weight-1 pin survives one miss (0.4) and clears after a second
+ * device's miss (-0.2). One vote per device per pin, so the same walker passing twice does not stack.
+ */
+export const WALKER_MISS_WEIGHT = 0.6;
 const toId = (s: string) => (/^[a-f0-9]{24}$/i.test(s) ? new ObjectId(s) : null);
 const defaultName = (id: string) => `Neighbor-${id.slice(0, 4)}`;
 /** Public stand-in for a device id: the raw id works as a credential, so never echo it. */
@@ -296,7 +302,7 @@ export function buildApp({
   /** Records (or replaces) a device's vote and recomputes confidence, expiry, and clearing. Null if the hazard is gone. */
   async function castVote(h: HazardDoc, dev: string, vote: Vote, source: Source) {
     const user = await ensureUser(dev);
-    const weight = voteWeight(user.karma) * (vote === 'down' && source === 'walker' ? 0.5 : 1);
+    const weight = vote === 'down' && source === 'walker' ? WALKER_MISS_WEIGHT : voteWeight(user.karma);
     const now = new Date();
     await votes.replaceOne(
       { hazardId: h._id, deviceId: dev },
@@ -322,7 +328,7 @@ export function buildApp({
       await votes.deleteMany({ hazardId: h._id }); // hazard vanished (TTL) mid-request: drop the orphan vote
       return null;
     }
-    if (updated.status === 'active' && confidence < -2) {
+    if (updated.status === 'active' && confidence < 0) {
       // conditional on status so only one concurrent voter settles karma
       const cleared = await hazards.findOneAndUpdate(
         { _id: h._id, status: 'active' },

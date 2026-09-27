@@ -265,9 +265,9 @@ struct HeadsUpState {
 }
 
 /// Passive walker downvotes (PLAN.md section 4): a pin the walker walked right up to while path guard watched
-/// the whole way, and path guard never saw anything of that band near it. OFF by default
-/// (Tuning.passiveDownvotesEnabled): a false downvote erases a real hazard for the next walker.
-/// When enabled, all of these must hold:
+/// the whole way, and path guard never saw anything of that band near it. ON by default
+/// (Tuning.passiveDownvotesEnabled); the server weighs it a fixed 0.6, so one false miss never erases a pin alone.
+/// All of these must hold:
 /// - at EVERY approach step: GPS accuracy <= 5 m, fix under 3 s old, a live path-guard output under 0.3 s old,
 ///   floor from the ARKit plane under the walker; one bad step spoils the approach (until 10 m away again);
 /// - the approach starts 6.5-8 m out and has >= 4 monotonically decreasing distance samples over >= 2 s,
