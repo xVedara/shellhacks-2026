@@ -78,8 +78,12 @@ struct BoxTracker {
     static let maxRollRateWalkingDegPerSec = 25.0
     /// A track re-found by bearing alone after longer than this unseen becomes a new track (fresh id).
     static let refindGapSeconds = 0.3
-    /// Standing: an alert needs this long of still-head growth samples in the current still window.
+    /// Standing: an alert needs this long of still-head growth samples in the current still window...
     static let stillMinSeconds = 0.6
+    /// ...or, for a close car growing fast (growth T >= 2 x minGrowthT within vehicleFastRangeM), this long: a car
+    /// crossing 2 m in front is in view ~0.8 s and recedes before 0.6 s of samples exist (night fly-by 03-39-39Z).
+    static let stillFastMinSeconds = 0.4
+    static let fastMinGrowthT = 2 * minGrowthT
     /// Walking: no growth samples while the head turns faster than this (deg/s).
     static let maxYawRateWalkingDegPerSec = 30.0
 
@@ -365,8 +369,11 @@ struct BoxTracker {
                 guard longLook || sweepPath else { continue }
             } else {
                 // Standing: >= stillMinSeconds of still-head samples, all in the current still window (samples are
-                // cleared when a window starts), whose growth passed the significance test above.
-                guard tr.samples.count >= 3, span >= Self.stillMinSeconds - 1e-6 else { continue }
+                // cleared when a window starts), whose growth passed the significance test above; a close car
+                // growing fast needs only stillFastMinSeconds.
+                let fast = span >= Self.stillFastMinSeconds - 1e-6 && Self.growthT(tr.samples) >= Self.fastMinGrowthT
+                    && Float(c.distance) < Tuning.vehicleFastRangeM && fastGuards(tr, distance: c.distance, ego: ego, forward: forward)
+                guard tr.samples.count >= 3, span >= Self.stillMinSeconds - 1e-6 || fast else { continue }
             }
             // Position: the last unclipped estimate, else (still entering from the side) direction x distance.
             let pos = tr.positions.last?.pos ?? walker + simd_normalize(flat) * Float(c.distance)
@@ -406,11 +413,27 @@ struct BoxTracker {
 
     /// The heading (world xz) lies inside the world azimuth span `bearing` widened by vehicleInPathMarginM at `range`,
     /// and range < vehicleInPathRangeM.
-    static func inPath(_ bearing: CGRect, range: Float, heading: SIMD2<Float>) -> Bool {
+    static func inPath(_ bearing: CGRect, range: Float, heading: SIMD2<Float>,
+                       marginM: Float = Tuning.vehicleInPathMarginM) -> Bool {
         guard range < Tuning.vehicleInPathRangeM, simd_length(heading) > 1e-3 else { return false }
         let h = unwrap(Double(atan2(heading.x, -heading.y)) * 180 / .pi, around: Double(bearing.midX))
-        let margin = Double(atan2(Tuning.vehicleInPathMarginM, max(range, 0.1))) * 180 / .pi
+        let margin = Double(atan2(marginM, max(range, 0.1))) * 180 / .pi
         return h >= Double(bearing.minX) - margin && h <= Double(bearing.maxX) + margin
+    }
+
+    /// Extra checks for the standing fast path (3 samples, 1 degree of freedom, so growth T alone is weak):
+    /// - head pitch still (< HeadMotion.stillRollDegPerSec): look-and-hold tests yaw and roll only, and a nod grows
+    ///   a box whose bottom the image edge cuts off (a parked car under ~2 m);
+    /// - the pessimistic slope (slope - pessimisticSE x SE, at zMid) still leaves an own approach >= 1.5 m/s;
+    /// - the box itself spans the look direction (inPath, no margin): a side-clipped car has no world position, hence
+    ///   no miss, and a car in the near lane beside the walker must not pass as one crossing in front.
+    func fastGuards(_ tr: Track, distance: Double, ego: Double, forward: SIMD2<Float>) -> Bool {
+        guard head.pitchRate < HeadMotion.stillRollDegPerSec, let (slope, se) = Self.growthSlope(tr.samples),
+              !tr.samples.isEmpty else { return false }
+        let meanLog = tr.samples.map { log(max($0.ang, 1e-9)) }.reduce(0, +) / Double(tr.samples.count)
+        let zMid = tr.heightM / (2 * tan(exp(meanLog) / 2))
+        guard zMid * (slope - Self.pessimisticSE * se) - ego >= Double(Tuning.vehicleMinClosingSpeedMps) else { return false }
+        return Self.inPath(tr.bearing, range: Float(distance), heading: forward, marginM: 0)
     }
 
     /// Least-squares world velocity over at least 3 positions spanning 0.4 s.
@@ -431,22 +454,26 @@ struct HeadMotion {
     static let window = 0.2
     static let stillYawDegPerSec = 12.0
     static let stillRollDegPerSec = 5.0
-    private var history: [(t: Double, yaw: Double, roll: Double)] = []
+    private var history: [(t: Double, yaw: Double, roll: Double, pitch: Double)] = []
     private(set) var yawRate = 0.0
     private(set) var rollRate = 0.0
+    /// Nod rate (deg/s). Not part of `still` (look-and-hold); BoxTracker's standing fast path requires it.
+    private(set) var pitchRate = 0.0
     var still: Bool { yawRate < Self.stillYawDegPerSec && rollRate < Self.stillRollDegPerSec }
 
     mutating func update(time: Double, rotation: simd_float3x3) {
         let fwd = -rotation.columns.2
         let yaw = Double(atan2(fwd.x, -fwd.z)) * 180 / .pi, roll = BoxTracker.roll(rotation)
+        let pitch = Double(atan2(fwd.y, (fwd.x * fwd.x + fwd.z * fwd.z).squareRoot())) * 180 / .pi
         history.removeAll { $0.t >= time }
         while history.count > 1, history[1].t <= time - Self.window { history.removeFirst() }
         if let ref = history.first {
             rollRate = abs(roll - ref.roll) / (time - ref.t)
+            pitchRate = abs(pitch - ref.pitch) / (time - ref.t)
             yawRate = abs(BoxTracker.unwrap(yaw, around: ref.yaw) - ref.yaw) / (time - ref.t)
         } else {
-            rollRate = 0; yawRate = 0
+            rollRate = 0; yawRate = 0; pitchRate = 0
         }
-        history.append((time, yaw, roll))
+        history.append((time, yaw, roll, pitch))
     }
 }

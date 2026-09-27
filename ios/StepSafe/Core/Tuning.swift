@@ -152,6 +152,9 @@ enum Tuning {
     /// 18-19-51Z: 1 more nuisance tag of 34, FA/min unchanged.
     static let vehicleInPathRangeM: Float = 6
     static let vehicleInPathMarginM: Float = 1.0
+    /// Standing, head still: a car closer than this growing fast may alert on 0.4 s of samples (BoxTracker
+    /// stillFastMinSeconds). Night fly-by 03-39-39Z: car at 2 m. Chest walks, head walk, jitter: no change.
+    static let vehicleFastRangeM: Float = 4
 
     // MARK: Community map
     /// Passive walker downvotes (MapRules PassiveVoter): on. The server weighs each one 0.6, so a reporter's weight-1
