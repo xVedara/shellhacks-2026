@@ -86,16 +86,16 @@ The web UI loads Inter through `next/font`. License: OFL-1.1, Copyright 2016 The
 
 `ios/CREDITS.md` records the YOLO export as coremltools 9.0 and PyTorch 2.7.0. Both are BSD-3-Clause. Neither is bundled. Nothing in the repo pins those versions. coremltools is Copyright 2020-2023 Apple Inc.
 
-`brandguide/make_icons.py` sizes the logos with Pillow (MIT-CMU). The copyright text is [LICENSES/pillow-MIT-CMU.txt](LICENSES/pillow-MIT-CMU.txt). Pillow is not bundled. `brandguide/logo-blue-1024.png` and `brandguide/logo-dark-1024.png` were made with GPT Image 2 (OpenAI).
+`brandguide/make_icons.py` sizes the logos with Pillow (MIT-CMU). The copyright text is [LICENSES/pillow-MIT-CMU.txt](LICENSES/pillow-MIT-CMU.txt). Pillow is not bundled. `brandguide/logo-blue-1024.png` and `brandguide/logo-dark-1024.png` were made with GPT Image 2.5 (OpenAI).
 
-## AI tools
+## AI tools used to build it
 
-Dev Goswami used Cursor (IDE and cloud agents) and Grok (including Grok Bot). Cursor cloud agents authored commits and opened pull requests. A Cursor cloud agent coordinated later review, verification, and design mockups.
+StepSafe was built at ShellHacks 2026 with AI coding tools.
+
+Dev Goswami used Cursor (IDE and cloud agents) and Grok (including Grok Bot).
 
 Ara Babigian used Claude Code (Anthropic).
 
-Commit messages name two review gates: Claude Opus (Anthropic) and Codex (OpenAI).
-
-Logos were made with GPT Image 2 (OpenAI).
+Models used: Grok 4.7, Claude Code, Claude Opus, Codex, GPT Image 2.5.
 
 The running app also calls Gemini, Qwen through Ollama, ElevenLabs, and on-device YOLO11s (listed above). Those runtime calls did not write the git history.
