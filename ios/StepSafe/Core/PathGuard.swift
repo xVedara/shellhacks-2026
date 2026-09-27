@@ -39,6 +39,9 @@ struct Detection {
     /// Metres to the right of the walking line (negative = left).
     var lateral: Float
     var pointCount: Int
+    /// Drop-offs only: the floor ahead falls smoothly (a ramp), spoken "Slope down" (PathGuard.slopeLabel,
+    /// HazardTracker keeps it per episode). Detection and timing do not depend on it.
+    var slope = false
     /// Set for .closing only; then `ahead` is the object's horizontal distance (range), not the along-lane part.
     var closing: Closing? = nil
     /// A drop-off spoken right after a closing phrase: just "Drop-off ahead.", no tone (it follows at once, as
@@ -157,6 +160,21 @@ enum PathGuard {
 
         var ground = Accumulator(), head = Accumulator(), drop = Accumulator()
         var expected = 0, drops = 0, missing = 0
+        // Slope label: floor-or-below lane heights per (lateral strip, bin ahead), and the drop pixels' points.
+        let profileLo = Tuning.dropoffNearM - Tuning.dropoffStepRunM
+        let profileBins = Int(((Tuning.laneFarM - profileLo) / Tuning.dropoffProfileBinM).rounded())
+        var profile = [[[Float]]](repeating: [[Float]](repeating: [], count: profileBins),
+                                  count: Tuning.dropoffProfileStrips)
+        var dropPoints: [(strip: Int, bin: Int?, h: Float)] = []
+        func strip(_ lateral: Float) -> Int {
+            let x = min(max(lateral, -Tuning.laneHalfWidthM), Tuning.laneHalfWidthM)
+            return min(Int((x + Tuning.laneHalfWidthM) / (2 * Tuning.laneHalfWidthM) * Float(Tuning.dropoffProfileStrips)),
+                       Tuning.dropoffProfileStrips - 1)
+        }
+        func bin(_ ahead: Float) -> Int? {
+            guard ahead >= profileLo, ahead <= Tuning.laneFarM else { return nil }
+            return min(Int((ahead - profileLo) / Tuning.dropoffProfileBinM), profileBins - 1)
+        }
         // Estimated floor: raise the ground band's lower edge so a wearer shorter than cameraHeightM
         // does not see the floor itself as an obstacle.
         let groundMin = f.floorIsEstimate ? Tuning.estimatedFloorGroundMinM : Tuning.groundBandMinM
@@ -168,14 +186,17 @@ enum PathGuard {
                 let dir = sharedRays?[i] ?? DepthRays.direction(u: u, v: v, intrinsics: f.intrinsics, rotation: rot)
                 let d = f.depth[i]
                 let valid = d > 0 && d.isFinite && f.confidence[i] >= Tuning.minConfidence
-                var h: Float = 0
+                var h: Float = 0, ahead: Float = 0, lateral: Float = 0
 
                 // Steps 1, 3, 4: unproject, lane box, height bands.
                 if valid {
                     let p = cam + dir * d
                     let rel = p - cam
-                    let ahead = simd_dot(rel, fwd), lateral = simd_dot(rel, right)
+                    ahead = simd_dot(rel, fwd); lateral = simd_dot(rel, right)
                     h = p.y - f.floorY
+                    if abs(lateral) <= Tuning.laneHalfWidthM, h < Tuning.groundBandMinM, let b = bin(ahead) {
+                        profile[strip(lateral)][b].append(h)
+                    }
                     if abs(lateral) <= Tuning.laneHalfWidthM,
                        ahead >= Tuning.laneNearM, ahead <= Tuning.laneFarM {
                         var label = PixelLabel.lane
@@ -203,9 +224,9 @@ enum PathGuard {
                 expected += 1
                 let isMissing = !valid, isDrop = valid && h < -Tuning.dropoffDepthM
                 if isMissing { missing += 1 }
-                if isDrop { drops += 1 }
+                if isDrop { drops += 1; dropPoints.append((strip(lateral), bin(ahead), h)) }
                 if isMissing || isDrop {
-                    drop.add(e, eAhead, eLateral)
+                    drop.add(e, eAhead, eLateral, noDepth: isMissing)
                     if wantLabels { result.labels[i] = PixelLabel.dropOff }
                 }
             }
@@ -218,12 +239,67 @@ enum PathGuard {
             result.detections[.headHeight] = head.detection(.headHeight)
         }
         // Floor out of view -> few expected pixels -> no missing-floor drop-off.
-        if (!f.floorIsEstimate && drops >= Tuning.minPointsDropoff) ||
-            (expected >= Tuning.dropoffMinExpectedPoints &&
-             Float(missing) >= Tuning.dropoffMissingFraction * Float(expected)) {
-            result.detections[.dropOff] = drop.detection(.dropOff)
+        let missingRule = expected >= Tuning.dropoffMinExpectedPoints &&
+            Float(missing) >= Tuning.dropoffMissingFraction * Float(expected)
+        if (!f.floorIsEstimate && drops >= Tuning.minPointsDropoff) || missingRule {
+            var d = drop.detection(.dropOff)
+            // No-depth pixels (puddle, dark mat, dropped depth edge) set the spoken distance but are not in the
+            // profile: if the nearest one is, or many are in the zone, the label is "Drop-off".
+            d.slope = !missingRule && !drop.nearestNoDepth && missing < Tuning.dropoffSlopeMaxOutliers
+                && slopeLabel(profile, dropPoints: dropPoints)
+            result.detections[.dropOff] = d
         }
         return result
+    }
+
+    /// pathguard_slope.classify (after the missing-floor check): true only if the floor falls smoothly. Any doubt
+    /// (too few points, an edge at the view's bottom, a step, drop pixels the profile does not explain) is false.
+    static func slopeLabel(_ profile: [[[Float]]], dropPoints: [(strip: Int, bin: Int?, h: Float)]) -> Bool {
+        let med: [[Float?]] = profile.map { $0.map { bin in
+            guard bin.count >= Tuning.dropoffProfileMinPoints else { return nil }
+            let s = bin.sorted(), n = s.count
+            return n % 2 == 1 ? s[n / 2] : (s[n / 2 - 1] + s[n / 2]) / 2
+        } }
+        let lo = Tuning.dropoffNearM - Tuning.dropoffStepRunM, width = Tuning.dropoffProfileBinM
+        let zone = (0..<(med.first?.count ?? 0)).filter {
+            let c = lo + (Float($0) + 0.5) * width
+            return c >= Tuning.dropoffNearM && c <= Tuning.dropoffFarM
+        }
+        for m in med {
+            if 2 * zone.filter({ m[$0] != nil }).count < zone.count { return false }
+            guard let first = m.first(where: { $0 != nil }) ?? nil, first >= -Tuning.dropoffSlopeStartMaxM else { return false }
+            if stripStep(m) >= Tuning.dropoffSlopeMaxStepM { return false }
+        }
+        let unexplained = dropPoints.filter { pt in
+            guard let b = pt.bin, let ref = med[pt.strip][b] else { return true }
+            return pt.h < ref - Tuning.dropoffSlopeOutlierM
+        }.count
+        return unexplained < Tuning.dropoffSlopeMaxOutliers
+    }
+
+    /// pathguard_slope.strip_step: the largest fall between non-empty bins at most dropoffStepRunM apart, or between
+    /// two non-empty bins with only empty bins between them, however far apart.
+    /// Infinity when nothing can be compared: the first bin below -dropoffDepthM is the first non-empty one, or the
+    /// floor-level profile ends more than dropoffStepRunM before laneFarM.
+    static func stripStep(_ med: [Float?]) -> Float {
+        let lo = Tuning.dropoffNearM - Tuning.dropoffStepRunM, run = Tuning.dropoffStepRunM
+        let width = Tuning.dropoffProfileBinM
+        let seen = med.indices.filter { med[$0] != nil }
+        guard let first = seen.first, let last = seen.last else { return 0 }
+        if let below = seen.first(where: { med[$0]! < -Tuning.dropoffDepthM }), below == first { return .infinity }
+        if med[last]! >= -Tuning.dropoffDepthM, lo + Float(last + 1) * width < Tuning.laneFarM - run { return .infinity }
+        var best: Float = 0
+        for a in seen.indices {
+            let i = seen[a], hi = med[i]!
+            for b in (a + 1)..<seen.count {
+                let j = seen[b], fall = hi - med[j]!, dist = Float(j - i) * width
+                // Across only empty bins the fall counts whatever the gap: an occlusion shadow, or depth-edge pixels
+                // ARKit marks low-confidence, hide what is between, so the whole fall may be one step.
+                if dist <= run + 1e-6 || b == a + 1 { best = max(best, fall) }
+                if dist > run + 1e-6 { break }
+            }
+        }
+        return best
     }
 
     private struct Accumulator {
@@ -231,10 +307,12 @@ enum PathGuard {
         var nearest = SIMD3<Float>(repeating: 0)
         var nearestAhead = Float.greatestFiniteMagnitude
         var nearestLateral: Float = 0
+        /// The nearest point came from a pixel with no depth (drop-offs only).
+        var nearestNoDepth = false
 
-        mutating func add(_ p: SIMD3<Float>, _ ahead: Float, _ lateral: Float) {
+        mutating func add(_ p: SIMD3<Float>, _ ahead: Float, _ lateral: Float, noDepth: Bool = false) {
             count += 1
-            if ahead < nearestAhead { nearestAhead = ahead; nearest = p; nearestLateral = lateral }
+            if ahead < nearestAhead { nearestAhead = ahead; nearest = p; nearestLateral = lateral; nearestNoDepth = noDepth }
         }
 
         func detection(_ kind: HazardKind) -> Detection {
@@ -269,6 +347,8 @@ struct HazardTracker {
     private var firstHit: [HazardKind: Double] = [:]
     private var lastHit: [HazardKind: Double] = [:]
     private(set) var confirmed: [HazardKind: Detection] = [:]
+    /// A frame of the current run was not labelled slope: the rest of the episode is said as "Drop-off".
+    private var steep: [HazardKind: Bool] = [:]
 
     mutating func update(_ detections: [HazardKind: Detection], time: Double) -> [HazardKind: Detection] {
         for kind in HazardKind.allCases {
@@ -276,12 +356,15 @@ struct HazardTracker {
                 let start = firstHit[kind] ?? time
                 firstHit[kind] = start
                 lastHit[kind] = time
+                steep[kind] = steep[kind, default: false] || !d.slope
                 var d = d
                 d.seenAt = time
+                d.slope = d.slope && steep[kind] != true
                 if confirmed[kind] != nil || time - start >= Tuning.confirmSeconds { confirmed[kind] = d }
             } else {
                 firstHit[kind] = nil
                 if let last = lastHit[kind], time - last >= Tuning.clearSeconds { confirmed[kind] = nil }
+                if confirmed[kind] == nil { steep[kind] = false } // the run ended unconfirmed, or the episode cleared
             }
         }
         return confirmed

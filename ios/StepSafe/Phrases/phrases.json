@@ -78,6 +78,81 @@
    "es": "Desnivel, 16 pies, al frente"
   },
   {
+   "id": "pg-slope-1-left",
+   "en": "Slope down, 3 feet, left",
+   "es": "Pendiente, 3 pies, izquierda"
+  },
+  {
+   "id": "pg-slope-1-right",
+   "en": "Slope down, 3 feet, right",
+   "es": "Pendiente, 3 pies, derecha"
+  },
+  {
+   "id": "pg-slope-1-ahead",
+   "en": "Slope down, 3 feet, ahead",
+   "es": "Pendiente, 3 pies, al frente"
+  },
+  {
+   "id": "pg-slope-2-left",
+   "en": "Slope down, 6 feet, left",
+   "es": "Pendiente, 6 pies, izquierda"
+  },
+  {
+   "id": "pg-slope-2-right",
+   "en": "Slope down, 6 feet, right",
+   "es": "Pendiente, 6 pies, derecha"
+  },
+  {
+   "id": "pg-slope-2-ahead",
+   "en": "Slope down, 6 feet, ahead",
+   "es": "Pendiente, 6 pies, al frente"
+  },
+  {
+   "id": "pg-slope-3-left",
+   "en": "Slope down, 9 feet, left",
+   "es": "Pendiente, 9 pies, izquierda"
+  },
+  {
+   "id": "pg-slope-3-right",
+   "en": "Slope down, 9 feet, right",
+   "es": "Pendiente, 9 pies, derecha"
+  },
+  {
+   "id": "pg-slope-3-ahead",
+   "en": "Slope down, 9 feet, ahead",
+   "es": "Pendiente, 9 pies, al frente"
+  },
+  {
+   "id": "pg-slope-4-left",
+   "en": "Slope down, 13 feet, left",
+   "es": "Pendiente, 13 pies, izquierda"
+  },
+  {
+   "id": "pg-slope-4-right",
+   "en": "Slope down, 13 feet, right",
+   "es": "Pendiente, 13 pies, derecha"
+  },
+  {
+   "id": "pg-slope-4-ahead",
+   "en": "Slope down, 13 feet, ahead",
+   "es": "Pendiente, 13 pies, al frente"
+  },
+  {
+   "id": "pg-slope-5-left",
+   "en": "Slope down, 16 feet, left",
+   "es": "Pendiente, 16 pies, izquierda"
+  },
+  {
+   "id": "pg-slope-5-right",
+   "en": "Slope down, 16 feet, right",
+   "es": "Pendiente, 16 pies, derecha"
+  },
+  {
+   "id": "pg-slope-5-ahead",
+   "en": "Slope down, 16 feet, ahead",
+   "es": "Pendiente, 16 pies, al frente"
+  },
+  {
    "id": "pg-head-1-left",
    "en": "Head height, 3 feet, left",
    "es": "A la altura de la cabeza, 3 pies, izquierda"

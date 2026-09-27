@@ -21,6 +21,25 @@ enum Tuning {
     static let dropoffMinExpectedPoints = 200
     /// ...of which at least this share have no valid depth.
     static let dropoffMissingFraction: Float = 0.3
+    /// Slope label (analysis/pathguard_slope.py): a detected drop-off is spoken "Slope down" instead of "Drop-off"
+    /// when the lane's floor falls smoothly ahead (curb ramp, cross-slope). Detection and timing are unchanged; the
+    /// label defaults to "Drop-off" whenever anything is ambiguous. Per lateral strip (dropoffProfileStrips), the
+    /// median floor-or-below height every dropoffProfileBinM along ahead (bins with < dropoffProfileMinPoints empty),
+    /// from dropoffNearM - dropoffStepRunM to laneFarM. Slope needs: no missing-floor rule; every strip at least
+    /// half covered in the drop zone and starting within dropoffSlopeStartMaxM of the floor; no fall of
+    /// dropoffSlopeMaxStepM within dropoffStepRunM (or across any gap of empty bins); fewer than dropoffSlopeMaxOutliers
+    /// drop pixels off the profile (more than dropoffSlopeOutlierM below their bin, or in an empty bin).
+    /// Offline (chest-height recordings): 5/10 drop-off episodes spoken "Slope down" on 18-19-51Z, 0/3 on 18-16-49Z,
+    /// 1/10 on the test route; synthetic sweeps: 0 real drops labelled slope (steps, blurred curbs, holes, side
+    /// drops, low-confidence depth edges up to 8 px wide). A flip to "Drop-off" is re-announced (AlertPolicy).
+    static let dropoffStepRunM: Float = 0.3
+    static let dropoffSlopeMaxStepM: Float = 0.05
+    static let dropoffSlopeStartMaxM: Float = 0.06
+    static let dropoffSlopeOutlierM: Float = 0.05
+    static let dropoffSlopeMaxOutliers = 10
+    static let dropoffProfileBinM: Float = 0.1
+    static let dropoffProfileMinPoints = 10
+    static let dropoffProfileStrips = 3
     static let minPointsGround = 60
     static let minPointsHead = 60
     static let minPointsDropoff = 60

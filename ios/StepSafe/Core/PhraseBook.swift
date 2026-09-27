@@ -31,10 +31,27 @@ struct PhraseBook {
         return ids.isEmpty ? nil : ids
     }
 
-    /// Clip names "<id>.<lang>" for `text`, or nil (speech fallback) when the text is not fixed or any clip
-    /// is missing for that language.
+    /// Clip names "<id>.<lang>" for `text` (a missing clip replaced by its fallback's), or nil (speech fallback)
+    /// when the text is not fixed or a clip is missing for that language with no recorded fallback.
+    /// Ids decoded up front (priority 1: closing objects, drop-offs and slopes within 2 m, i.e. metre buckets 1-2).
+    static func urgent(_ ids: [String]) -> [String] {
+        ids.filter { $0.hasPrefix("cl-") || ["pg-dropoff-1-", "pg-dropoff-2-", "pg-slope-1-", "pg-slope-2-"].contains(where: $0.hasPrefix) }
+    }
+
+    /// A phrase whose clips are not recorded yet plays its fallback's clips (the scarier, already recorded words):
+    /// "Slope down, ..." -> "Drop-off, ...".
+    static func fallback(_ id: String) -> String? {
+        id.hasPrefix("pg-slope-") ? "pg-dropoff-" + id.dropFirst("pg-slope-".count) : nil
+    }
+
     func clipNames(for text: String, lang: String, exists: (String) -> Bool) -> [String]? {
-        guard let names = ids(for: text)?.map({ "\($0).\(lang)" }), names.allSatisfy(exists) else { return nil }
+        guard let ids = ids(for: text) else { return nil }
+        var names: [String] = []
+        for id in ids {
+            if exists("\(id).\(lang)") { names.append("\(id).\(lang)"); continue }
+            guard let alt = Self.fallback(id), exists("\(alt).\(lang)") else { return nil }
+            names.append("\(alt).\(lang)")
+        }
         return names
     }
 }

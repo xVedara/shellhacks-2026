@@ -94,4 +94,35 @@ final class AlertPolicyTests: XCTestCase {
         XCTAssertNotNil(policy.next([.ground: ground], now: 0, playing: AlertPolicy.serverPhrasePriority))
         XCTAssertNil(policy.next([.ground: ground], now: 0, playing: 3)) // a real priority 3 still is not cut by 3
     }
+
+    func testSlopeThatTurnsOutToBeADropOffIsSaidAgain() {
+        // Said "Slope down" at 1.5 m; the same hazard is then labelled "Drop-off": due at once (the scarier words),
+        // once only. The reverse (Drop-off, then Slope) is not repeated.
+        var p = AlertPolicy()
+        var slope = det(.dropOff, ahead: 1.5); slope.slope = true
+        p.markAnnounced(slope, now: 0)
+        XCTAssertNil(p.next([.dropOff: slope], now: 1, playing: nil), "same label: not repeated")
+        var steep = slope; steep.slope = false; steep.ahead = 1.4
+        XCTAssertEqual(p.next([.dropOff: steep], now: 1, playing: nil)?.slope, false)
+        XCTAssertEqual(AlertPolicy.phrase(steep), "Drop-off, 3 feet, ahead")
+        p.markAnnounced(steep, now: 1)
+        XCTAssertNil(p.next([.dropOff: steep], now: 2, playing: nil), "only once")
+        XCTAssertNil(p.next([.dropOff: slope], now: 3, playing: nil), "back to slope: nothing new")
+        var q = AlertPolicy()
+        q.markAnnounced(steep, now: 0)
+        XCTAssertNil(q.next([.dropOff: slope], now: 1, playing: nil), "Drop-off then Slope: not repeated")
+    }
+
+    func testFollowOnDropOffAheadClearsTheSlopeRecord() {
+        // "Car approaching... " then the follow-on "Drop-off ahead." for a hazard first said as "Slope down": the
+        // record becomes Drop-off, so a later Drop-off label is not said a third time.
+        var p = AlertPolicy()
+        var slope = det(.dropOff, ahead: 1.5); slope.slope = true
+        p.markAnnounced(slope, now: 0)
+        var follow = slope; follow.followOn = true
+        XCTAssertEqual(AlertPolicy.phrase(follow), AlertPolicy.dropOffAhead)
+        p.markAnnounced(follow, now: 1)
+        var steep = slope; steep.slope = false
+        XCTAssertNil(p.next([.dropOff: steep], now: 2, playing: nil))
+    }
 }

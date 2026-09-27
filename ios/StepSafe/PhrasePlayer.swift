@@ -15,7 +15,8 @@ final class PhrasePlayer: @unchecked Sendable {
             .flatMap { try? Data(contentsOf: $0) }
             .flatMap { try? PhraseBook(json: $0) }
         // Priority 1 phrases (drop-offs within 2 m, anything closing) are decoded up front: no decode delay then.
-        let urgent = book?.entries.map(\.id).filter { $0.hasPrefix("cl-") || $0.hasPrefix("pg-dropoff-1") || $0.hasPrefix("pg-dropoff-2") } ?? []
+        // Slope phrases too (same distances); clip() returns nil for one not recorded yet, so that costs nothing.
+        let urgent = PhraseBook.urgent(book?.entries.map(\.id) ?? [])
         warm.enter()
         DispatchQueue.global(qos: .userInitiated).async {
             urgent.forEach { _ = self.clip("\($0).\(self.lang)") }

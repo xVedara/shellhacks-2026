@@ -109,6 +109,8 @@ struct AlertPolicy {
         let trackId: Int?
         var time: Double
         var close: Bool
+        /// Announced as "Slope down": a later "Drop-off" for the same hazard is due again (the scarier words).
+        var slope = false
     }
 
     /// What is playing: its priority, the hazard if it is an alert, and when it ends.
@@ -203,7 +205,7 @@ struct AlertPolicy {
         switch d.kind {
         case .dropOff:
             if d.followOn { return dropOffAhead }
-            name = "Drop-off"
+            name = d.slope ? "Slope down" : "Drop-off"
         case .headHeight: name = "Head height"
         case .ground: name = "Obstacle"
         case .closing:
@@ -420,8 +422,10 @@ struct AlertPolicy {
         if let i = match(d, now: now) {
             history[i].time = now
             history[i].close = history[i].close || close
+            history[i].slope = history[i].slope && d.slope && !d.followOn // "Drop-off ahead." was said
         } else {
-            history.append(Announced(kind: d.kind, point: d.point, trackId: d.closing?.trackId, time: now, close: close))
+            history.append(Announced(kind: d.kind, point: d.point, trackId: d.closing?.trackId, time: now, close: close,
+                                     slope: d.kind == .dropOff && d.slope && !d.followOn))
         }
     }
 
@@ -438,6 +442,7 @@ struct AlertPolicy {
     private func isDue(_ d: Detection, now: Double) -> Bool {
         guard let i = match(d, now: now) else { return true } // new hazard, or window expired
         if d.kind == .closing { return false } // re-announced after closingRepeatSeconds (match expires)
+        if history[i].slope, !d.slope { return true } // said "Slope down", now "Drop-off": say the scarier words
         return d.ahead <= Tuning.repeatCloseDistance && !history[i].close
     }
 
