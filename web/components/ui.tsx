@@ -167,5 +167,4 @@ export const primaryButton = `${base} bg-primary font-semibold text-primary-ink 
 export const secondaryButton = `${base} border border-[var(--border-strong)] bg-transparent font-medium text-ink hover:bg-hover`;
 export const linkClass = "font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent";
 
-/** Side-panel layout from here up; the bottom sheet below. Matches --breakpoint-md in globals.css. */
-export const DESKTOP_QUERY = "(min-width: 1024px)";
+export { DESKTOP_MIN_WIDTH, DESKTOP_QUERY } from "@/lib/desktop";

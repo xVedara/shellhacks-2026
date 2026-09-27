@@ -105,11 +105,11 @@
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
 }
 
-/* The side-panel layout starts at 1024px. Below that (phones and portrait tablets)
-   the map runs full width under the bottom sheet; a 768px tablet left the map 128px wide.
-   Keep in step with DESKTOP_QUERY in components/ui.tsx. */
+/* Side panel from 1024px up. 768–1023px keeps the full-width map and bottom sheet.
+   Pixels, not rem, so a non-16px browser font cannot move this. Same value as
+   DESKTOP_MIN_WIDTH in lib/desktop.ts. */
 @theme {
-  --breakpoint-md: 64rem;
+  --breakpoint-md: 1024px;
 }
 
 html {
@@ -124,7 +124,7 @@ html {
   padding-right: env(safe-area-inset-right, 0px);
   padding-left: env(safe-area-inset-left, 0px);
 }
-@media (min-width: 1024px) {
+@media (min-width: theme(--breakpoint-md)) {
   .app-chrome {
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
@@ -133,7 +133,7 @@ html {
   padding-right: max(16px, env(safe-area-inset-right, 0px));
   padding-left: max(16px, env(safe-area-inset-left, 0px));
 }
-@media (min-width: 1024px) {
+@media (min-width: theme(--breakpoint-md)) {
   .top-bar {
     padding-right: max(24px, env(safe-area-inset-right, 0px));
     padding-left: max(24px, env(safe-area-inset-left, 0px));
@@ -280,7 +280,7 @@ body {
 .instrument-card {
   --panel-h: min(640px, 68%);
 }
-@media (min-width: 1024px) {
+@media (min-width: theme(--breakpoint-md)) {
   .sheet-panel {
     position: relative;
     top: auto;
