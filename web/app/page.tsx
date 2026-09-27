@@ -5,8 +5,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import HazardDetail, { useHazardDetail } from "@/components/HazardDetail";
 import Map from "@/components/Map";
 import { Legend, LiveDot, Notice, PageBar, PanelHead, PinTile, SampleBadge, linkClass, primaryButton, secondaryButton } from "@/components/ui";
-import { API_URL, CATEGORY_META, GRAHAM_CENTER, HEIGHT_META, getVotedIds, relativeTime, typeDisplayName } from "@/lib/api";
+import { API_URL, CATEGORY_META, GRAHAM_CENTER, HEIGHT_META, relativeTime, typeDisplayName } from "@/lib/api";
 import { useLiveHazards, useNow, useTaxonomy, type Connection } from "@/lib/hooks";
+import { useVotedIds } from "@/lib/use-voted";
 
 const HOUR = 3_600_000;
 
@@ -85,7 +86,7 @@ export default function MapPage() {
   const { taxonomy } = useTaxonomy();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showOsm, setShowOsm] = useState(false);
-  const [voted] = useState<Set<string>>(() => (typeof window === "undefined" ? new Set() : getVotedIds()));
+  const voted = useVotedIds();
   const now = useNow(15_000);
   const panelHeading = useRef<HTMLHeadingElement>(null);
 

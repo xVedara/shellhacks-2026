@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applyTypePick, isTaxonomyArray, relativeTime, typeDisplayName, type HazardType, type ReclassifyPickState } from "./api.ts";
+import { applyTypePick, getVotedIds, isTaxonomyArray, relativeTime, rememberVote, typeDisplayName, type HazardType, type ReclassifyPickState } from "./api.ts";
 
 const trashBin: HazardType = { id: "trash-bin", en: "trash bin", es: "cubo de basura", category: "moving", defaultHeightBand: "ground" };
 const ladder: HazardType = { id: "ladder", en: "ladder", es: "escalera de mano", category: "temporary", defaultHeightBand: "head" };
@@ -72,6 +72,16 @@ test("relativeTime uses minutes, hours, and days, and rejects a bad timestamp", 
   assert.equal(relativeTime("2026-09-25T12:00:00.000Z", now), "yesterday");
   assert.equal(relativeTime("2026-09-26T12:00:30.000Z", now), "in under a minute");
   assert.equal(relativeTime("not-a-date", now), "unknown");
+});
+
+test("getVotedIds returns the same set until a vote is remembered", () => {
+  const before = getVotedIds();
+  assert.equal(getVotedIds(), before);
+  rememberVote("vote-queue-test-id");
+  const after = getVotedIds();
+  assert.equal(after.has("vote-queue-test-id"), true);
+  assert.notEqual(after, before);
+  assert.equal(getVotedIds(), after);
 });
 
 test("applyTypePick resetting type to 'No change' leaves a manually-set field alone", () => {
