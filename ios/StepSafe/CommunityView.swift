@@ -1,3 +1,4 @@
+import Combine
 import MapKit
 import SwiftUI
 import UIKit
@@ -35,7 +36,13 @@ final class CommunityModel: ObservableObject {
     /// False while another tab shows: late results (an SSE hazard, a vote answer) are not spoken there.
     var tabVisible = false
 
-    init(api: APIClient) { self.api = api }
+    private var voteWatch: AnyCancellable?
+
+    init(api: APIClient) {
+        self.api = api
+        // A vote from the Scout tab refreshes an open Community view (the store has one copy; this re-reads it).
+        voteWatch = votes.objectWillChange.receive(on: DispatchQueue.main).sink { [weak self] in self?.objectWillChange.send() }
+    }
 
     func t(_ en: String, _ es: String) -> String { lang == "es" ? es : en }
 
@@ -183,7 +190,8 @@ final class CommunityModel: ObservableObject {
     }
 
     func vote(_ id: String, at pin: Geo.Fix, up: Bool) async {
-        guard votes.vote(id) == nil, !voting.contains(id) else { return }
+        guard !voting.contains(id) else { return }
+        if let done = votedText(id) { announce(done); return } // a tap on a view that was not refreshed yet
         guard canVote(pin) else {
             announce(fixUsable ? t("Get closer to confirm", "Acércate para confirmar") : t("Waiting for GPS", "Esperando GPS"))
             return
@@ -311,25 +319,41 @@ struct CommunityView: View {
 
     /// Opaque navy sheet (the system dialog put blue text on glass over the map at about 1.5:1).
     private func stackSheet(_ spot: StackedSpot) -> some View {
-        NavigationStack {
-            List(model.pins.filter { spot.ids.contains($0.id) }) { pin in
-                Button {
-                    stacked = nil
-                    path.append(pin.id)
-                } label: {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(model.name(type: pin.type, label: pin.label)).font(.headline).foregroundStyle(.white)
-                        // Category and distance: stacked hazards often share a name.
-                        Text([HazardMap.category(pin.category, lang: model.lang),
-                              pin.distanceM.map { Community.distance($0, lang: model.lang) }]
-                            .compactMap { $0 }.joined(separator: " · "))
-                            .foregroundStyle(Color.slate)
-                    }
-                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+        let pins = model.pins.filter { spot.ids.contains($0.id) }
+        return NavigationStack {
+            List {
+                if pins.isEmpty {
+                    Text(t("These hazards are no longer on the map", "Estos peligros ya no están en el mapa"))
+                        .foregroundStyle(Color.slate)
+                        .listRowBackground(Color.white.opacity(0.06))
                 }
-                .accessibilityElement(children: .combine)
-                .accessibilityHint(t("Opens details", "Abre los detalles"))
-                .listRowBackground(Color.white.opacity(0.06))
+                ForEach(pins) { pin in
+                    let name = model.name(type: pin.type, label: pin.label)
+                    let category = HazardMap.category(pin.category, lang: model.lang)
+                    let distance = pin.distanceM.map { Community.distance($0, lang: model.lang) }
+                    Button {
+                        stacked = nil
+                        path.append(pin.id)
+                    } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(name).font(.headline).foregroundStyle(.white)
+                                // Category and distance: stacked hazards often share a name.
+                                Text([category, distance].compactMap { $0 }.joined(separator: ", "))
+                                    .foregroundStyle(Color.slate)
+                            }
+                            Spacer(minLength: 8)
+                            Image(systemName: "chevron.right").font(.footnote.bold()).foregroundStyle(Color.slate)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        // The button's one label, as a sentence: "Sample. Trash bin, permanent, 440 feet".
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel((pin.sample == true ? t("Sample. ", "Muestra. ") : "")
+                                            + [name, category.lowercased(), distance].compactMap { $0 }.joined(separator: ", "))
+                    }
+                    .accessibilityHint(t("Opens details", "Abre los detalles"))
+                    .listRowBackground(Color.white.opacity(0.06))
+                }
             }
             .scrollContentBackground(.hidden)
             .background(Color.navy)
@@ -339,6 +363,8 @@ struct CommunityView: View {
                 ToolbarItem(placement: .cancellationAction) { Button(t("Cancel", "Cancelar")) { stacked = nil } }
             }
         }
+        // White toolbar text: the app's blue tint on the glass Cancel capsule was about 3:1.
+        .tint(.white)
         .presentationDetents([.medium, .large])
         .presentationBackground(Color.navy)
     }

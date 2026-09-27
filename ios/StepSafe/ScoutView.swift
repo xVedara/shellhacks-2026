@@ -1,4 +1,5 @@
 import ARKit
+import Combine
 import SceneKit
 import SwiftUI
 import UIKit
@@ -90,10 +91,15 @@ final class ScoutModel: ObservableObject, @unchecked Sendable { // main-confined
     private var nearToken = 0
     /// Last report text considered for VoiceOver, so one transition is not spoken twice.
     private var spoken: String?
+    private var voteWatch: AnyCancellable?
+
     init(link: ServerLink, scoutVisible: Bool = false, walkerRunning: Bool = false) {
         self.link = link
         self.scoutVisible = scoutVisible
         self.walkerRunning = walkerRunning
+        // A vote from the Community tab refreshes these rows (the store has one copy; this re-reads it).
+        voteWatch = VoteStore.shared.objectWillChange.receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.objectWillChange.send() }
     }
 
     var hasFix: Bool { link.localizer.fix != nil }
@@ -216,8 +222,12 @@ final class ScoutModel: ObservableObject, @unchecked Sendable { // main-confined
     /// Same rules as the Community detail: one vote per hazard, a fresh accurate fix, disabled while sending,
     /// and the result spoken through the Walker and tab gate.
     func vote(_ pin: NearHazard, up: Bool) {
-        guard myVote(pin.id) == nil, !voting.contains(pin.id) else { return }
+        guard !voting.contains(pin.id) else { return }
         let name = name(pin)
+        if let mine = myVote(pin.id) { // a tap on a row that was not refreshed yet
+            announce(.message((mine == "up" ? "Already marked still there by you: " : "Already marked gone by you: ") + name))
+            return
+        }
         guard let q = link.localizer.fixQuality,
               Community.canVote(from: link.localizer.fix, accuracyM: q.accuracyM, ageS: q.ageS, to: pin.fix) else {
             // Same distinctions as Community: no fix yet, a fix too weak or old to count, or too far away.
@@ -379,8 +389,10 @@ struct ScoutView: View {
                 Label(wide ? "Correct type" : "", systemImage: "pencil")
                     .labelStyle(wide ? AnyLabelStyle(.titleAndIcon) : AnyLabelStyle(.iconOnly))
                     .font(wide ? .title3.bold() : .title2)
+                    .padding(wide ? 0 : 10)
                     .frame(maxWidth: wide ? .infinity : nil)
                     .frame(minWidth: 56, minHeight: 56)
+                    .frame(maxHeight: wide ? nil : .infinity) // same height as the thumbs wells beside it
                     .background(wide ? Color.control : Color.navy, in: RoundedRectangle(cornerRadius: 12))
                     .foregroundStyle(.white)
             }
@@ -391,7 +403,7 @@ struct ScoutView: View {
     private var nearbyList: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Nearby, 650 ft").font(.headline).foregroundStyle(.white)
+                Text("Nearby, 650 feet").font(.headline).foregroundStyle(.white)
                     .accessibilityAddTraits(.isHeader)
                 Spacer()
                 Button { scout.refresh() } label: { Image(systemName: "arrow.clockwise").frame(width: 44, height: 44) }
@@ -442,6 +454,7 @@ struct ScoutView: View {
                         voteButton(pin, up: false)
                         correctButton(PickTarget(id: pin.id, name: scout.name(pin)))
                     }
+                    .fixedSize(horizontal: false, vertical: true) // three wells, one height
                 }
                 .padding(8)
                 .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
@@ -455,7 +468,9 @@ struct ScoutView: View {
         return Button { scout.vote(pin, up: up) } label: {
             Image(systemName: up ? "hand.thumbsup.fill" : "hand.thumbsdown.fill")
                 .font(.title2)
+                .padding(10) // the glyph stays inside its well at accessibility sizes
                 .frame(minWidth: 56, minHeight: 56) // grows with the symbol at large text sizes
+                .frame(maxHeight: .infinity)
                 // Navy well inside the card: #087FF5 is 4.66:1 on it (2.96:1 on the old white-10% surface).
                 .background(Color.navy, in: RoundedRectangle(cornerRadius: 12))
                 .foregroundStyle(up ? Color.control : Color.white) // orange is for hazards, not controls
@@ -553,6 +568,9 @@ struct TypePicker: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button(t("Cancel", "Cancelar"), action: cancel) } }
         }
+        // White text for Cancel, the picker values and the type rows: the app's blue tint was 2.7-3.5:1 on the
+        // sheet's glass and gray.
+        .tint(.white)
     }
 }
 
