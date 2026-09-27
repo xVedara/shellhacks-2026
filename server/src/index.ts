@@ -13,7 +13,7 @@ const tts = ttsKey
   ? elevenLabsTts({ apiKey: ttsKey, voiceId, model: ttsModel, cacheDir: fileURLToPath(new URL('../.cache/tts', import.meta.url)) })
   : undefined;
 const app = buildApp({
-  db, namer: naming.namer, tts, logger: true,
+  db, tts, logger: true,
   ttsDailyChars: envBudget(process.env.TTS_DAILY_CHAR_BUDGET),
   ttsIpDailyChars: envBudget(process.env.TTS_IP_DAILY_CHAR_BUDGET),
 });
@@ -37,7 +37,7 @@ try {
 // 127.0.0.1 by default: cloudflared runs on the same box; cf-connecting-ip is honoured only from loopback sockets.
 await app.listen({ host: process.env.HOST || '127.0.0.1', port: Number(process.env.PORT) || 8787 });
 
-// Every 30 s: re-probe while no provider is active, re-warm an unloaded model, then retry needsNaming hazards unless a model call is running.
+// Every 5 s: re-probe while no provider is active, re-warm an unloaded model, then retry needsNaming hazards unless a model call is running.
 let passRunning = false;
 setInterval(async () => {
   if (passRunning) return;
@@ -54,7 +54,7 @@ setInterval(async () => {
   } finally {
     passRunning = false;
   }
-}, 30_000).unref();
+}, 5_000).unref();
 
 for (const sig of ['SIGINT', 'SIGTERM'] as const) {
   process.once(sig, async () => {

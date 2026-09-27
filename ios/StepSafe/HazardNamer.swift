@@ -63,7 +63,7 @@ enum FrameCrop {
 
 /// Walker mode hazard naming (PLAN.md 3.1 item 3, 7 "Hazard naming and placement"): each confirmed hazard
 /// identity is reported once. Safety never waits on it: path guard has already warned with its own phrase;
-/// the returned label is only spoken later as priority 3.
+/// the returned label is spoken later as priority 3, and only when it is a real name (a merge into a named pin).
 /// `update`/`reset` on main; `capture` on the ARSession delegate queue.
 final class HazardNamer: @unchecked Sendable { // main-confined state; tasks hop back to main
     private struct Request {
@@ -246,7 +246,7 @@ final class HazardNamer: @unchecked Sendable { // main-confined state; tasks hop
         onResult?("\(r.merged ? "Merged" : pinned ? "New" : "Not pinned"): \(r.label)")
         guard epoch.withLock({ $0 }) == ep else { return }
         gate.answered(req.detection, pinned: pinned, now: now)
-        guard r.label != "unknown obstacle" else { return }
+        guard !Spoken.isGeneric(r.label) else { return } // a new pin: named later, reaches walkers via heads-up
         // Speak only while path guard still sees it (distance and side from the latest detection).
         if let now = latest[req.detection.kind],
            simd_distance(now.point, req.detection.point) <= 2 * Tuning.sameHazardRadius {

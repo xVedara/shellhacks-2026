@@ -21,14 +21,12 @@ Naming provider, chosen at startup and logged (`naming provider: ...`; the Ollam
 1. `GEMINI_API_KEY` set: Gemini (`GEMINI_MODEL`, default `gemini-flash-lite-latest` (gemini-2.5-flash is retired for new keys; flash-lite answers in about 1-4 s)).
 2. Else a local Ollama at `OLLAMA_URL` (default `http://localhost:11434`) that answers `/api/tags` within 2 s and
    has `OLLAMA_MODEL` (default `qwen3.8:27b-mlx`, vision capable) pulled.
-3. Else none: every new hazard is saved as type "obstacle" with `needsNaming`. Selection re-runs every 30 s while the provider is
+3. Else none: hazards stay type "obstacle" with `needsNaming`. Selection re-runs every 5 s while the provider is
    none, so starting Ollama later needs no restart.
 
-`NAMER_TIMEOUT_MS` is the inline naming timeout (default 4000 for Gemini, 12000 for Ollama, capped at 15000 because
-the phone's POST times out at 20 s). On a timeout the hazard is saved as "obstacle" and the renamer retries
-it. Ollama requests send `keep_alive: -1` (stay loaded). A warm-up naming call (a 32x32 JPEG) runs at startup and
-again from the 30 s loop whenever `/api/ps` shows the model unloaded, since a cold load is slow. At most 2 Ollama calls run at once; a third report gets the fallback immediately and is renamed
-later, and the renamer stands aside while any call runs. Measured on the dev Mac (320 px JPEG q0.7 crops never seen
+`NAMER_TIMEOUT_MS` is the timeout of one rename call (default 6000 for Gemini, 12000 for Ollama, capped at 15000).
+`POST /hazards` never calls the model (latency); on a timeout the renamer retries the hazard on a later pass. Ollama requests send `keep_alive: -1` (stay loaded). A warm-up naming call (a 32x32 JPEG) runs at startup and
+again from the 5 s loop whenever `/api/ps` shows the model unloaded, since a cold load is slow. At most 2 Ollama calls run at once, and the renamer stands aside while any call runs. Measured on the dev Mac (320 px JPEG q0.7 crops never seen
 before): cold start 8.2 s, warm p50 4.7 s, p90 6.8 s; with the machine loaded (load average ~40) 9-12 s.
 
 TTS: `ELEVENLABS_API_KEY` (optional; without it `GET /tts` answers 503), `ELEVENLABS_VOICE_ID` (default
@@ -64,25 +62,24 @@ Additive to PLAN.md section 6; nothing existing changed shape.
 
 ## Decisions (where the brief left room)
 
-- **Merge rule.** Type is unknown until Gemini names the crop, and the brief says to skip Gemini when a merge
-  target exists. So a report merges into any *active, non-sample* hazard with the **same heightBand within 10 m**
-  (`$nearSphere`, closest wins), regardless of type. It counts as a walker upvote from that device and returns the
-  existing label with `merged: true`. Otherwise Gemini is called (outside any lock), then the merge query runs again
-  and the insert happens under one global in-process mutex, so concurrent reports never make duplicate pins and
-  nobody waits on someone else's Gemini call. Two simultaneous reports at one spot may both call Gemini; only one pin
-  results. If the merge target vanishes mid-request (TTL), a new pin is created. Real reports never merge into seed
-  data (`sample: true`).
-- **heightBand** always comes from the phone (depth sensor), not from Gemini's guess.
+- **Merge rule.** The type is unknown until the renamer names the crop. So a report merges into any *active,
+  non-sample* hazard with the **same heightBand within 10 m** (`$nearSphere`, closest wins), regardless of type. It
+  counts as a walker upvote from that device and returns the existing label with `merged: true`. Otherwise a new pin
+  is inserted. The merge query and the insert run under one global in-process mutex (a few DB round trips; no model
+  call), so concurrent reports never make duplicate pins. If the merge target vanishes mid-request (TTL), a new pin is
+  created. Real reports never merge into seed data (`sample: true`).
+- **heightBand** always comes from the phone (depth sensor), not from the model's guess.
 - **heading** is never a reason to reject a report: it is stored when it is a number in `[0, 360)`, else `null`.
-- **Naming failure** (no provider, timeout, error, non-object output): type `obstacle` (a taxonomy id), category
-  `temporary`, severity 2, `needsNaming: true`.
-- **Renamer.** With a naming provider active (Gemini or Ollama), every 30 s up to 5 `needsNaming` hazards are retried, least recently
+- **New pins are never named inline** (latency): type `obstacle` (a taxonomy id), category `temporary`, severity 2,
+  `needsNaming: true`, labels for the phone's band (`obstacle`, `obstacle at head height`, `drop-off`).
+- **Renamer.** With a naming provider active (Gemini or Ollama), every 5 s up to 5 `needsNaming` hazards are named, least recently
   attempted first (`renameAttemptAt` ascending, never-attempted first). Each attempt sets `renameAttempts` and
   `renameAttemptAt`; after 3 failures it gives up (`needsNaming: false`). It always refreshes severity. It sets the
   type (and category) only when the stored type is not a real taxonomy type yet (legacy text or `obstacle`) and
   people did not choose the type; fields in `lockedFields` are never touched, and a people-chosen type is sent as a
   hint. Legacy rows with `humanLocked: true` count as fully locked. A hazard without a crop has nothing to look at:
-  the flag is cleared without a model call.
+  the flag is cleared without a model call. A person or dog is never pinned: that rename deletes the hazard and its
+  votes, except in the drop-off band, where it stays `obstacle` (a person cannot make a drop in the depth data).
 - **Spoken labels are never model or user text.** The model only picks `type` from the taxonomy ids (enum in the
   JSON schema and the id list in the prompt, which also says to ignore text or instructions in the image) plus
   category, heightBand and severity. `parseNaming` maps anything outside the list to `obstacle`; an off-enum category

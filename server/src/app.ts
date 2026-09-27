@@ -29,7 +29,6 @@ declare module 'fastify' {
 
 export interface AppOptions {
   db: Db;
-  namer: Namer;
   /** ElevenLabs TTS; absent (no key) means GET /tts answers 503 and the phone uses its built-in voice. */
   tts?: Tts;
   /** ElevenLabs cache misses per minute per client IP (hits are free). */
@@ -104,12 +103,12 @@ export const expiryAfterCategoryChange = (lastSeen: Date, category: Category) =>
   new Date(Math.max(lastSeen.getTime() + LIFESPAN_MS[category], Date.now() + HOUR_MS));
 
 /**
- * Re-asks the model for up to `limit` hazards flagged needsNaming (naming failed at creation, or people
- * reclassified), least recently attempted first. Severity is always refreshed. The type (and, with it, the category)
- * is replaced only when it is not a real taxonomy type yet (legacy text or "obstacle") and people did not choose it;
- * fields in lockedFields are never touched. Hazards without a crop are skipped. Gives up after
- * RENAME_MAX_ATTEMPTS failures. Stops early while `busy()`
- * (a model call is already running), so it never competes with a walker's inline naming.
+ * The only place a model names hazards (POST /hazards never does, for latency): asks the model for up to `limit`
+ * hazards flagged needsNaming (every new report, and reclassified ones), least recently attempted first. Severity is
+ * always refreshed. The type (and, with it, the category) is replaced only when it is not a real taxonomy type yet
+ * (legacy text or "obstacle") and people did not choose it; fields in lockedFields are never touched. A person or dog
+ * deletes the pin, except in the drop-off band, where it stays "obstacle". Hazards without a crop are skipped. Gives up
+ * after RENAME_MAX_ATTEMPTS failures. Stops early while `busy()` (a model call is already running, e.g. a warm-up).
  */
 export async function renamePending(db: Db, namer: Namer, limit = 5, busy: () => boolean = () => false) {
   const hazards = db.collection<HazardDoc>('hazards');
@@ -118,7 +117,7 @@ export async function renamePending(db: Db, namer: Namer, limit = 5, busy: () =>
     .toArray();
   let renamed = 0;
   for (const h of pending) {
-    if (busy()) break; // a walker's inline naming is running: stand aside, the next pass continues
+    if (busy()) break; // a model call is running: stand aside, the next pass continues
     if (!h.crop) {
       await hazards.updateOne({ _id: h._id }, { $set: { needsNaming: false } }); // nothing to look at
       continue;
@@ -145,17 +144,22 @@ export async function renamePending(db: Db, namer: Namer, limit = 5, busy: () =>
     const set: Partial<HazardDoc> = { severity: n.severity, needsNaming: false, renameAttempts: attempts, renameAttemptAt: new Date() };
     if (!typeLocked && (!isTypeId(h.type) || h.type === OBSTACLE)) {
       const type = taxonomyEntry(n.type).id;
-      // A fallback "obstacle" that turns out to be a person or dog is never kept (the same rule as POST /hazards;
-      // a drop-off stays). Same filter as the rename below, so a reclassification that landed meanwhile wins.
-      if (NEVER_PINNED.has(type) && h.heightBand !== 'dropoff') {
-        const del = await hazards.deleteOne({ _id: h._id, type: h.type, needsNaming: true, lockedFields: h.lockedFields ?? { $exists: false } });
-        if (del.deletedCount) await db.collection('votes').deleteMany({ hazardId: h._id });
-        continue;
-      }
-      Object.assign(set, { type, ...labelsFor(type, h.heightBand) });
-      if (!locked.includes('category') && n.category !== h.category) {
-        set.category = n.category;
-        if (h.status === 'active') set.expiresAt = expiryAfterCategoryChange(h.lastSeen, n.category);
+      if (NEVER_PINNED.has(type)) {
+        // A fallback "obstacle" that turns out to be a person or dog is never kept. Same filter as the rename
+        // below, so a reclassification that landed meanwhile wins.
+        if (h.heightBand !== 'dropoff') {
+          const del = await hazards.deleteOne({ _id: h._id, type: h.type, needsNaming: true, lockedFields: h.lockedFields ?? { $exists: false } });
+          if (del.deletedCount) await db.collection('votes').deleteMany({ hazardId: h._id });
+          continue;
+        }
+        // A person cannot make a drop in the depth data: a passer-by at a curb leaves a real drop-off, which stays
+        // a generic obstacle (read "drop-off") so no person is ever recorded.
+      } else {
+        Object.assign(set, { type, ...labelsFor(type, h.heightBand) });
+        if (!locked.includes('category') && n.category !== h.category) {
+          set.category = n.category;
+          if (h.status === 'active') set.expiresAt = expiryAfterCategoryChange(h.lastSeen, n.category);
+        }
       }
     }
     // filters make a reclassification that landed meanwhile win over this rename
@@ -182,7 +186,7 @@ export function ipKey(ip: string) {
 }
 
 export function buildApp({
-  db, namer, tts, ttsMissPerMin = 20, ttsDailyChars = 20_000, ttsIpDailyChars = 2000, rateLimitPerMin = 30, getRateLimitPerMin = 300, ipWriteRateLimitPerMin = 120, logger = false,
+  db, tts, ttsMissPerMin = 20, ttsDailyChars = 20_000, ttsIpDailyChars = 2000, rateLimitPerMin = 30, getRateLimitPerMin = 300, ipWriteRateLimitPerMin = 120, logger = false,
 }: AppOptions) {
   const app = Fastify({ logger, bodyLimit: 1024 * 1024 });
   const hazards = db.collection<HazardDoc>('hazards');
@@ -267,8 +271,8 @@ export function buildApp({
     if (over(`wip:${ip}`, ipWriteRateLimitPerMin, now)) return reply.code(429).send({ error: 'rate_limited' });
   });
 
-  // ---- one global mutex around the final merge re-check + insert so concurrent reports cannot duplicate pins ----
-  // Gemini runs outside it, so the lock is held only for a couple of DB round trips.
+  // ---- one global mutex around the merge check + insert so concurrent reports cannot duplicate pins ----
+  // POST /hazards never calls a model, so the lock is held only for a few DB round trips.
   // ponytail: global lock; switch to per-cell locks that also lock neighbour cells if throughput matters,
   // or a DB claim for multiple instances.
   let createChain: Promise<unknown> = Promise.resolve();
@@ -394,9 +398,9 @@ export function buildApp({
       }
       const point = { type: 'Point' as const, coordinates: [b.lng, b.lat] as [number, number] };
 
-      // Merge: any active same-band pin within 10 m. Type is unknown before Gemini, and the
-      // brief says to skip Gemini when a merge target exists, so band + distance decides.
-      const tryMerge = async () => {
+      // Merge: any active same-band pin within 10 m (band + distance; the type is only known after the renamer).
+      // Inside the lock so two reports at one spot cannot both create a pin.
+      return serialized(async () => {
         const target = await hazards.findOne(
           {
             status: 'active',
@@ -407,44 +411,28 @@ export function buildApp({
           },
           { projection: { crop: 0 } },
         );
-        if (!target || !(await castVote(target, b.deviceId, 'up', 'walker'))) return null; // gone mid-request: create instead
-        return { id: target._id.toHexString(), label: spokenLabels(target).spokenLabel_en, merged: true };
-      };
-
-      const early = await tryMerge();
-      if (early) return early;
-      const naming = await namer(b64, b.heightBand); // outside the lock: can take up to NAMER_TIMEOUT_MS
-      // spoken labels come only from the taxonomy, for the phone's band; never from model text
-      const named = naming ? taxonomyEntry(naming.type).id : OBSTACLE; // failure: "obstacle" + needsNaming
-      // A person cannot make a drop in the depth data: at a curb, a passer-by in the crop still leaves a real
-      // drop-off to pin, stored as a generic obstacle (read "drop-off") so no person is ever recorded.
-      const type = NEVER_PINNED.has(named) && b.heightBand === 'dropoff' ? OBSTACLE : named;
-      const labels = labelsFor(type, b.heightBand);
-      // A person or dog is never pinned and never upvotes a pin nearby. 200 with the usual {id, label, merged}
-      // (id empty, nothing stored) so the phone marks the report done and does not retry. The early merge above
-      // skips naming (PLAN.md 8), so it cannot know the crop was a person; the phone's stillness gate covers that.
-      if (NEVER_PINNED.has(type)) return { id: '', label: labels.spokenLabel_en, merged: false, pinned: false };
-      return serialized(async () => {
-        const late = await tryMerge(); // another report may have landed while Gemini ran
-        if (late) return late;
+        if (target && (await castVote(target, b.deviceId, 'up', 'walker'))) { // gone mid-request: create instead
+          return { id: target._id.toHexString(), label: spokenLabels(target).spokenLabel_en, merged: true };
+        }
 
         const now = new Date();
         const user = await ensureUser(b.deviceId);
         const weight = voteWeight(user.karma);
-        const category: Category = naming?.category ?? 'temporary';
+        // Never named inline (latency): a generic obstacle that the renamer names within seconds.
+        const category: Category = 'temporary';
         const doc: HazardDoc = {
           _id: new ObjectId(),
-          type,
+          type: OBSTACLE,
           category,
-          heightBand: b.heightBand, // the phone's depth-derived band beats the model's guess
+          heightBand: b.heightBand, // the phone's depth-derived band; the renamer never changes it
           location: point,
           heading: typeof b.heading === 'number' && b.heading >= 0 && b.heading < 360 ? b.heading : null,
           measurements: b.measurements ?? null,
           crop: new Binary(bytes),
           meshUrl: null,
-          severity: naming?.severity ?? 2,
-          ...labels,
-          needsNaming: !naming,
+          severity: 2,
+          ...labelsFor(OBSTACLE, b.heightBand),
+          needsNaming: true,
           confidence: weight,
           status: 'active',
           sample: false,

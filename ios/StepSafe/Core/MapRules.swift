@@ -353,6 +353,12 @@ struct PassiveVoter {
 enum Spoken {
     static func capitalized(_ s: String) -> String { s.prefix(1).uppercased() + s.dropFirst() }
 
+    /// The server's labels for a pin not named yet (a new report is always one; the renamer names it seconds later).
+    /// Path guard already said as much, so the phone does not repeat it.
+    static func isGeneric(_ label: String) -> Bool {
+        ["obstacle", "obstacle at head height", "drop-off", "unknown obstacle"].contains(label.lowercased())
+    }
+
     /// "Trash bin, 6 feet, left": the label in place of AlertPolicy's name; distance and side stay AlertPolicy's.
     /// Spanish uses the same side words as the bundled clips (pies, izquierda, derecha, al frente).
     static func named(_ label: String, _ d: Detection, lang: String = "en") -> String {

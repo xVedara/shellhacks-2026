@@ -431,6 +431,15 @@ final class MapRulesTests: XCTestCase {
         XCTAssertEqual(Spoken.named("low branch", detection(.headHeight, .zero, ahead: 0.8)), "Low branch, 3 feet, ahead")
     }
 
+    func testGenericReportLabelsAreNotSpoken() {
+        for label in ["obstacle", "obstacle at head height", "drop-off", "unknown obstacle", "Obstacle"] {
+            XCTAssertTrue(Spoken.isGeneric(label), label)
+        }
+        for label in ["e-scooter", "trash bin at head height", "drop-off: pothole", "low branch"] {
+            XCTAssertFalse(Spoken.isGeneric(label), label)
+        }
+    }
+
     func testTTSFallbackSelection() {
         XCTAssertTrue(TTSChoice.useClip(status: 200, contentType: "audio/mpeg", bytes: 4000, elapsed: 1.2))
         for status in [404, 503, 502, 429, 500] {

@@ -4,9 +4,9 @@ import { geminiNamer, namingPrompt, parseNaming, type Namer } from './gemini.ts'
 
 type Fetch = typeof fetch;
 
-/** The phone's POST /hazards timeout is 20 s; naming must finish well inside it. */
+/** Cap on one naming call (the renamer runs every 5 s; a hung call must not stall it). */
 export const NAMER_TIMEOUT_CAP_MS = 15_000;
-/** Concurrent Ollama calls; past this, inline naming falls back at once and the renamer names it later. */
+/** Concurrent Ollama calls; past this, a call returns null at once and the renamer retries on a later pass. */
 export const MAX_CONCURRENT_NAMING = 2;
 /** A 32x32 JPEG used once at startup to load the model into memory. */
 export const WARMUP_JPEG =
@@ -39,7 +39,7 @@ export function ollamaNamer(url: string, model: string, timeoutMs: number, fetch
           model,
           stream: false,
           think: false,
-          keep_alive: -1, // stay loaded: a cold 27B load costs far more than the inline timeout
+          keep_alive: -1, // stay loaded: a cold 27B load costs far more than the call timeout
           format: NAMING_SCHEMA,
           options: { temperature: 0.1 },
           messages: [
@@ -63,8 +63,8 @@ export function ollamaNamer(url: string, model: string, timeoutMs: number, fetch
 }
 
 /**
- * Caps concurrent calls at `max`. When saturated the call returns null at once (the "obstacle"
- * fallback, renamed later) instead of queueing behind a slow local model. `busy()` lets the renamer stand aside.
+ * Caps concurrent calls at `max`. When saturated the call returns null at once (the hazard stays "obstacle",
+ * retried on a later pass) instead of queueing behind a slow local model. `busy()` lets the renamer stand aside.
  */
 export function limitConcurrency(namer: Namer, max = MAX_CONCURRENT_NAMING) {
   let active = 0;
@@ -148,7 +148,7 @@ export async function selectNamer(env: NodeJS.ProcessEnv = process.env, fetchImp
   }
   return {
     provider: 'none', namer: async () => null, busy: () => false, warm: async () => null,
-    detail: `none (${why}): new hazards are saved as "obstacle"; retrying every 30 s`,
+    detail: `none (${why}): new hazards stay "obstacle"; retrying every 5 s`,
   };
 }
 

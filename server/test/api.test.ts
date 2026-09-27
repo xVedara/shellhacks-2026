@@ -26,13 +26,11 @@ let db: Db;
 let app: FastifyInstance;
 let naming: Naming | null;
 let namerCalls = 0;
-let namerDelayMs = 0;
 
 let lastNamerArgs: unknown[] = [];
 const namer = async (...args: unknown[]) => {
   namerCalls++;
   lastNamerArgs = args;
-  if (namerDelayMs) await new Promise((r) => setTimeout(r, namerDelayMs));
   return naming;
 };
 const hashId = (id: string) => createHash('sha256').update(id).digest('hex').slice(0, 10);
@@ -42,7 +40,7 @@ beforeAll(async () => {
   client = await MongoClient.connect(rs.getUri());
   db = client.db('stepsafe_test');
   await ensureIndexes(db);
-  app = buildApp({ db, namer, rateLimitPerMin: 100_000, ipWriteRateLimitPerMin: 100_000 });
+  app = buildApp({ db, rateLimitPerMin: 100_000, ipWriteRateLimitPerMin: 100_000 });
   await app.ready();
 }, 120_000);
 
@@ -55,7 +53,6 @@ afterAll(async () => {
 beforeEach(async () => {
   naming = SCOOTER;
   namerCalls = 0;
-  namerDelayMs = 0;
   await Promise.all(['hazards', 'votes', 'users', 'reclassifications', 'reports'].map((c) => db.collection(c).deleteMany({})));
 });
 
@@ -72,65 +69,53 @@ const vote = (id: string, deviceId: string, v: 'up' | 'down', source = 'scout') 
 const detail = (id: string) => app.inject({ url: `/hazards/${id}` }).then((r) => r.json());
 
 describe('POST /hazards', () => {
-  it('creates a hazard named by Gemini', async () => {
+  it('creates an "obstacle" with needsNaming at once, never calling the namer', async () => {
     const { status, body } = await create({ measurements: { clearanceM: 1.8 } });
     expect(status).toBe(200);
-    expect(body).toMatchObject({ label: 'e-scooter', merged: false });
+    expect(body).toEqual({ id: expect.any(String), label: 'obstacle', merged: false });
+    expect(namerCalls).toBe(0);
     const d = await detail(body.id);
     expect(d).toMatchObject({
-      id: body.id, type: 'e-scooter', category: 'moving', heightBand: 'ground', status: 'active',
-      lat: BASE.lat, lng: BASE.lng, confidence: 1, sample: false, label: 'e-scooter',
-      spokenLabel_es: 'patinete eléctrico', severity: 2, meshUrl: null, crop: CROP,
+      id: body.id, type: 'obstacle', category: 'temporary', heightBand: 'ground', status: 'active',
+      lat: BASE.lat, lng: BASE.lng, confidence: 1, sample: false, label: 'obstacle',
+      spokenLabel_es: 'obstáculo', severity: 2, meshUrl: null, crop: CROP,
       measurements: { clearanceM: 1.8 }, pendingReclassifications: [],
     });
     expect(d.votes).toHaveLength(1);
     expect(d.votes[0]).toMatchObject({ deviceId: hashId('dev-A'), vote: 'up', source: 'walker', weight: 1 });
     const lifespan = new Date(d.expiresAt).getTime() - new Date(d.createdAt).getTime();
-    expect(lifespan).toBe(6 * 3600_000);
+    expect(lifespan).toBe(7 * 24 * 3600_000); // temporary
+    expect(await db.collection('hazards').findOne({ _id: new ObjectId(body.id) })).toMatchObject({ needsNaming: true });
   });
 
-  it('falls back to type "obstacle" with needsNaming when naming fails', async () => {
-    naming = null;
-    const { body } = await create({ heightBand: 'head' });
-    expect(body.label).toBe('obstacle at head height');
-    const h = await db.collection('hazards').findOne({ _id: new ObjectId(body.id) });
-    expect(h).toMatchObject({ type: 'obstacle', category: 'temporary', heightBand: 'head', needsNaming: true });
+  it('labels the fallback for the phone band, even for a crop the model would call a person', async () => {
+    naming = { type: 'person', category: 'moving', heightBand: 'ground', severity: 2 };
+    const head = await create({ heightBand: 'head' });
+    expect(head.body).toMatchObject({ label: 'obstacle at head height', merged: false });
+    const drop = await create({ heightBand: 'dropoff', lat: north(50), deviceId: 'dev-B' });
+    expect(drop.body).toMatchObject({ label: 'drop-off', merged: false });
+    expect(await db.collection('hazards').countDocuments({ type: 'obstacle', needsNaming: true })).toBe(2);
+    expect(namerCalls).toBe(0);
   });
 
-  it('merges a same-band report within 10 m as an upvote, skipping Gemini', async () => {
+  it('the renamer names the new obstacle later', async () => {
+    const { body } = await create();
+    expect(await renamePending(db, namer)).toBe(1);
+    expect(namerCalls).toBe(1);
+    expect(await detail(body.id)).toMatchObject({ type: 'e-scooter', category: 'moving', label: 'e-scooter', spokenLabel_es: 'patinete eléctrico' });
+    expect(await db.collection('hazards').findOne({ _id: new ObjectId(body.id) })).toMatchObject({ needsNaming: false });
+    // a later report merges into the named pin and gets its real name back
+    const merged = await create({ lat: north(8), deviceId: 'dev-B' });
+    expect(merged.body).toEqual({ id: body.id, label: 'e-scooter', merged: true });
+  });
+
+  it('merges a same-band report within 10 m as an upvote', async () => {
     const first = await create();
     const second = await create({ lat: north(8), deviceId: 'dev-B' });
-    expect(second.body).toEqual({ id: first.body.id, label: 'e-scooter', merged: true });
-    expect(namerCalls).toBe(1);
+    expect(second.body).toEqual({ id: first.body.id, label: 'obstacle', merged: true });
+    expect(namerCalls).toBe(0);
     expect((await detail(first.body.id)).confidence).toBeCloseTo(2);
     expect(await db.collection('hazards').countDocuments()).toBe(1);
-  });
-
-  it('never pins a person or a dog: 200, empty id, nothing stored', async () => {
-    for (const type of ['person', 'dog']) {
-      naming = { type, category: 'moving', heightBand: 'ground', severity: 2 };
-      const { status, body } = await create();
-      expect(status).toBe(200);
-      expect(body).toEqual({ id: '', label: type, merged: false, pinned: false });
-    }
-    for (const c of ['hazards', 'votes', 'users']) expect(await db.collection(c).countDocuments()).toBe(0);
-  });
-
-  it('still pins a drop-off when a person is in the crop, as an obstacle', async () => {
-    naming = { type: 'person', category: 'moving', heightBand: 'dropoff', severity: 2 };
-    const { body } = await create({ heightBand: 'dropoff' });
-    expect(body.id).not.toBe('');
-    expect(body.label).toBe('drop-off');
-    expect(await db.collection('hazards').countDocuments({ type: 'person' })).toBe(0);
-    expect(await db.collection('hazards').countDocuments({ type: 'obstacle', heightBand: 'dropoff' })).toBe(1);
-  });
-
-  it('still pins a parked e-scooter', async () => {
-    naming = SCOOTER;
-    const { body } = await create();
-    expect(body).toMatchObject({ label: 'e-scooter', merged: false });
-    expect(body.id).not.toBe('');
-    expect(await db.collection('hazards').countDocuments({ type: 'e-scooter' })).toBe(1);
   });
 
   it('does not merge at 15 m or across height bands', async () => {
@@ -281,15 +266,26 @@ describe('reclassify, report, users', () => {
     });
   });
 
-  it('renamer deletes a fallback obstacle that turns out to be a person, with its votes', async () => {
-    naming = null;
-    const { body } = await create();
-    await create({ lat: north(5), deviceId: 'dev-B' }); // an upvote on the same pin
-    expect(await db.collection('votes').countDocuments({ hazardId: new ObjectId(body.id) })).toBe(2);
-    naming = { type: 'person', category: 'moving', heightBand: 'ground', severity: 2 };
+  it('renamer deletes a fallback obstacle that turns out to be a person or a dog, with its votes', async () => {
+    for (const type of ['person', 'dog']) {
+      const { body } = await create();
+      await create({ lat: north(5), deviceId: 'dev-B' }); // an upvote on the same pin
+      expect(await db.collection('votes').countDocuments({ hazardId: new ObjectId(body.id) })).toBe(2);
+      naming = { type, category: 'moving', heightBand: 'ground', severity: 2 };
+      await renamePending(db, namer);
+      expect(await db.collection('hazards').countDocuments(), type).toBe(0);
+      expect(await db.collection('votes').countDocuments(), type).toBe(0);
+    }
+  });
+
+  it('renamer keeps a drop-off with a person in the crop as an obstacle', async () => {
+    const { body } = await create({ heightBand: 'dropoff' });
+    naming = { type: 'person', category: 'moving', heightBand: 'dropoff', severity: 3 };
     await renamePending(db, namer);
-    expect(await db.collection('hazards').countDocuments()).toBe(0);
-    expect(await db.collection('votes').countDocuments()).toBe(0);
+    expect(await db.collection('hazards').countDocuments({ type: 'person' })).toBe(0);
+    expect(await db.collection('hazards').findOne({ _id: new ObjectId(body.id) })).toMatchObject({
+      type: 'obstacle', category: 'temporary', heightBand: 'dropoff', spokenLabel_en: 'drop-off', severity: 3, needsNaming: false,
+    });
   });
 
   it('renames needsNaming hazards, keeping a people-chosen type', async () => {
@@ -370,7 +366,7 @@ describe('rate limit', () => {
     a.inject({ method: 'POST', url: `/hazards/${new ObjectId()}/report`, remoteAddress: ip, payload: { reason: 'spam', deviceId } });
 
   it('returns 429 after 30 writes per device per minute', async () => {
-    const limited = buildApp({ db, namer });
+    const limited = buildApp({ db });
     await limited.ready();
     try {
       for (let i = 0; i < 30; i++) expect((await report(limited, 'dev-rl')).statusCode).toBe(404);
@@ -384,7 +380,7 @@ describe('rate limit', () => {
   });
 
   it('keys invalid deviceIds by IP, and limits GETs per IP separately', async () => {
-    const limited = buildApp({ db, namer, rateLimitPerMin: 3, getRateLimitPerMin: 5 });
+    const limited = buildApp({ db, rateLimitPerMin: 3, getRateLimitPerMin: 5 });
     await limited.ready();
     try {
       // junk deviceIds cannot mint fresh buckets: all share the IP bucket
@@ -403,7 +399,6 @@ describe('rate limit', () => {
 
 describe('concurrency', () => {
   it('two concurrent POSTs 8 m apart across a ~20 m grid edge produce one hazard', async () => {
-    namerDelayMs = 100;
     const edge = (Math.round(BASE.lat / 0.0002) + 0.5) * 0.0002; // where the old per-cell lock split
     const [a, b] = await Promise.all([
       create({ deviceId: 'dev-X', lat: edge - 4 / M_PER_DEG }),
@@ -412,7 +407,6 @@ describe('concurrency', () => {
     expect(await db.collection('hazards').countDocuments()).toBe(1);
     expect([a.body.merged, b.body.merged].sort()).toEqual([false, true]);
     expect(a.body.id).toBe(b.body.id);
-    // Gemini runs outside the lock, so both reports may be named; the locked re-check still merges
   });
 
   it('upvotes never shorten expiry', async () => {
@@ -425,18 +419,6 @@ describe('concurrency', () => {
 });
 
 describe('audit fixes', () => {
-  it('a merge POST returns fast while another report waits on a slow Gemini call', async () => {
-    const { body } = await create({ deviceId: 'dev-A' });
-    namerDelayMs = 2000;
-    const slow = create({ deviceId: 'dev-S', lat: north(500) }); // new spot: waits on Gemini
-    await new Promise((r) => setTimeout(r, 50));
-    const t0 = Date.now();
-    const merge = await create({ deviceId: 'dev-M' });
-    expect(Date.now() - t0).toBeLessThan(500);
-    expect(merge.body).toMatchObject({ id: body.id, merged: true });
-    expect((await slow).body.merged).toBe(false);
-  });
-
   it('never merges into sample (seed) pins', async () => {
     const seeded = await create();
     await db.collection('hazards').updateOne({ _id: new ObjectId(seeded.body.id) }, { $set: { sample: true } });
@@ -489,7 +471,8 @@ describe('audit fixes', () => {
     for (const [i, phrase] of PROBES.slice(0, 20).entries()) {
       naming = { type: phrase, category: 'temporary', heightBand: 'ground', severity: 2, spokenLabel_en: phrase, spokenLabel_es: phrase } as unknown as Naming;
       const { body } = await create({ lat: north(20 * (i + 1)), deviceId: `dev-${i}` });
-      expect(body.label, phrase).toBe('obstacle');
+      await renamePending(db, namer);
+      expect((await detail(body.id)).label, phrase).toBe('obstacle');
       expect(await db.collection('hazards').findOne({ _id: new ObjectId(body.id) })).toMatchObject({
         type: 'obstacle', spokenLabel_en: 'obstacle', spokenLabel_es: 'obstáculo',
       });
@@ -566,7 +549,7 @@ describe('audit fixes', () => {
   });
 
   it('a device already over its cap does not consume the shared IP write budget', async () => {
-    const limited = buildApp({ db, namer, rateLimitPerMin: 2, ipWriteRateLimitPerMin: 3 });
+    const limited = buildApp({ db, rateLimitPerMin: 2, ipWriteRateLimitPerMin: 3 });
     await limited.ready();
     try {
       const post = (deviceId: string) =>
@@ -587,7 +570,7 @@ describe('audit fixes', () => {
   });
 
   it('rejects further writes from an exhausted IP before reading the body', async () => {
-    const limited = buildApp({ db, namer, ipWriteRateLimitPerMin: 1, rateLimitPerMin: 100 });
+    const limited = buildApp({ db, ipWriteRateLimitPerMin: 1, rateLimitPerMin: 100 });
     await limited.ready();
     try {
       const post = (payload: string | Record<string, string>) =>
@@ -608,7 +591,7 @@ describe('audit fixes', () => {
   });
 
   it('caps writes per IP even when deviceIds rotate', async () => {
-    const limited = buildApp({ db, namer, ipWriteRateLimitPerMin: 4 });
+    const limited = buildApp({ db, ipWriteRateLimitPerMin: 4 });
     await limited.ready();
     try {
       const post = (deviceId: string, ip: string) =>
@@ -636,7 +619,7 @@ describe('audit fixes', () => {
 
 describe('GET /events', () => {
   it('sends CORS headers and caps connections at 5 per IP', async () => {
-    const live = buildApp({ db, namer, rateLimitPerMin: 100_000 });
+    const live = buildApp({ db, rateLimitPerMin: 100_000 });
     const url = await live.listen({ port: 0, host: '127.0.0.1' });
     const abort = new AbortController();
     try {
@@ -654,7 +637,7 @@ describe('GET /events', () => {
     }
   });
   it('streams an upsert after POST /hazards and a remove after delete', async () => {
-    const live = buildApp({ db, namer, rateLimitPerMin: 100_000 });
+    const live = buildApp({ db, rateLimitPerMin: 100_000 });
     const url = await live.listen({ port: 0, host: '127.0.0.1' });
     const abort = new AbortController();
     try {
@@ -683,7 +666,7 @@ describe('GET /events', () => {
       const frame = buf.split('\n\n').find((f) => f.includes('"op":"upsert"'))!;
       expect(frame).toMatch(/^event: hazard\ndata: /m);
       const data = JSON.parse(frame.split('data: ')[1]);
-      expect(data.hazard).toMatchObject({ id, type: 'e-scooter', label: 'e-scooter', status: 'active' });
+      expect(data.hazard).toMatchObject({ id, type: 'obstacle', label: 'obstacle', status: 'active' });
       expect(data.hazard).not.toHaveProperty('crop');
 
       await db.collection('hazards').deleteOne({ _id: new ObjectId(id) });
@@ -696,19 +679,16 @@ describe('GET /events', () => {
 });
 
 describe('local naming timeout', () => {
-  it('a hung Ollama call falls back to "obstacle" and leaves it for the renamer', async () => {
+  it('a hung Ollama call fails the rename pass quickly and leaves the hazard for the next pass', async () => {
     const hang = ((_u: unknown, init?: RequestInit) =>
       new Promise((_, reject) => init!.signal!.addEventListener('abort', () => reject(new Error('aborted'))))) as typeof fetch;
-    const slow = buildApp({ db, namer: ollamaNamer('http://ollama', 'm', 100, hang), rateLimitPerMin: 100_000 });
-    try {
-      const t = Date.now();
-      const res = await slow.inject({ method: 'POST', url: '/hazards', payload: { crop: CROP, ...BASE, heightBand: 'ground', deviceId: 'dev-A' } });
-      expect(Date.now() - t).toBeLessThan(2000);
-      expect(res.json()).toMatchObject({ label: 'obstacle', merged: false });
-      expect(await db.collection('hazards').findOne({ _id: new ObjectId(res.json().id) })).toMatchObject({ needsNaming: true });
-    } finally {
-      await slow.close();
-    }
+    const { body } = await create();
+    const t = Date.now();
+    expect(await renamePending(db, ollamaNamer('http://ollama', 'm', 100, hang))).toBe(0);
+    expect(Date.now() - t).toBeLessThan(2000);
+    expect(await db.collection('hazards').findOne({ _id: new ObjectId(body.id) })).toMatchObject({
+      type: 'obstacle', needsNaming: true, renameAttempts: 1,
+    });
   });
 });
 
@@ -735,7 +715,7 @@ describe('GET /tts', () => {
       if (fail) throw new Error('upstream 500');
       return Buffer.from([0xff, 0xf3, 7]);
     };
-    const withTts = buildApp({ db, namer, tts, rateLimitPerMin: 100_000 });
+    const withTts = buildApp({ db, tts, rateLimitPerMin: 100_000 });
     try {
       const ok = await withTts.inject({ url: `/tts?text=${encodeURIComponent(' \u0000 silla \t  adelante ')}&lang=es` });
       expect(ok.statusCode).toBe(200);
@@ -764,7 +744,7 @@ describe('GET /tts', () => {
       }
       return Buffer.from([0xff]);
     };
-    const withTts = buildApp({ db, namer, tts, rateLimitPerMin: 100_000, ttsDailyChars: 500 });
+    const withTts = buildApp({ db, tts, rateLimitPerMin: 100_000, ttsDailyChars: 500 });
     const get = (text: string, ip = '10.0.0.1') => withTts.inject({ url: `/tts?text=${text}`, headers: { 'cf-connecting-ip': ip } });
     try {
       for (let i = 0; i < 20; i++) expect((await get(`p${i}`)).statusCode).toBe(200);
@@ -790,7 +770,7 @@ describe('GET /tts', () => {
       cacheDir: '/tmp/stepsafe-tts-refund-missing',
       fetchImpl: async () => new Response('no', { status: 500, headers: { 'content-type': 'application/json' } }),
     });
-    const withTts = buildApp({ db, namer, tts, rateLimitPerMin: 100_000, ttsDailyChars: 10, ttsMissPerMin: 100 });
+    const withTts = buildApp({ db, tts, rateLimitPerMin: 100_000, ttsDailyChars: 10, ttsMissPerMin: 100 });
     try {
       expect((await withTts.inject({ url: '/tts?text=hello' })).statusCode).toBe(502); // 5 chars, reserved then refunded
       // 6 more would exceed a budget that still held the first 5; a refund leaves room and upstream fails again
@@ -805,7 +785,7 @@ describe('GET /tts', () => {
       if (!charge(text.length)) throw new TtsBudgetError('budget');
       return Buffer.from([0xff]);
     };
-    const withTts = buildApp({ db, namer, tts, rateLimitPerMin: 100_000, ttsIpDailyChars: 250, ttsMissPerMin: 1000 });
+    const withTts = buildApp({ db, tts, rateLimitPerMin: 100_000, ttsIpDailyChars: 250, ttsMissPerMin: 1000 });
     const get = (text: string, ip: string) => withTts.inject({ url: `/tts?text=${text}`, headers: { 'cf-connecting-ip': ip } });
     try {
       expect((await get('a'.repeat(200), '10.2.0.1')).statusCode).toBe(200);
@@ -820,7 +800,7 @@ describe('GET /tts', () => {
 
 describe('client IP trust', () => {
   it('honours cf-connecting-ip only from a loopback socket; a spoof from elsewhere is keyed by its socket address', async () => {
-    const strict = buildApp({ db, namer, getRateLimitPerMin: 2 });
+    const strict = buildApp({ db, getRateLimitPerMin: 2 });
     try {
       const fromLan = (i: number) =>
         strict.inject({ url: '/users/abc', remoteAddress: '192.168.1.50', headers: { 'cf-connecting-ip': `10.9.9.${i}` } });
@@ -887,7 +867,7 @@ describe('budget env and IPv6 keys', () => {
       if (!cached.has(text) && !charge(text.length)) throw new TtsBudgetError('budget');
       return Buffer.from([0xff]);
     };
-    const zero = buildApp({ db, namer, tts, ttsDailyChars: envBudget('0') });
+    const zero = buildApp({ db, tts, ttsDailyChars: envBudget('0') });
     try {
       expect((await zero.inject({ url: '/tts?text=miss' })).statusCode).toBe(429);
       expect((await zero.inject({ url: '/tts?text=hit' })).statusCode).toBe(200);
@@ -907,7 +887,7 @@ describe('budget env and IPv6 keys', () => {
   });
 
   it('rotating addresses inside one IPv6 /64 shares one rate-limit bucket', async () => {
-    const strict = buildApp({ db, namer, getRateLimitPerMin: 2 });
+    const strict = buildApp({ db, getRateLimitPerMin: 2 });
     try {
       const get = (ip: string) => strict.inject({ url: '/users/abc', remoteAddress: ip });
       expect((await get('2001:db8:1:2::1')).statusCode).toBe(200);

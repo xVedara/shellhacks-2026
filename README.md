@@ -46,7 +46,7 @@ The phone detects an obstacle on the device. On-device alerts do not need a netw
 
 The phone crops the obstacle and sends `POST /hazards` with the crop, latitude, longitude, height band, and `deviceId`. That post is a PathGuard hazard or a Scout report. `ServerLink.handle` does not pin a closing alert.
 
-The server merges the report into a nearby pin, or names the crop. A `GEMINI_API_KEY` selects Google Gemini. With no key, Ollama names the crop when `qwen3.8:27b-mlx` is available. Otherwise the server stores the hazard as type `obstacle` with `needsNaming`.
+The server merges the report into a nearby pin, or stores a new pin as type `obstacle` with `needsNaming` and answers at once. It never names a crop inline. A renamer names new pins every 5 seconds: a `GEMINI_API_KEY` selects Google Gemini; with no key, Ollama names the crop when `qwen3.8:27b-mlx` is available.
 
 The phone requests a spoken hazard name from `GET /tts`. With no `ELEVENLABS_API_KEY`, that route returns 503 and the phone uses on-device speech.
 
