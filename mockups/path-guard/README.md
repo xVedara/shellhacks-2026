@@ -2,7 +2,9 @@
 
 Static HTML studies for the StepSafe community map. These files do not run in the app, do not call the API, and are not wired into `web/`, `ios/`, or `server/`.
 
-Open `index.html` in a browser. It is a gallery of the same three screens in three frames, light and dark:
+Open `index.html` in a browser. It is a gallery of the same three screens in three frames, light and dark.
+
+Rendered PNGs of every screen are in `shots/`, named `{desktop|mobile-web|mobile-app}-{live-map|verify|hazard}-{light|dark}.png`.
 
 | Frame | What it is |
 | --- | --- |
