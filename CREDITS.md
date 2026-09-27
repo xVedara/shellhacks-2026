@@ -10,7 +10,7 @@ Qwen names a crop when no Gemini key is set and Ollama is running. The tag is `q
 
 ElevenLabs speaks alerts and live hazard names with model `eleven_multilingual_v2` and the premade voice Sarah, id `EXAVITQu4vr4xnSDxMaL`. The phone bundles 71 phrases in English and Spanish. The clips were generated on Ara's ElevenLabs account (Creator plan, redeemed through MLH). Terms: https://elevenlabs.io/terms-of-use.
 
-Ultralytics YOLO11n detects vehicles on the phone. The weights are AGPL-3.0-only. The bundled model and the AGPL text in the app are described in [ios/CREDITS.md](ios/CREDITS.md). The model metadata says it was trained on COCO. COCO annotations are CC-BY-4.0. COCO images stay under Flickr's terms. Neither file is in this repo.
+Ultralytics YOLO11s (a WiSE-FT blend with a fine-tune on the CC BY 4.0 WOTR and blind-crossing datasets) detects vehicles on the phone. The weights are AGPL-3.0-only. The bundled model and the AGPL text in the app are described in [ios/CREDITS.md](ios/CREDITS.md). The model metadata says it was trained on COCO. COCO annotations are CC-BY-4.0. COCO images stay under Flickr's terms. Neither file is in this repo.
 
 MongoDB Atlas stores hazards. Use of Atlas follows the MongoDB Cloud Terms: https://www.mongodb.com/legal/terms-and-conditions/cloud. Those terms have no attribution line. The Node.js driver is a separate Apache-2.0 library, listed below. A local demo can download MongoDB Community Server through `mongodb-memory-server`. That server binary is SSPL-1.0 and is not in git: https://www.mongodb.com/licensing/server-side-public-license.
 
@@ -74,4 +74,4 @@ Logos were made with GPT Image 2 (OpenAI).
 
 Cursor cloud agents authored commits and opened pull requests. A Cursor cloud agent coordinated later review, verification, and design mockups.
 
-The running app also calls Gemini, Qwen through Ollama, ElevenLabs, and on-device YOLO11n, listed above. Those calls did not write the git history.
+The running app also calls Gemini, Qwen through Ollama, ElevenLabs, and on-device YOLO11s, listed above. Those calls did not write the git history.

@@ -11,7 +11,7 @@ checklist and first-time device test below before the actual demo.
   alerts with spatial tones, priority ordering, and AirPods mute / what's-ahead
   (`ios/StepSafe/AlertManager.swift`, `Core/PathGuard.swift`, `Core/AlertPolicy.swift`).
 - **Crossing assist:** `ClosingDetector` (depth) alerts on anything closing fast,
-  including a pushed cart; `VehicleDetector` (YOLO11n Core ML) alerts on cars and
+  including a pushed cart; `VehicleDetector` (YOLO11s Core ML) alerts on cars and
   bikes beyond LiDAR range (`BoxTracker` only emits `group == "vehicle"`; a cart is
   not a YOLO class, and YOLO-only pedestrians are not alerted). Both are priority 1.
   The hard rule in `AlertPolicy`'s header: closing objects are never muted, and their
@@ -138,7 +138,7 @@ waiting on a real fix.
   field of view).
 - Combined drop-off + closing phrases are marked done at start, not on completion.
 - Spanish phrase wording wants a native speaker's pass.
-- Repo LICENSE for AGPL (YOLO11n is AGPL-3.0, see `ios/CREDITS.md`) is Ara's
+- Repo LICENSE for AGPL (YOLO11s is AGPL-3.0, see `ios/CREDITS.md`) is Ara's
   decision, pending.
 - As of commit `1cd146e`, none of this had run on a physical device — that's what
   the first-time device test above is for.

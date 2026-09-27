@@ -4,7 +4,7 @@ import VideoToolbox
 import Vision
 import os
 
-/// Vehicles beyond LiDAR range (crossing assist, PLAN.md section 7): YOLO11n (Ultralytics, AGPL-3.0, see
+/// Vehicles beyond LiDAR range (crossing assist, PLAN.md section 7): YOLO11s WiSE blend (Ultralytics, AGPL-3.0, see
 /// ios/CREDITS.md) through Vision at about Tuning.vehicleHz on its own queue. The ARSession delegate queue only
 /// copies the camera pixels (FrameCrop.copyRegion) and pose; the ARFrame is never kept. An IoU tracker turns box
 /// growth into closing speed (BoxTracker.closing), with the walker's own motion subtracted.
@@ -35,7 +35,7 @@ final class VehicleDetector {
 
     /// nil if the bundled model cannot be loaded (then crossing assist is depth-only).
     init?() {
-        guard let url = Bundle.main.url(forResource: "yolo11n", withExtension: "mlmodelc"),
+        guard let url = Bundle.main.url(forResource: Tuning.vehicleModelName, withExtension: "mlmodelc"),
               let ml = try? MLModel(contentsOf: url, configuration: MLModelConfiguration()),
               let vn = try? VNCoreMLModel(for: ml) else { return nil }
         vn.featureProvider = Thresholds()

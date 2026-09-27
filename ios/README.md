@@ -20,7 +20,7 @@ Sensing:
   from depth.
 - `Core/ClosingDetector.swift` — depth-based detection of anything closing fast
   (crossing assist), ego-motion and head-rotation invariant.
-- `VehicleDetector.swift` — YOLO11n Core ML detector (cars, bikes, people) beyond
+- `VehicleDetector.swift` — YOLO11s (WiSE blend) Core ML detector (cars, bikes, people) beyond
   LiDAR range.
 - `Core/BoxTracker.swift` — IoU tracking of YOLO boxes plus closing math from box
   growth, roll- and rotation-compensated.
@@ -79,5 +79,5 @@ via `HOST=0.0.0.0` (`scripts/dev-up.sh` does this by default).
 
 ## Credits
 
-Ships the YOLO11n (Ultralytics, AGPL-3.0) Core ML model — see
+Ships a YOLO11s (Ultralytics, AGPL-3.0) WiSE-FT blend Core ML model — see
 [`CREDITS.md`](CREDITS.md) for the license and export details.

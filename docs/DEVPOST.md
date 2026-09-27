@@ -28,7 +28,7 @@ Controls are two fixed AirPods presses — "what's ahead" and mute — nothing c
 
 ## How we built it
 
-**iOS.** `ARWorldTrackingConfiguration` with `sceneDepth`/`smoothedSceneDepth` gives a live LiDAR depth map. Path guard unprojects a central band of depth pixels into world points, buckets them into ground/head/drop-off bands against the detected floor plane, and requires a few consecutive confirming frames before alerting. Crossing assist runs two detectors together: a depth-based `ClosingDetector` that flags anything whose range is shrinking fast (so a pushed cart triggers it, not just a labeled vehicle class), and YOLO11n (Ultralytics, Core ML, pretrained on COCO) for cars, bikes, and people beyond LiDAR's ~5 m range, tracked frame-to-frame by IoU. Alerts play as spatial audio — one `AVAudioEngine` with an `AVAudioEnvironmentNode` (HRTF) positioning each tone at the hazard's real 3D point, listener pose copied from the AR camera every frame since the head mount means phone pose is head pose — plus Core Haptics on the highest-priority alerts.
+**iOS.** `ARWorldTrackingConfiguration` with `sceneDepth`/`smoothedSceneDepth` gives a live LiDAR depth map. Path guard unprojects a central band of depth pixels into world points, buckets them into ground/head/drop-off bands against the detected floor plane, and requires a few consecutive confirming frames before alerting. Crossing assist runs two detectors together: a depth-based `ClosingDetector` that flags anything whose range is shrinking fast (so a pushed cart triggers it, not just a labeled vehicle class), and YOLO11s (Ultralytics, Core ML, pretrained on COCO and lightly fine-tuned on pedestrian-view street data) for cars, bikes, and people beyond LiDAR's ~5 m range, tracked frame-to-frame by IoU. Alerts play as spatial audio — one `AVAudioEngine` with an `AVAudioEnvironmentNode` (HRTF) positioning each tone at the hazard's real 3D point, listener pose copied from the AR camera every frame since the head mount means phone pose is head pose — plus Core Haptics on the highest-priority alerts.
 
 **Voice.** ~70 fixed phrases per language (English/Spanish) are pre-generated with ElevenLabs (voice "Sarah") and bundled so alerts play instantly offline; live hazard names come from a `/tts` endpoint cached by content hash, falling back to on-device `AVSpeechSynthesizer` if ElevenLabs is unreachable. Safety detection never waits on any of this either way.
 
@@ -70,7 +70,7 @@ Tune path-guard and crossing thresholds on real outdoor walks instead of simulat
 
 ## Built with
 
-Swift, SwiftUI, ARKit, Core ML, Vision, AVAudioEngine, Core Haptics, CoreLocation, Node.js, TypeScript, Fastify, MongoDB Atlas, Google Gemini API, ElevenLabs, Next.js, React, Tailwind CSS, Leaflet, OpenStreetMap, YOLO11n (Ultralytics), Ollama, Qwen, Cloudflare Tunnel, NVIDIA Jetson, PM2, Claude Code, Cursor, Codex, GPT Image 2.
+Swift, SwiftUI, ARKit, Core ML, Vision, AVAudioEngine, Core Haptics, CoreLocation, Node.js, TypeScript, Fastify, MongoDB Atlas, Google Gemini API, ElevenLabs, Next.js, React, Tailwind CSS, Leaflet, OpenStreetMap, YOLO11s (Ultralytics), Ollama, Qwen, Cloudflare Tunnel, NVIDIA Jetson, PM2, Claude Code, Cursor, Codex, GPT Image 2.
 
 ## Sponsor tracks
 
@@ -94,7 +94,7 @@ Swift, SwiftUI, ARKit, Core ML, Vision, AVAudioEngine, Core Haptics, CoreLocatio
 
 - Map data © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors, [ODbL 1.0](https://opendatacommons.org/licenses/odbl/).
 - Map rendering by [Leaflet](https://leafletjs.com/) via `react-leaflet`.
-- Vehicle/person detection: **YOLO11n** by [Ultralytics](https://github.com/ultralytics/ultralytics), pretrained on COCO, exported to Core ML. Licensed **AGPL-3.0**, so the StepSafe repo is AGPL-3.0 too.
+- Vehicle/person detection: **YOLO11s** by [Ultralytics](https://github.com/ultralytics/ultralytics), pretrained on COCO, blended (WiSE-FT, 10%) with a fine-tune on the WOTR and blind-crossing datasets (CC BY 4.0), exported to Core ML. Licensed **AGPL-3.0**, so the StepSafe repo is AGPL-3.0 too.
 - Hazard naming: [Google Gemini API](https://ai.google.dev/).
 - Text-to-speech: [ElevenLabs](https://elevenlabs.io/) (Creator plan via MLH).
 - Development naming stand-in: a [Qwen](https://ollama.com/library/qwen) vision model via [Ollama](https://ollama.com/).

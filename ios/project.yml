@@ -19,7 +19,7 @@ targets:
       - path: StepSafe/Phrases
         type: folder
         buildPhase: resources
-      # AGPL text for the bundled YOLO11n weights. No in-app screen.
+      # AGPL text for the bundled YOLO11s weights. No in-app screen.
       - path: ../LICENSE
         type: file
         buildPhase: resources
@@ -62,6 +62,8 @@ targets:
     sources:
       - StepSafeTests
       - StepSafe/Core
+      # The vehicle model, compiled into the test bundle for VehicleModelTests (I/O contract).
+      - StepSafe/Models
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.babigian.stepsafe.tests

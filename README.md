@@ -1,6 +1,6 @@
 # StepSafe
 
-StepSafe warns blind and low-vision pedestrians about hazards ahead. A head-mounted iPhone uses LiDAR to detect ground obstacles, head-height hazards, and drop-offs. ClosingDetector warns about anything closing fast, including a pushed cart. YOLO11n warns about cars and bikes beyond LiDAR range. Sighted people report and verify hazards in the Scout tab. The web map shows those reports.
+StepSafe warns blind and low-vision pedestrians about hazards ahead. A head-mounted iPhone uses LiDAR to detect ground obstacles, head-height hazards, and drop-offs. ClosingDetector warns about anything closing fast, including a pushed cart. YOLO11s warns about cars and bikes beyond LiDAR range. Sighted people report and verify hazards in the Scout tab. The web map shows those reports.
 
 StepSafe does not replace a guide dog or your own judgment. It does not give walking directions.
 
@@ -12,7 +12,7 @@ Built at ShellHacks 2026 at FIU Graham Center in Miami.
  ┌──────────────── iPhone Pro (head mount) ──────────────────┐
  │  ARKit LiDAR depth ──► PathGuard                          │
  │                        (ground / head / drop-off lane)    │
- │  Camera ──► YOLO11n ──► BoxTracker ─┐                     │
+ │  Camera ──► YOLO11s ──► BoxTracker ─┐                     │
  │  LiDAR ───► ClosingDetector ────────┴─► crossing assist   │
  │                         │                                 │
  │                         ▼                                 │
@@ -91,7 +91,7 @@ The phone talks to the live API at `https://api.stepsafe.miami` by default. To t
 
 ## License
 
-StepSafe is licensed under the [GNU AGPL-3.0](LICENSE). The iOS app bundles the Ultralytics YOLO11n model, which is also AGPL-3.0, so the repo uses that license.
+StepSafe is licensed under the [GNU AGPL-3.0](LICENSE). The iOS app bundles the Ultralytics YOLO11s model, which is also AGPL-3.0, so the repo uses that license.
 
 ## Credits
 

@@ -140,7 +140,9 @@ enum Tuning {
     static let closingSameRadiusM: Float = 2.0
     /// Within this angle of the walking direction the side is spoken as "ahead".
     static let closingAheadDeg: Float = 8
-    // Vehicles (YOLO11n boxes, beyond LiDAR range)
+    // Vehicles (YOLO boxes, beyond LiDAR range)
+    /// Bundled Core ML detector (StepSafe/Models/<name>.mlpackage): YOLO11s WiSE-FT blend, alpha 0.1 (ios/CREDITS.md).
+    static let vehicleModelName = "yolo11s_wise01"
     static let vehicleHz: Double = 5
     static let vehicleMinConfidence: Float = 0.4
     /// Vehicles need a clearer closing speed: their distance comes from box size, which is noisy.
