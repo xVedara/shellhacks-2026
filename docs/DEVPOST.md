@@ -44,7 +44,7 @@ Swift, SwiftUI, ARKit, Core ML, YOLO11s, Node.js, TypeScript, Fastify, MongoDB A
 
 **Best First-Time Hacker.** Dev and Ara are both first-time hackers.
 
-**Microsoft — What’s Missing?** No chat interface: two fixed AirPods commands, not a conversation. AI runs inside perception, never as a dialogue layer.
+**Microsoft — What’s Missing?** On. Team qualifies: no chatbot and no chat window.
 
 **Waymo — Mobility Challenge.** OpenStreetMap crossings, curbs, and tactile paving, plus community hazard reports, with no turn-by-turn route.
 
@@ -54,7 +54,9 @@ Swift, SwiftUI, ARKit, Core ML, YOLO11s, Node.js, TypeScript, Fastify, MongoDB A
 
 **MLH / MongoDB — Best Use of MongoDB Atlas.** Hazards and votes live in Atlas: a 2dsphere index, TTL expiry by category, and change streams.
 
-**MLH / GoDaddy Registry — Best Domain Name.** The community map is live at https://stepsafe.miami.
+**MLH / GoDaddy Registry — Best Domain Name.** On. MLH GoDaddy flow. Domain issued via Porkbun.
+
+Do not enter: Assurant, Blackstone, Sperry, State Farm, INIT, Solana, Tiger Data, DigitalOcean, Snowflake.
 
 ## Credits and licenses
 
