@@ -55,7 +55,7 @@ export default function HazardPage() {
         aria-label="Hazard status"
       >
         <div className="sheet-face scroll-quiet min-h-0 flex-1 overflow-y-auto pb-2">
-          <Link href={`/?selected=${encodeURIComponent(hazardId)}`} className={`${linkClass} inline-flex min-h-11 items-center text-[14px]`}>
+          <Link href={missing ? "/" : `/?selected=${encodeURIComponent(hazardId)}`} className={`${linkClass} inline-flex min-h-11 items-center text-[14px]`}>
             Back to the live map
           </Link>
           {!detail && <h1 className="sr-only">Hazard</h1>}

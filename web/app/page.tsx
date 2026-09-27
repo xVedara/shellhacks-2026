@@ -119,6 +119,13 @@ export default function MapPage() {
     setDetent("expanded");
   }, []);
 
+  const mapCovered = mapPinsClass(desktop, stageH - sheet) === " map-covered";
+  const showOnMap = () => {
+    setDetent("peek");
+    // The details close; keep keyboard focus on the button that brings them back.
+    requestAnimationFrame(() => document.getElementById("peek-action")?.focus());
+  };
+
   const closePanel = () => {
     returnFocusTo.current = selectedId;
     setPanel("list");
@@ -259,8 +266,8 @@ export default function MapPage() {
           {showPeek ? (
             <div>
               <LiveKicker connection={connection} count={loaded ? list.length : 0} />
-              <button type="button" className={`${primaryButton} mt-3.5 w-full`} onClick={() => setDetent("medium")}>
-                Open list
+              <button id="peek-action" type="button" className={`${primaryButton} mt-3.5 w-full`} onClick={() => setDetent("medium")}>
+                {panel === "detail" && selectedId ? "Back to details" : "Open list"}
               </button>
             </div>
           ) : detailOpen ? (
@@ -272,6 +279,12 @@ export default function MapPage() {
                 <button type="button" className={secondaryButton} onClick={closePanel}>
                   All hazards
                 </button>
+                {/* A landscape phone's expanded sheet leaves no room for even the selected pin: drop to peek to see it. */}
+                {mapCovered && (
+                  <button type="button" className={secondaryButton} onClick={showOnMap}>
+                    Show on map
+                  </button>
+                )}
                 {selectedId && (
                   <Link href={`/hazard/${encodeURIComponent(selectedId)}`} className={`${linkClass} inline-flex min-h-11 items-center px-1 text-[13px]`}>
                     Open full page

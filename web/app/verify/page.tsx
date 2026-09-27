@@ -250,7 +250,8 @@ export default function VerifyPage() {
             aria-labelledby="verify-heading"
             className="panel grid gap-4 p-4 md:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] md:grid-rows-[auto_auto_1fr] md:gap-x-6 md:p-5"
           >
-            <div className="space-y-4 md:row-span-3">
+            {/* With a photo the left column spans the card's rows; without one it would leave an empty band. */}
+            <div className={`space-y-4 ${detail?.crop ? "md:row-span-3" : ""}`}>
               {detailLoading && <p role="status" className="text-ink-3">Loading photo and details…</p>}
               {detailError && <Notice tone="warn" title="Couldn’t load details">{detailError}</Notice>}
               {detail && detail.id === current.id && (

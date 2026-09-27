@@ -116,13 +116,14 @@ export default function Header() {
             <span className="hidden text-[12px] text-ink-3 md:block">Community hazard map</span>
           </span>
         </Link>
-        <div className="ml-auto flex items-center gap-1 short:order-3 short:ml-0 short:pr-4 md:hidden">
+        {/* Portrait phone: the theme and profile share the logo row, above the tabs. */}
+        <div className="ml-auto flex items-center gap-1 short:hidden md:hidden">
           <ThemeToggle compact />
           <Profile {...identity} />
         </div>
       </div>
 
-      <nav aria-label="Main" className="px-2 short:order-2 short:flex-1 md:mt-2 md:flex-1">
+      <nav aria-label="Main" className="px-2 short:flex-1 md:mt-2 md:flex-1">
         <ul className="flex gap-1 md:flex-col md:gap-1">
           {NAV.map((item) => {
             const current = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
@@ -145,6 +146,12 @@ export default function Header() {
           })}
         </ul>
       </nav>
+
+      {/* Landscape phone: one row, so the theme and profile come after the tabs, in reading and tab order. */}
+      <div className="hidden items-center gap-1 pr-4 short:flex">
+        <ThemeToggle compact />
+        <Profile {...identity} />
+      </div>
 
       <div className="mt-auto hidden border-t border-line p-3 md:block">
         <ThemeToggle className="w-full justify-start px-2" />
