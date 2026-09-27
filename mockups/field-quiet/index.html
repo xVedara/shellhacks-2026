@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Field Quiet · StepSafe mockups</title>
+<script>
+(function () {
+  var q = new URLSearchParams(location.search);
+  var t = q.get("theme");
+  if (t !== "light" && t !== "dark") {
+    try { t = localStorage.getItem("field-quiet-theme"); } catch (e) { t = null; }
+  }
+  if (t !== "light" && t !== "dark") t = "light";
+  document.documentElement.setAttribute("data-theme", t);
+  if (q.get("embed") === "1" || q.get("shot") === "1") document.documentElement.setAttribute("data-embed", "1");
+})();
+</script>
+<link rel="stylesheet" href="field-quiet.css">
+<link rel="icon" href="assets/logo-light.png">
+</head>
+<body class="surface-gallery">
+<div class="wrap gallery"><div class="gallery-top"><div><p class="eyebrow">StepSafe · verifier mockups · no product code</p><h1>Field Quiet</h1><p class="intro">Same jobs as the live site: live map, verify queue, and hazard detail, on the phone app, on stepsafe.miami, and on a 1440 desktop. The chrome is the change. Tesla subtraction, Apple quiet. Orange only where a hazard is speaking.</p></div><div class="switch" role="group" aria-label="Theme"><button type="button" data-set-theme="light">Light</button><button type="button" data-set-theme="dark">Dark</button></div></div><p class="section-note" style="margin-top:18px">The switch updates every still on this page. Open a screen for the in-product toggle, the map layer, and the shortcut checkbox. <a class="readme-link" href="README.md">Direction notes</a></p><h2>Mobile app</h2><p class="section-note">Phone frame, 390-wide screen. Bottom tabs. Hazard is a pushed screen.</p><div class="gallery-grid"><a class="shot" href="mobile-app-live-map.html"><img class="only-light" src="shots/mobile-app-live-map-light.png" alt="Live map, light theme"><img class="only-dark" src="shots/mobile-app-live-map-dark.png" alt="Live map, dark theme"><span>Live map</span><small>Heading, five summaries, map, feed</small></a><a class="shot" href="mobile-app-verify.html"><img class="only-light" src="shots/mobile-app-verify-light.png" alt="Verify queue, light theme"><img class="only-dark" src="shots/mobile-app-verify-dark.png" alt="Verify queue, dark theme"><span>Verify queue</span><small>Still there, Gone, Skip</small></a><a class="shot" href="mobile-app-hazard.html"><img class="only-light" src="shots/mobile-app-hazard-light.png" alt="Hazard, light theme"><img class="only-dark" src="shots/mobile-app-hazard-dark.png" alt="Hazard, dark theme"><span>Hazard</span><small>Full record for the queued ramp</small></a></div><h2>Mobile web</h2><p class="section-note">stepsafe.miami at 390. Logo, two tabs, map above the feed.</p><div class="gallery-grid"><a class="shot" href="mobile-web-live-map.html"><img class="only-light" src="shots/mobile-web-live-map-light.png" alt="Live map, light theme"><img class="only-dark" src="shots/mobile-web-live-map-dark.png" alt="Live map, dark theme"><span>Live map</span><small>Top tabs, summary cards, map, feed</small></a><a class="shot" href="mobile-web-verify.html"><img class="only-light" src="shots/mobile-web-verify-light.png" alt="Verify queue, light theme"><img class="only-dark" src="shots/mobile-web-verify-dark.png" alt="Verify queue, dark theme"><span>Verify queue</span><small>Single column, sticky vote bar</small></a><a class="shot" href="mobile-web-hazard.html"><img class="only-light" src="shots/mobile-web-hazard-light.png" alt="Hazard, light theme"><img class="only-dark" src="shots/mobile-web-hazard-dark.png" alt="Hazard, dark theme"><span>Hazard</span><small>Detail, votes, location</small></a></div><h2>Desktop</h2><p class="section-note">1440. Left rail, five summaries, map beside the active-hazard feed.</p><div class="stack"><a class="shot wide" href="desktop-live-map.html"><img class="only-light" src="shots/desktop-live-map-light.png" alt="Live map, light theme"><img class="only-dark" src="shots/desktop-live-map-dark.png" alt="Live map, dark theme"><span>Live map</span><small>Sidebar, metrics, map | feed</small></a><a class="shot wide" href="desktop-verify.html"><img class="only-light" src="shots/desktop-verify-light.png" alt="Verify queue, light theme"><img class="only-dark" src="shots/desktop-verify-dark.png" alt="Verify queue, dark theme"><span>Verify queue</span><small>Review card, shortcuts, three votes</small></a><a class="shot wide" href="desktop-hazard.html"><img class="only-light" src="shots/desktop-hazard-light.png" alt="Hazard, light theme"><img class="only-dark" src="shots/desktop-hazard-dark.png" alt="Hazard, dark theme"><span>Hazard</span><small>Measurements, history, map</small></a></div></div>
+<script src="theme.js"></script>
+</body>
+</html>

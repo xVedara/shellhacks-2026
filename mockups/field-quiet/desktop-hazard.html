@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hazard details · StepSafe</title>
+<script>
+(function () {
+  var q = new URLSearchParams(location.search);
+  var t = q.get("theme");
+  if (t !== "light" && t !== "dark") {
+    try { t = localStorage.getItem("field-quiet-theme"); } catch (e) { t = null; }
+  }
+  if (t !== "light" && t !== "dark") t = "light";
+  document.documentElement.setAttribute("data-theme", t);
+  if (q.get("embed") === "1" || q.get("shot") === "1") document.documentElement.setAttribute("data-embed", "1");
+})();
+</script>
+<link rel="stylesheet" href="field-quiet.css">
+<link rel="icon" href="assets/logo-light.png">
+</head>
+<body class="surface-desk">
+<div class="preview-bar"><a href="index.html">Gallery</a><span>Field Quiet · Desktop · Hazard details · theme toggle is in the screen</span></div><div class="desktop"><aside class="sidebar"><a class="brand" href="desktop-live-map.html"><img class="logo-light" src="assets/logo-light.png" width="28" height="28" alt=""><img class="logo-dark" src="assets/logo-dark.png" width="28" height="28" alt=""><span><span class="name">StepSafe</span><small>Community hazard map</small></span></a><nav class="nav" aria-label="Main"><a href="desktop-live-map.html" aria-current="page"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 6.5 9 4.5l6 2 4.5-2v13l-4.5 2-6-2-4.5 2v-13Z"/><path d="M9 4.5v13M15 6.5v13"/></svg> Live map</a><a href="desktop-verify.html"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4.5" y="4.5" width="15" height="15" rx="2"/><path d="m8 12.2 2.4 2.4L16 9.2"/></svg> Verify queue</a></nav><div class="side-foot"><button type="button" class="theme-btn" data-theme-toggle aria-pressed="false"><span class="when-light"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.25"/><path d="M12 3.5v1.8M12 18.7v1.8M3.5 12h1.8M18.7 12h1.8M5.8 5.8l1.3 1.3M16.9 16.9l1.3 1.3M18.2 5.8l-1.3 1.3M7.1 16.9l-1.3 1.3"/></svg></span><span class="when-dark"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16.5 14.2A6.2 6.2 0 0 1 9.8 4.8 6.4 6.4 0 1 0 16.5 14.2Z"/></svg></span><span>Dark theme</span></button><div class="profile"><span class="avatar" aria-hidden="true">N</span><span><b>Neighbor-5ae3</b><small>0 karma · verifier</small></span></div></div></aside><div class="main scroll"><div class="page-head"><h1>Hazard details</h1><div class="actions"><a class="textlink" href="desktop-live-map.html">← Back to the map</a></div></div><div class="hazard-grid"><div class="panel hazard-body"><div class="hz"><span class="pin-tile"><svg class="pin" width="26" height="26" viewBox="0 0 26 26" aria-hidden="true" style="overflow:visible;filter:drop-shadow(0 0 1px rgba(8,22,36,.75))"><rect x="1.3" y="1.3" width="23.4" height="23.4" rx="2" fill="#ffc23d" stroke="#fff" stroke-width="2.08"/><text x="13" y="13" text-anchor="middle" dominant-baseline="central" fill="#081624" font-size="10" font-weight="700" font-family="Geist, sans-serif">M</text></svg></span><div><h2>drop-off <span class="badge-sample">Sample</span></h2><p>Moving · Drop-off · type “ramp”</p></div></div>
+<div class="notice" role="status"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 11v5"/><path d="M12 8h.01"/></svg><div><strong>Sample hazard</strong><p>Seeded for the demo. It was not reported by a real walker.</p></div></div>
+<div class="nophoto"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5h3.2L8 6h8l1.8 2.5H21v9.2a1.3 1.3 0 0 1-1.3 1.3H4.3A1.3 1.3 0 0 1 3 17.7V8.5Z"/><path d="m4 5 16 15"/></svg><span>No photo was sent with this report</span></div>
+<dl class="facts facts-2">
+  <div><dt>Clearance height</dt><dd>Not measured</dd></div>
+  <div><dt>Remaining sidewalk width</dt><dd>Not measured</dd></div>
+  <div><dt>Confidence</dt><dd>1.0 <span class="hint">(cleared below −2)</span></dd></div>
+  <div><dt>Severity</dt><dd>1 of 3</dd></div>
+  <div><dt>Last seen</dt><dd>4 hours ago</dd></div>
+  <div><dt>Expires</dt><dd>in 2 hours <span class="hint">(clears after 6 hours without an upvote)</span></dd></div>
+  <div><dt>First reported</dt><dd>Sep 26, 2026, 6:12 PM</dd></div>
+  <div><dt>Spoken in Spanish</dt><dd lang="es">Rampa adelante</dd></div>
+</dl>
+<section><h3 class="h3">Pending reclassifications</h3><ul class="pending"><li>Change to <strong>type “curb”, permanent, ground level</strong>: 1 of 3 agree</li></ul></section>
+<section><h3 class="h3">Vote history (2)</h3><div class="table-wrap"><table><thead><tr><th>When</th><th>Vote</th><th>From</th><th class="num">Weight</th></tr></thead><tbody><tr><td>5 hours ago</td><td>Still there</td><td>Scout</td><td class="num">1.00</td></tr><tr><td>6 hours ago</td><td>Still there</td><td>Walker</td><td class="num">0.70</td></tr></tbody></table></div></section></div><div class="mini-map"><svg class="campus" viewBox="730 430 450 270" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Map of reported hazards around FIU Graham Center">
+    <defs><filter id="pinshadow" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="0.8" stdDeviation="0.7" flood-color="#081624" flood-opacity="0.55"/></filter></defs>
+    <rect class="land" x="0" y="0" width="1200" height="800"/>
+    <rect class="park" x="12" y="12" width="148" height="96" rx="16"/>
+    <rect class="park" x="12" y="672" width="200" height="108" rx="16"/>
+    <ellipse class="water" cx="1108" cy="728" rx="52" ry="22"/>
+    <rect class="case" x="0" y="146" width="1200" height="30" rx="8"/>
+    <rect class="road" x="0" y="152" width="1200" height="18" rx="6"/>
+    <rect class="case" x="0" y="398" width="1200" height="26" rx="7"/>
+    <rect class="road" x="0" y="404" width="1200" height="14" rx="5"/>
+    <rect class="case" x="0" y="626" width="1200" height="28" rx="8"/>
+    <rect class="road" x="0" y="632" width="1200" height="16" rx="6"/>
+    <rect class="case" x="176" y="0" width="28" height="800" rx="8"/>
+    <rect class="road" x="182" y="0" width="16" height="800" rx="6"/>
+    <rect class="case" x="536" y="0" width="30" height="800" rx="8"/>
+    <rect class="road" x="542" y="0" width="18" height="800" rx="6"/>
+    <rect class="case" x="896" y="0" width="26" height="800" rx="8"/>
+    <rect class="road" x="902" y="0" width="14" height="800" rx="6"/>
+    <circle class="ring-case" cx="1004" cy="286" r="50"/>
+    <circle class="ring" cx="1004" cy="286" r="50"/>
+    <rect class="bldg" x="220" y="18" width="280" height="108" rx="3"/>
+    <rect class="bldg" x="590" y="18" width="270" height="108" rx="3"/>
+    <rect class="bldg" x="220" y="196" width="280" height="168" rx="3"/>
+    <rect class="bldg" x="590" y="196" width="270" height="168" rx="3"/>
+    <rect class="bldg" x="20" y="456" width="136" height="120" rx="3"/>
+    <rect class="bldg" x="220" y="448" width="280" height="140" rx="3"/>
+    <rect class="bldg" x="590" y="448" width="190" height="140" rx="3"/>
+    <rect class="bldg" x="812" y="458" width="72" height="48" rx="3"/>
+    <rect class="bldg" x="948" y="456" width="206" height="130" rx="3"/>
+    <rect class="bldg" x="628" y="692" width="192" height="80" rx="3"/>
+    <text class="blabel" x="360" y="78" text-anchor="middle">Chemistry &amp; Physics</text>
+    <text class="blabel" x="725" y="64" text-anchor="middle">Academic Health</text>
+    <text class="blabel" x="725" y="90" text-anchor="middle">Center</text>
+    <text class="blabel" x="360" y="286" text-anchor="middle">Viertes Haus</text>
+    <text class="blabel emph" x="725" y="286" text-anchor="middle">Green Library</text>
+    <text class="blabel" x="88" y="522" text-anchor="middle">SIPA</text>
+    <text class="blabel" x="360" y="524" text-anchor="middle">Ryder Business</text>
+    <text class="blabel emph" x="685" y="524" text-anchor="middle">Graham Center</text>
+    <text class="blabel small" x="848" y="488" text-anchor="middle">Market</text>
+    <text class="blabel" x="1051" y="528" text-anchor="middle">Primera Casa</text>
+    <text class="blabel" x="724" y="738" text-anchor="middle">Gold Garage</text>
+    <text class="blabel small" x="1108" y="732" text-anchor="middle">Lakeview</text>
+    <text class="street" x="236" y="166">SW 8th Street</text>
+    <text class="street" x="660" y="646">SW 14th Street</text>
+    <text class="street" x="1076" y="292">Campus Circle</text>
+    <circle class="osm osm-cross" cx="190" cy="161" r="5"/>
+    <circle class="osm osm-cross" cx="551" cy="161" r="5"/>
+    <circle class="osm osm-curb" cx="909" cy="161" r="4.5"/>
+    <circle class="osm osm-tactile" cx="190" cy="411" r="4.5"/>
+    <circle class="osm osm-cross" cx="551" cy="411" r="5"/>
+    <circle class="osm osm-curb" cx="909" cy="411" r="4.5"/>
+    <circle class="osm osm-cross" cx="551" cy="640" r="5"/>
+    <circle class="osm osm-tactile" cx="909" cy="640" r="4.5"/>
+    <g transform="translate(74,218)"><g filter="url(#pinshadow)"><polygon points="18,1.4 34.6,34.6 1.4,34.6" fill="#FF7900" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><text x="18" y="23.76" text-anchor="middle" dominant-baseline="central" fill="#081624" font-size="12" font-weight="700" font-family="Geist, sans-serif">T</text></g></g><g transform="translate(114,322)"><g filter="url(#pinshadow)"><circle cx="18" cy="18" r="16.3" fill="#ffc23d" stroke="#fff" stroke-width="2"/><text x="18" y="18" text-anchor="middle" dominant-baseline="central" fill="#081624" font-size="14" font-weight="700" font-family="Geist, sans-serif">M</text></g></g><g transform="translate(944,56)"><g filter="url(#pinshadow)"><circle cx="16" cy="16" r="14.3" fill="#d93a1e" stroke="#fff" stroke-width="2"/><text x="16" y="16" text-anchor="middle" dominant-baseline="central" fill="#ffffff" font-size="13" font-weight="700" font-family="Geist, sans-serif">P</text></g></g><g transform="translate(1046,60)"><g filter="url(#pinshadow)"><circle cx="18" cy="18" r="16.3" fill="#FF7900" stroke="#fff" stroke-width="2"/><text x="18" y="18" text-anchor="middle" dominant-baseline="central" fill="#081624" font-size="14" font-weight="700" font-family="Geist, sans-serif">T</text></g></g><g transform="translate(944,184)"><g filter="url(#pinshadow)"><circle cx="16" cy="16" r="14.3" fill="#d93a1e" stroke="#fff" stroke-width="2"/><text x="16" y="16" text-anchor="middle" dominant-baseline="central" fill="#ffffff" font-size="13" font-weight="700" font-family="Geist, sans-serif">P</text></g></g><g transform="translate(1007,355)"><g filter="url(#pinshadow)"><polygon points="17,1.4 32.6,32.6 1.4,32.6" fill="#d93a1e" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><text x="17" y="22.44" text-anchor="middle" dominant-baseline="central" fill="#ffffff" font-size="11" font-weight="700" font-family="Geist, sans-serif">P</text></g></g><a href="desktop-hazard.html" aria-label="Sample drop-off, moving, confidence 1.0"><g transform="translate(827,557)"><g filter="url(#pinshadow)"><rect x="1.5" y="1.5" width="39" height="39" rx="2.5" fill="#ffc23d" stroke="#fff" stroke-width="2"/><text x="21" y="21" text-anchor="middle" dominant-baseline="central" fill="#081624" font-size="17" font-weight="700" font-family="Geist, sans-serif">M</text></g><circle cx="21" cy="21" r="25" fill="none" stroke="var(--heading)" stroke-width="1.6" stroke-dasharray="3 2.2"/></g><g class="stag" transform="translate(814,531)"><rect width="68" height="20" rx="4" fill="#ffffff" stroke="#081624" stroke-width="1.25" stroke-dasharray="3 2"/><text x="34" y="14" text-anchor="middle" font-weight="650" fill="#081624" font-family="Geist, sans-serif">Sample</text></g></a><g transform="translate(580,714)"><g filter="url(#pinshadow)"><rect x="1.5" y="1.5" width="29" height="29" rx="2.5" fill="#d93a1e" stroke="#fff" stroke-width="2"/><text x="16" y="16" text-anchor="middle" dominant-baseline="central" fill="#ffffff" font-size="13" font-weight="700" font-family="Geist, sans-serif">P</text></g></g><g transform="translate(963,691)"><g filter="url(#pinshadow)"><circle cx="17" cy="17" r="15.3" fill="#d93a1e" stroke="#fff" stroke-width="2"/><text x="17" y="17" text-anchor="middle" dominant-baseline="central" fill="#ffffff" font-size="14" font-weight="700" font-family="Geist, sans-serif">P</text></g></g>
+  </svg><p class="attrib">Leaflet | <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors</p></div></div></div></div>
+<script src="theme.js"></script>
+</body>
+</html>
