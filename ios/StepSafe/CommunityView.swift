@@ -105,7 +105,8 @@ final class CommunityModel: ObservableObject {
             status = nil
         } catch {
             guard !Task.isCancelled else { return }
-            status = t("Server unreachable, retrying", "Servidor no disponible, reintentando") // the offline poll retries
+            // SSE-up failures are not retried (the 15 s poll runs only while disconnected).
+            status = t("Server unreachable", "Servidor no disponible")
         }
     }
 
@@ -152,9 +153,9 @@ final class CommunityModel: ObservableObject {
                 pins[i] = h
             } else {
                 pins.append(h)
-                if Community.isFresh(lastSeen: h.lastSeen), !walkerRunning {
-                    UIAccessibility.post(notification: .announcement,
-                                         argument: t("New hazard reported, ", "Nuevo peligro reportado, ") + Community.distance(d, lang: lang))
+                if Community.isFresh(lastSeen: h.lastSeen) {
+                    postVoiceOverAnnouncement(t("New hazard reported, ", "Nuevo peligro reportado, ") + Community.distance(d, lang: lang),
+                                              walkerRunning: walkerRunning)
                 }
             }
             pins.sort { ($0.distanceM ?? .infinity) < ($1.distanceM ?? .infinity) }
@@ -221,8 +222,15 @@ final class CommunityModel: ObservableObject {
 
     func announce(_ text: String) {
         status = text
-        if !walkerRunning { UIAccessibility.post(notification: .announcement, argument: text) }
+        postVoiceOverAnnouncement(text, walkerRunning: walkerRunning)
     }
+}
+
+/// Drop the post while Walker is scanning, or while the caller's tab is not visible.
+/// Nothing is queued: a late Scout report must not talk over safety alerts.
+func postVoiceOverAnnouncement(_ text: String, walkerRunning: Bool, tabVisible: Bool = true) {
+    guard tabVisible, !walkerRunning else { return }
+    UIAccessibility.post(notification: .announcement, argument: text)
 }
 
 struct CommunityView: View {

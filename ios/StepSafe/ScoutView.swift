@@ -81,14 +81,22 @@ final class ScoutModel: ObservableObject, @unchecked Sendable { // main-confined
     enum NearbyPhase { case idle, loading, loaded, failed }
     @Published private(set) var nearbyPhase: NearbyPhase = .idle
     @Published var busy = false
+    /// Same gate as Community: stay quiet while Walker is scanning.
+    var walkerRunning = false
+    /// False on the other tabs. The report task can finish after Scout is no longer showing.
+    var scoutVisible = false
 
     private let link: ServerLink
     /// True until the first fix is observed. The GPS retry and the prompt restore read this, not `status`.
     private var awaitingFirstFix = true
     private var nearToken = 0
-    /// Last text passed to VoiceOver, so one transition is not spoken twice.
+    /// Last report text considered for VoiceOver, so one transition is not spoken twice.
     private var spoken: String?
-    init(link: ServerLink) { self.link = link }
+    init(link: ServerLink, scoutVisible: Bool = false, walkerRunning: Bool = false) {
+        self.link = link
+        self.scoutVisible = scoutVisible
+        self.walkerRunning = walkerRunning
+    }
 
     var hasFix: Bool { link.localizer.fix != nil }
     /// True while /near is in flight. A later GPS wake must not start a second request.
@@ -189,10 +197,11 @@ final class ScoutModel: ObservableObject, @unchecked Sendable { // main-confined
     }
 
     /// Posted at a terminal report change, not from `body`, so a re-render does not repeat it.
+    /// Remembered even when dropped, so a report that finishes during Walker is not spoken later.
     private func speak(_ text: String) {
         guard text != spoken else { return }
         spoken = text
-        UIAccessibility.post(notification: .announcement, argument: text)
+        postVoiceOverAnnouncement(text, walkerRunning: walkerRunning, tabVisible: scoutVisible)
     }
 
     func vote(_ pin: NearHazard, up: Bool) {
@@ -267,7 +276,7 @@ struct ScoutView: View {
     init(model: AppModel, cameraLive: Bool = true) {
         self.model = model
         self.cameraLive = cameraLive
-        _scout = StateObject(wrappedValue: ScoutModel(link: model.link))
+        _scout = StateObject(wrappedValue: ScoutModel(link: model.link, scoutVisible: cameraLive, walkerRunning: model.running))
     }
 
     var body: some View {
@@ -305,6 +314,8 @@ struct ScoutView: View {
             scout.refresh()
             scout.loadTaxonomy()
         }
+        .onChange(of: model.running, initial: true) { scout.walkerRunning = model.running }
+        .onChange(of: cameraLive, initial: true) { scout.scoutVisible = cameraLive }
         // Poll the localizer, not `status`. A tap before the first fix rewrites the status string
         // and must not stop this. When a fix is in and /near is not already pending, refresh once.
         .task {
@@ -352,6 +363,7 @@ struct ScoutView: View {
                 Spacer()
                 Button { scout.refresh() } label: { Image(systemName: "arrow.clockwise").frame(width: 44, height: 44) }
                     .accessibilityLabel("Refresh nearby hazards")
+                    .disabled(scout.nearPending)
             }
             if scout.nearbyPhase == .loading {
                 ProgressView("Loading hazards")
