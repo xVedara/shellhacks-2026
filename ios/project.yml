@@ -42,15 +42,6 @@ targets:
         NSCameraUsageDescription: StepSafe uses the camera and LiDAR to find obstacles, head-height hazards and drop-offs in your path.
         NSLocationWhenInUseUsageDescription: StepSafe uses your location to place hazards on the community map and warn you about hazards ahead.
         NSMotionUsageDescription: StepSafe uses motion sensors to track where your head is pointing so warnings come from the right direction.
-        NSLocalNetworkUsageDescription: StepSafe talks to the StepSafe hazard server on this network to share and receive hazard pins.
-        # Plain HTTP only to the local network and the venue Mac; no global arbitrary loads.
-        NSAppTransportSecurity:
-          NSAllowsLocalNetworking: true
-          NSExceptionDomains:
-            192.168.81.233:
-              NSExceptionAllowsInsecureHTTPLoads: true
-            100.90.192.75:
-              NSExceptionAllowsInsecureHTTPLoads: true
     scheme:
       testTargets:
         - StepSafeTests

@@ -7,9 +7,6 @@ final class ServerLink: ObservableObject {
     @Published var lastReport = "None yet"
     @Published var ahead: [HeadsUpState.Due] = []
     @Published var pinCount = 0
-    @Published var baseURL: String {
-        didSet { UserDefaults.standard.set(baseURL, forKey: APIClient.baseURLKey) }
-    }
 
     let api = APIClient()
     let localizer = Localizer()
@@ -20,7 +17,7 @@ final class ServerLink: ObservableObject {
     var scoutActive = false
 
     init(alerts: AlertManager) {
-        baseURL = UserDefaults.standard.string(forKey: APIClient.baseURLKey) ?? APIClient.defaultBaseURL
+        UserDefaults.standard.removeObject(forKey: "serverURL") // drop the old debug-panel override
         tts = TTSPlayer(api: api)
         namer = HazardNamer(api: api, localizer: localizer)
         map = MapSync(api: api, localizer: localizer)
@@ -73,7 +70,7 @@ final class ServerLink: ObservableObject {
     func reset() { namer.reset() }
 }
 
-/// Server status in the walker debug panel: reachability, last report, pins ahead, server URL.
+/// Server status in the walker debug panel: reachability, last report, pins ahead, server.
 struct ServerStatusView: View {
     @ObservedObject var link: ServerLink
 
@@ -88,15 +85,7 @@ struct ServerStatusView: View {
                 Text(Spoken.headsUp(due) + (due.pin.sample == true ? " (sample)" : ""))
                     .font(.footnote).foregroundStyle(.white)
             }
-            TextField("Server URL", text: $link.baseURL)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .keyboardType(.URL)
-                .font(.footnote.monospaced())
-                .padding(8)
-                .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
-                .foregroundStyle(.white)
-                .accessibilityLabel("Server URL")
+            Text(APIClient.baseURL.absoluteString).font(.footnote.monospaced()).foregroundStyle(Color.slate)
         }
         .accessibilityElement(children: .contain)
     }

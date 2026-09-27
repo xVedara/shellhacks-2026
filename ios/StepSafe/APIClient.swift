@@ -7,8 +7,8 @@ import UIKit
 /// The StepSafe server (PLAN.md section 6, server/README.md). Nothing here is on the safety path:
 /// callers never wait on it before warning the walker. Thread-safe; completion work is the caller's.
 final class APIClient {
-    static let defaultBaseURL = "https://api.stepsafe.miami" // Jetson behind the Cloudflare tunnel (dev fallbacks: http://100.90.192.75:8787 Tailscale, http://192.168.81.233:8787 LAN)
-    static let baseURLKey = "serverURL"
+    /// The only server the app talks to: the Jetson behind the Cloudflare tunnel. Not user-configurable.
+    static let baseURL = URL(string: "https://api.stepsafe.miami")!
 
     struct ReportResult: Decodable { var id: String; var label: String; var merged: Bool }
     struct VoteResult: Decodable { var confidence: Double; var status: String }
@@ -24,10 +24,7 @@ final class APIClient {
     /// Reachability as last observed: true after any HTTP response, false after a transport error.
     var onReachability: ((Bool) -> Void)?
 
-    var baseURL: URL {
-        let s = UserDefaults.standard.string(forKey: Self.baseURLKey)?.trimmingCharacters(in: .whitespaces)
-        return URL(string: (s?.isEmpty == false ? s! : Self.defaultBaseURL)) ?? URL(string: Self.defaultBaseURL)!
-    }
+    var baseURL: URL { Self.baseURL }
 
     /// identifierForVendor, matching the server's ^[A-Za-z0-9._:-]{1,128}$.
     let deviceId: String = {
