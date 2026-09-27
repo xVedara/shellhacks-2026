@@ -56,7 +56,7 @@ Additive to PLAN.md section 6; nothing existing changed shape.
 - `src/gemini.ts` `Namer` type, shared prompt, `parseNaming` (validation), Gemini naming; `null` on failure.
 - `src/namer.ts` Ollama naming (`/api/chat`, image + JSON schema, `think: false`) and `selectNamer()` (provider pick).
 - `src/tts.ts` ElevenLabs TTS with the disk cache and in-flight dedupe.
-- `src/index.ts` entry point; every 30 s re-probes the provider while none is active and runs the renamer.
+- `src/index.ts` entry point; every 5 s re-probes the provider while none is active and runs the renamer (failed renames back off 30 s x attempts, up to 8 tries).
 - `test/api.test.ts` API tests; `test/ai.test.ts` taxonomy, provider selection, normalization, Ollama and ElevenLabs
   (fetch injected); `test/probes.ts` the audit's hostile phrases, replayed as type, label and reclassify input.
 

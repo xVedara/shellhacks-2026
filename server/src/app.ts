@@ -61,7 +61,9 @@ const NEAR_MAX_ROWS = 500;
 const TTS_MAX_CHARS = 200;
 const RATE_KEYS_MAX = 10_000;
 const HOUR_MS = 3600_000;
-const RENAME_MAX_ATTEMPTS = 3;
+const RENAME_MAX_ATTEMPTS = 8;
+/** Wait after the n-th failed rename: n x this, so a Gemini outage or 429 burst is retried for ~15 min, not ~15 s. */
+const RENAME_BACKOFF_MS = 30_000;
 const SSE_MAX_CLIENTS = 200;
 const SSE_MAX_PER_IP = 5;
 /** Spoken labels, derived on every read from type + band; a legacy or unknown type reads as "obstacle". */
@@ -125,7 +127,17 @@ export const expiryAfterCategoryChange = (lastSeen: Date, category: Category) =>
 export async function renamePending(db: Db, namer: Namer, limit = 5, busy: () => boolean = () => false) {
   const hazards = db.collection<HazardDoc>('hazards');
   const pending = await hazards
-    .find({ needsNaming: true }, { sort: { renameAttemptAt: 1 }, limit }) // missing renameAttemptAt sorts first
+    .find(
+      {
+        needsNaming: true,
+        // backoff: a row that failed n times waits n x RENAME_BACKOFF_MS (new rows have no renameAttemptAt yet)
+        $or: [
+          { renameAttemptAt: { $exists: false } },
+          { $expr: { $lt: ['$renameAttemptAt', { $subtract: [new Date(), { $multiply: [RENAME_BACKOFF_MS, { $ifNull: ['$renameAttempts', 0] }] }] }] } },
+        ],
+      },
+      { sort: { renameAttemptAt: 1 }, limit },
+    ) // missing renameAttemptAt sorts first
     .toArray();
   let renamed = 0;
   for (const h of pending) {

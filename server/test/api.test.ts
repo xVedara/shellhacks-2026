@@ -513,8 +513,8 @@ describe('audit fixes', () => {
   it('a failed rename does not clear needsNaming that a reclassify reset while the model ran', async () => {
     naming = null;
     const { body } = await create();
-    await renamePending(db, namer);
-    await renamePending(db, namer); // two failures; the next one would be the give-up
+    // seven failures, backoff elapsed: the next failure would be the give-up
+    await db.collection('hazards').updateOne({ _id: new ObjectId(body.id) }, { $set: { renameAttempts: 7, renameAttemptAt: new Date(0) } });
     let started!: () => void;
     const startedP = new Promise<void>((r) => (started = r));
     let release!: (v: null) => void;
@@ -535,22 +535,29 @@ describe('audit fixes', () => {
     });
   });
 
-  it('renamer gives up after 3 failed attempts and tries least recently attempted first', async () => {
+  it('renamer backs off after a failure, tries least recently attempted first, and gives up after 8 attempts', async () => {
     naming = null;
     const a = await create();
     const b = await create({ lat: north(50), deviceId: 'dev-B' });
     const hz = () => db.collection('hazards').find().sort({ _id: 1 }).toArray();
+    const expireBackoff = () => db.collection('hazards').updateMany({}, { $set: { renameAttemptAt: new Date(0) } });
     await renamePending(db, namer, 1);
     let [ha, hb] = await hz();
     expect([ha.renameAttempts ?? 0, hb.renameAttempts ?? 0].sort()).toEqual([0, 1]);
     await renamePending(db, namer, 1); // the unattempted one sorts first
     [ha, hb] = await hz();
     expect([ha.renameAttempts, hb.renameAttempts]).toEqual([1, 1]);
-    for (let i = 0; i < 4; i++) await renamePending(db, namer);
+    await renamePending(db, namer); // both just failed: backing off, nothing retried
+    [ha, hb] = await hz();
+    expect([ha.renameAttempts, hb.renameAttempts]).toEqual([1, 1]);
+    for (let i = 0; i < 9; i++) {
+      await expireBackoff();
+      await renamePending(db, namer);
+    }
     [ha, hb] = await hz();
     expect([ha._id.toHexString(), hb._id.toHexString()]).toEqual([a.body.id, b.body.id]);
-    expect(ha).toMatchObject({ renameAttempts: 3, needsNaming: false, type: 'obstacle' });
-    expect(hb).toMatchObject({ renameAttempts: 3, needsNaming: false });
+    expect(ha).toMatchObject({ renameAttempts: 8, needsNaming: false, type: 'obstacle' });
+    expect(hb).toMatchObject({ renameAttempts: 8, needsNaming: false });
   });
 
   it('a reclassified hazard without a crop keeps its taxonomy labels and is not sent to the model', async () => {
