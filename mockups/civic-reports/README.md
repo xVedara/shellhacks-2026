@@ -6,12 +6,15 @@ Open `index.html` in a browser. Each screen is one file. Add `?theme=dark` for t
 
 ```
 mockups/civic-reports/
-  index.html          gallery
+  index.html          gallery of the live pages and the PNGs
+  shots/              18 PNGs: mobile-app, mobile-web, desktop × live-map, verify, hazard × light, dark
   desktop/            sidebar, live map, verify queue, hazard record
   mobile-web/         browser chrome and the two top tabs
   mobile-app/         status bar, large titles, bottom tabs
   assets/             CSS, behavior, Public Sans
 ```
+
+Filenames look like `shots/mobile-app-live-map-light.png`. Desktop captures are 1440×900 CSS pixels. Phone captures are 390×844. Both are saved at 2×.
 
 ## What this direction is
 
