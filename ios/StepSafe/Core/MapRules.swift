@@ -88,6 +88,15 @@ enum Taxonomy {
         return Spoken.capitalized(label ?? type.replacingOccurrences(of: "-", with: " "))
     }
 
+    /// English server label -> the taxonomy's Spanish name, when one entry's English name matches.
+    /// Unknown labels, and English phones, come back unchanged.
+    static func localize(_ label: String, lang: String, in entries: [HazardTypeEntry]?) -> String {
+        guard lang == "es", let e = entries?.first(where: {
+            $0.en.compare(label, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+        }) else { return label }
+        return e.es
+    }
+
     /// Entries whose shown name (or id) contains `query`, ignoring case and accents; all for an empty query.
     static func search(_ entries: [HazardTypeEntry], _ query: String, lang: String) -> [HazardTypeEntry] {
         let q = query.trimmingCharacters(in: .whitespaces)
@@ -190,6 +199,10 @@ struct HeadsUpState {
         return due
     }
 
+    /// The pin was selected but never played (muted, audio down, or the queue expired).
+    /// What's-ahead does not release the claim. It can be said on a later tick instead of staying silent for five minutes.
+    mutating func release(_ id: String) { announced[id] = nil }
+
     mutating func reset() { announced = [:] }
 }
 
@@ -283,17 +296,36 @@ enum Spoken {
     static func capitalized(_ s: String) -> String { s.prefix(1).uppercased() + s.dropFirst() }
 
     /// "Trash bin, 6 feet, left": the label in place of AlertPolicy's name; distance and side stay AlertPolicy's.
-    static func named(_ label: String, _ d: Detection) -> String {
+    /// Spanish uses the same side words as the bundled clips (pies, izquierda, derecha, al frente).
+    static func named(_ label: String, _ d: Detection, lang: String = "en") -> String {
         let phrase = AlertPolicy.phrase(d)
-        let rest = phrase.firstIndex(of: ",").map { phrase[$0...] } ?? ""
-        return capitalized(label) + rest
+        let rest = phrase.firstIndex(of: ",").map { String(phrase[$0...]) } ?? ""
+        return capitalized(label) + (lang == "es" ? spanishTail(rest) : rest)
     }
 
     /// "Scaffolding, 40 feet, right" (PLAN.md section 7, priority 4). Feet rounded to 5.
-    static func headsUp(_ due: HeadsUpState.Due) -> String {
+    /// `taxonomy` + `lang` turn the pin's type id into the phone's language; nil taxonomy keeps the label.
+    static func headsUp(_ due: HeadsUpState.Due, lang: String = "en", taxonomy: [HazardTypeEntry]? = nil) -> String {
+        // English keeps the pin's own label. Spanish uses the taxonomy name when the type id is known.
+        let name = lang == "es"
+            ? Taxonomy.displayName(type: due.pin.type, label: due.pin.label, in: taxonomy, lang: "es")
+            : due.pin.spokenName
         let feet = max(5, Int((due.distanceM * 3.28084 / 5).rounded()) * 5)
+        if lang == "es" {
+            let side = abs(due.relativeDeg) <= MapTuning.headsUpAheadDeg ? "al frente" : due.relativeDeg < 0 ? "izquierda" : "derecha"
+            return "\(name), \(feet) pies, \(side)"
+        }
         let side = abs(due.relativeDeg) <= MapTuning.headsUpAheadDeg ? "ahead" : due.relativeDeg < 0 ? "left" : "right"
-        return "\(due.pin.spokenName), \(feet) feet, \(side)"
+        return "\(name), \(feet) feet, \(side)"
+    }
+
+    /// ", 9 feet, right" -> ", 9 pies, derecha". Only the distance tail, not the hazard name.
+    private static func spanishTail(_ english: String) -> String {
+        english
+            .replacingOccurrences(of: " feet", with: " pies")
+            .replacingOccurrences(of: ", left", with: ", izquierda")
+            .replacingOccurrences(of: ", right", with: ", derecha")
+            .replacingOccurrences(of: ", ahead", with: ", al frente")
     }
 }
 

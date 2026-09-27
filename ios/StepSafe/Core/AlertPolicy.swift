@@ -49,11 +49,26 @@ struct NoticeQueue<Item> {
     mutating func push(_ item: Item, server: Bool, now: Double) { items.append((item, server, now)) }
     mutating func removeAll() { items = [] }
     /// "What's ahead" clears every queued notice and server phrase: it is the only thing left to say.
-    mutating func replaceAll(with item: Item, now: Double) { items = [(item, false, now)] }
+    /// Returns what was cleared. What's-ahead must ignore that list: a heads-up claim stays.
+    /// Mute, audio down, and queue expiry release the claim through onDrop, not through this return.
+    @discardableResult
+    mutating func replaceAll(with item: Item, now: Double) -> [Item] {
+        let old = items.map(\.item)
+        items = [(item, false, now)]
+        return old
+    }
 
     /// The notice to play now (removed from the queue), or nil. `playing` = priority playing, nil if idle.
     mutating func pop(playing: Int?, now: Double) -> Item? {
+        var dropped: [Item] = []
+        return pop(playing: playing, now: now, dropped: &dropped)
+    }
+
+    /// Same as `pop`, and appends server phrases dropped for being older than `serverPhraseMaxWaitSeconds`.
+    mutating func pop(playing: Int?, now: Double, dropped: inout [Item]) -> Item? {
+        let stale = items.filter { $0.server && now - $0.queuedAt > Tuning.serverPhraseMaxWaitSeconds }.map(\.item)
         items.removeAll { $0.server && now - $0.queuedAt > Tuning.serverPhraseMaxWaitSeconds }
+        dropped.append(contentsOf: stale)
         guard let i = items.firstIndex(where: { !$0.server }) ?? (items.isEmpty ? nil : 0) else { return nil }
         let mayStart = playing == nil || (!items[i].server && playing == AlertPolicy.serverPhrasePriority)
         return mayStart ? items.remove(at: i).item : nil
@@ -252,11 +267,21 @@ struct AlertPolicy {
         return Self.mayStart(d, over: playing, now: now, walkerSpeed: walkerSpeed)
     }
 
+    /// Closing tracks that have not had their immediate tone and haptic yet, in `tracks` order, one per id.
+    /// Speech still uses the single `confirmed[.closing]` slot; the tone does not.
+    static func unpingedClosings(_ tracks: [Detection], pinged: Set<Int>) -> [Detection] {
+        var seen = Set<Int>()
+        return tracks.filter { c in
+            guard c.kind == .closing, let id = c.closing?.trackId, !pinged.contains(id), seen.insert(id).inserted else { return false }
+            return true
+        }
+    }
+
     /// The closing object that should get the immediate crossing tone + haptic now: a track id not pinged yet
     /// (AlertManager.pingNewClosing; the spoken alert follows the normal rules).
     static func closingToPing(_ confirmed: [HazardKind: Detection], pinged: Set<Int>) -> Detection? {
-        guard let c = confirmed[.closing], let id = c.closing?.trackId, !pinged.contains(id) else { return nil }
-        return c
+        guard let c = confirmed[.closing] else { return nil }
+        return unpingedClosings([c], pinged: pinged).first
     }
 
     /// A due priority-1 drop-off blocked behind closing words (a drop-off never cuts them off) gets its tone and

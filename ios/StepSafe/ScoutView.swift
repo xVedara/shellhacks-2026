@@ -4,14 +4,19 @@ import SwiftUI
 
 /// Walker (audio-first, slice 1 screen) and Scout (sighted, phone in hand; PLAN.md 3.2) tabs.
 struct RootView: View {
+    private enum Tab: Hashable { case walker, scout }
+
     @ObservedObject var model: AppModel
+    @State private var tab = Tab.walker
 
     var body: some View {
-        TabView {
+        TabView(selection: $tab) {
             ContentView(model: model)
                 .tabItem { Label("Walker", systemImage: "figure.walk") }
-            ScoutView(model: model)
+                .tag(Tab.walker)
+            ScoutView(model: model, cameraLive: tab == .scout)
                 .tabItem { Label("Scout", systemImage: "camera.viewfinder") }
+                .tag(Tab.scout)
         }
         .tint(Color.control)
     }
@@ -150,6 +155,8 @@ final class ScoutModel: ObservableObject, @unchecked Sendable { // main-confined
 /// The shared AR session's camera feed; a tap reports what is under the finger.
 struct ARPreview: UIViewRepresentable {
     let session: ARSession
+    /// False on the Walker tab. The shared ARSession keeps running for path guard; this view stops drawing.
+    var cameraLive: Bool
     let onTap: (ScoutCapture) -> Void
 
     func makeUIView(context: Context) -> ARSCNView {
@@ -160,10 +167,21 @@ struct ARPreview: UIViewRepresentable {
         view.isAccessibilityElement = true
         view.accessibilityLabel = "Camera. Double tap to report what is in the middle of the view"
         view.accessibilityTraits = .button
+        setLive(view, cameraLive)
         return view
     }
 
-    func updateUIView(_ view: ARSCNView, context: Context) { context.coordinator.onTap = onTap }
+    func updateUIView(_ view: ARSCNView, context: Context) {
+        context.coordinator.onTap = onTap
+        setLive(view, cameraLive)
+    }
+
+    /// Stops the SceneKit render loop only. Does not pause `session` (path guard still owns it).
+    private func setLive(_ view: ARSCNView, _ live: Bool) {
+        view.rendersContinuously = live
+        view.isPlaying = live
+        view.scene.isPaused = !live
+    }
     func makeCoordinator() -> Coordinator { Coordinator(onTap: onTap) }
 
     final class Coordinator: NSObject {
@@ -180,6 +198,8 @@ struct ARPreview: UIViewRepresentable {
 
 struct ScoutView: View {
     @ObservedObject var model: AppModel
+    /// Walker tab keeps this view around; the camera preview should not keep rendering there.
+    var cameraLive: Bool
     @StateObject private var scout: ScoutModel
     @State private var startedSession = false
     /// The hazard whose type is being corrected (sheet shown while set).
@@ -187,8 +207,9 @@ struct ScoutView: View {
 
     struct PickTarget: Identifiable { let id: String; let name: String }
 
-    init(model: AppModel) {
+    init(model: AppModel, cameraLive: Bool = true) {
         self.model = model
+        self.cameraLive = cameraLive
         _scout = StateObject(wrappedValue: ScoutModel(link: model.link))
     }
 
@@ -196,7 +217,7 @@ struct ScoutView: View {
         ScrollView {
             VStack(spacing: 14) {
                 Text("Scout").font(.largeTitle.bold()).foregroundStyle(.white)
-                ARPreview(session: model.sensors.session) { capture in
+                ARPreview(session: model.sensors.session, cameraLive: cameraLive) { capture in
                     if !scout.busy { scout.submit(capture) }
                 }
                 .frame(height: 380)

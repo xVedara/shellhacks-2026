@@ -91,7 +91,10 @@ final class HazardNamer: @unchecked Sendable { // main-confined state; tasks hop
     /// Last report result for the debug panel (main).
     var onResult: ((String) -> Void)?
     /// Speak a label (server phrase, any hazard alert cuts it off) (main).
-    var speak: ((String) -> Void)?
+    /// `onDrop` runs if the phrase never starts. Naming does not retry the POST for that.
+    var speak: ((String, _ onDrop: @escaping () -> Void) -> Void)?
+    private var taxonomy: [HazardTypeEntry]?
+    private let lang = TTSChoice.lang()
     /// A report succeeded: the pin id this device created or merged into (main).
     var onReported: ((String) -> Void)?
 
@@ -104,6 +107,11 @@ final class HazardNamer: @unchecked Sendable { // main-confined state; tasks hop
         walking.withLock { $0 = true }
         epoch.withLock { $0 += 1 }
         FrameCrop.warmUp()
+        let api = api
+        Task {
+            let entries = try? await api.getTaxonomy()
+            DispatchQueue.main.async { if let entries { self.taxonomy = entries } }
+        }
     }
 
     /// Walking stopped: drop queued captures and cancel in-flight POSTs.
@@ -123,8 +131,11 @@ final class HazardNamer: @unchecked Sendable { // main-confined state; tasks hop
             if let pin = ReportGate.knownPin(band: d.kind.band, at: fix, in: pins) {
                 gate.mark(d)
                 gate.succeeded(d) // the map already has it
-                onResult?("Known pin \(pin.spokenName), not reported")
-                speak?(Spoken.named(pin.spokenName, d))
+                let name = lang == "es"
+                    ? Taxonomy.displayName(type: pin.type, label: pin.label, in: taxonomy, lang: "es")
+                    : pin.spokenName
+                onResult?("Known pin \(name), not reported")
+                speak?(Spoken.named(name, d, lang: lang)) { }
                 continue
             }
             gate.mark(d) // in flight until the POST succeeds or its retries fail
@@ -231,7 +242,8 @@ final class HazardNamer: @unchecked Sendable { // main-confined state; tasks hop
         // Speak only while path guard still sees it (distance and side from the latest detection).
         if let now = latest[req.detection.kind],
            simd_distance(now.point, req.detection.point) <= 2 * Tuning.sameHazardRadius {
-            speak?(Spoken.named(r.label, now))
+            let name = Taxonomy.localize(r.label, lang: lang, in: taxonomy)
+            speak?(Spoken.named(name, now, lang: lang)) { }
         }
     }
 }

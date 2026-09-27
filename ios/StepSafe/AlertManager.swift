@@ -40,9 +40,15 @@ final class AlertManager {
     private enum Notice {
         case say(String), whatsAhead
         /// A spoken label or heads-up: server clip, or speech when nil. Plays as serverPhrasePriority.
-        case server(String, clip: AVAudioPCMBuffer?)
+        /// `onDrop` runs when this never starts (muted, audio down, or the queue expired).
+        /// What's-ahead clears the queue but does not call this: the heads-up claim stays.
+        case server(String, clip: AVAudioPCMBuffer?, onDrop: (() -> Void)?)
 
         var isServer: Bool { if case .server = self { return true } else { return false } }
+        var onDrop: (() -> Void)? {
+            if case let .server(_, _, onDrop) = self { return onDrop }
+            return nil
+        }
     }
 
     // Main-thread state
@@ -267,7 +273,6 @@ final class AlertManager {
     private var holdStillHint = HoldStillHint()
     /// Closing objects (track ids) that already got their immediate tone and haptic.
     private var pinged: Set<Int> = []
-
     /// A due priority-1 drop-off waiting behind closing words: its tone at the drop-off and the haptic now, mixed
     /// over the words (AlertPolicy.dropOffToCue); its words follow.
     private func cueBlockedDropOff(_ confirmed: [HazardKind: Detection]) {
@@ -292,25 +297,43 @@ final class AlertManager {
         }
     }
 
-    /// A NEW closing object gets the spatial crossing tone and the haptic at once, even while another clip plays
-    /// (the tone mixes over speech; nothing is cut off). Its spoken alert follows the policy.
-    private func pingNewClosing(_ confirmed: [HazardKind: Detection]) {
-        guard let c = AlertPolicy.closingToPing(confirmed, pinged: pinged), let id = c.closing?.trackId else { return }
-        pinged.insert(id)
-        playHaptic()
-        guard audioReady, let buffer = tones[.crossing] else { return }
-        let point = c.point
-        audioQueue.async { [self] in
-            tonePlayer.position = AVAudio3DPoint(x: point.x, y: point.y, z: point.z)
-            tonePlayer.scheduleBuffer(buffer, at: nil, options: .interrupts)
-            tonePlayer.play()
+    /// Each NEW closing object gets the spatial crossing tone and the haptic at once, even while another clip
+    /// plays (the tone mixes over speech; nothing is cut off). Its spoken alert follows the policy.
+    /// Several new tracks in one frame: least urgent tone first, so the soonest contact is the one left playing.
+    private func pingNewClosing(_ tracks: [Detection]) {
+        let fresh = AlertPolicy.unpingedClosings(tracks, pinged: pinged).sorted { a, b in
+            let ka = (a.closing?.passing == true ? 1 : 0, a.closing?.ttc ?? .infinity)
+            let kb = (b.closing?.passing == true ? 1 : 0, b.closing?.ttc ?? .infinity)
+            return ka > kb
+        }
+        for c in fresh {
+            if let id = c.closing?.trackId { pinged.insert(id) }
+            playHaptic()
+            guard audioReady, let buffer = tones[.crossing], let copy = Self.copy(buffer) else { continue }
+            let point = c.point
+            audioQueue.async { [self, copy] in
+                tonePlayer.position = AVAudio3DPoint(x: point.x, y: point.y, z: point.z)
+                tonePlayer.scheduleBuffer(copy, at: nil, options: .interrupts)
+                tonePlayer.play()
+            }
         }
     }
 
+    /// A second schedule of the same buffer while it is playing is not safe. The crossing tone is one short beep.
+    private static func copy(_ buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
+        guard let out = AVAudioPCMBuffer(pcmFormat: buffer.format, frameCapacity: buffer.frameLength),
+              let src = buffer.floatChannelData?[0], let dst = out.floatChannelData?[0] else { return nil }
+        out.frameLength = buffer.frameLength
+        memcpy(dst, src, Int(buffer.frameLength) * MemoryLayout<Float>.size)
+        return out
+    }
+
     /// Feed the confirmed hazards after every analysis frame.
-    func update(_ confirmed: [HazardKind: Detection]) {
+    /// `closings` is every closing object this frame. Empty falls back to the single `confirmed[.closing]` slot.
+    func update(_ confirmed: [HazardKind: Detection], closings: [Detection] = []) {
         latest = confirmed
-        pingNewClosing(confirmed)
+        let tracks = closings.isEmpty ? (confirmed[.closing].map { [$0] } ?? []) : closings
+        pingNewClosing(tracks)
         cueBlockedDropOff(confirmed)
         if let d = policy.decide(confirmed, now: now, playing: playing, walkerSpeed: walkerSpeed) {
             announce(d)
@@ -388,7 +411,10 @@ final class AlertManager {
     }
 
     private func drainNotices() {
-        if let n = pending.pop(playing: playingPriority, now: now) { perform(n) }
+        var dropped: [Notice] = []
+        let next = pending.pop(playing: playingPriority, now: now, dropped: &dropped)
+        for n in dropped { n.onDrop?() }
+        if let next { perform(next) }
     }
 
     private func perform(_ n: Notice) {
@@ -403,11 +429,11 @@ final class AlertManager {
             } else {
                 speakNow(phrase)
             }
-        case let .server(text, clip):
+        case let .server(text, clip, onDrop):
             let priority = AlertPolicy.serverPhrasePriority // any hazard alert may cut it off
-            guard !policy.isMuted(now: now) else { return } // mute silences priority 2 and lower
+            guard !policy.isMuted(now: now) else { onDrop?(); return } // mute silences priority 2 and lower
             guard let clip, audioReady else {
-                play(tone: nil, at: nil, phrase: text, priority: priority) // speech fallback; nothing if audio is down
+                if !play(tone: nil, at: nil, phrase: text, priority: priority) { onDrop?() } // speech fallback; nothing if audio is down
                 return
             }
             if playingPriority != nil { cutOff() }
@@ -424,10 +450,11 @@ final class AlertManager {
     }
 
     /// A server label or map heads-up (PLAN priority 3/4), only while scanning. Queued like any notice
-    /// (never cuts anything off) and plays as serverPhrasePriority, so any hazard alert cuts it off. Muted = dropped.
-    func sayServer(_ text: String, clip: AVAudioPCMBuffer?) {
-        guard isScanning, !policy.isMuted(now: now) else { return }
-        notice(.server(text, clip: clip))
+    /// (never cuts anything off) and plays as serverPhrasePriority, so any hazard alert cuts it off.
+    /// `onDrop` runs when the phrase never starts (muted, audio down, or the queue expired).
+    func sayServer(_ text: String, clip: AVAudioPCMBuffer?, onDrop: (() -> Void)? = nil) {
+        guard isScanning, !policy.isMuted(now: now) else { onDrop?(); return }
+        notice(.server(text, clip: clip, onDrop: onDrop))
     }
 
     /// Falls back to speech alone when the engine is down or not scanning (audio session inactive).
@@ -477,6 +504,8 @@ final class AlertManager {
     func whatsAhead() {
         guard isScanning else { return notice(.say(Notices.stopped)) }
         if AlertPolicy.whatsAheadCutsOff(playingPriority) { cutOff() }
+        // Throw the cleared notices away. Calling onDrop here released the heads-up claim, MapSync
+        // re-claimed the same pin, and the heads-up played straight after this answer.
         pending.replaceAll(with: .whatsAhead, now: now)
         drainNotices()
     }

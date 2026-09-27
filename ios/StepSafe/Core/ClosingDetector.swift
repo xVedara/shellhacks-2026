@@ -83,12 +83,12 @@ struct ClosingDetector {
     mutating func reset() { frames = []; cams = []; tracks = []; walkerSpeed = 0 }
 
     /// Closing objects in this frame, most urgent (lowest time to contact) first.
-    mutating func update(_ f: DepthFrame, time: Double) -> [ClosingObject] {
+    /// `rays` is PathGuard's per-pixel ray buffer for this frame (one unproject). Nil keeps the direct
+    /// unproject, which the tests use; the two formulas agree to well under a millimetre.
+    mutating func update(_ f: DepthFrame, time: Double, rays: [SIMD3<Float>]? = nil) -> [ClosingObject] {
         let t = f.cameraTransform
-        let cam = SIMD3(t.columns.3.x, t.columns.3.y, t.columns.3.z)
-        let rot = simd_float3x3(SIMD3(t.columns.0.x, t.columns.0.y, t.columns.0.z),
-                                SIMD3(t.columns.1.x, t.columns.1.y, t.columns.1.z),
-                                SIMD3(t.columns.2.x, t.columns.2.y, t.columns.2.z))
+        let cam = t.translation
+        let rot = t.rotation3
         let look = -rot.columns.2
         guard look.x * look.x + look.z * look.z > 1e-4 else { reset(); return [] }
         let fwd = simd_normalize(SIMD2(look.x, look.z))
@@ -97,6 +97,7 @@ struct ClosingDetector {
         // This frame's points in world space.
         let fx = f.intrinsics.columns.0.x, fy = f.intrinsics.columns.1.y
         let cx = f.intrinsics.columns.2.x, cy = f.intrinsics.columns.2.y
+        let sharedRays = rays?.count == f.width * f.height ? rays : nil
         var points: [SIMD3<Float>] = [], seen: [SIMD3<Float>] = []
         points.reserveCapacity(f.width * f.height / 2)
         seen.reserveCapacity(f.width * f.height / 8)
@@ -105,7 +106,9 @@ struct ClosingDetector {
                 let i = v * f.width + u
                 let d = f.depth[i]
                 guard d > 0, d.isFinite, f.confidence[i] >= Tuning.minConfidence else { continue }
-                let p = cam + rot * SIMD3((Float(u) + 0.5 - cx) / fx * d, -(Float(v) + 0.5 - cy) / fy * d, -d)
+                // Shared rays: cam + (rot * dirCam) * d. Direct: cam + rot * (dirCam * d). Same point.
+                let p = sharedRays.map { cam + $0[i] * d }
+                    ?? cam + rot * SIMD3((Float(u) + 0.5 - cx) / fx * d, -(Float(v) + 0.5 - cy) / fy * d, -d)
                 if (u & 3) == 0 && (v & 3) == 0 { seen.append(p) } // coverage only needs a sparse sample
                 let h = p.y - f.floorY
                 if h >= Tuning.closingMinHeightM && h <= Tuning.closingMaxHeightM { points.append(p) }

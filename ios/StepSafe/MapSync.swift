@@ -22,8 +22,10 @@ final class MapSync: @unchecked Sendable { // main-confined; tasks hop back to m
     private var floorUnder = false
     /// Pins ahead within MapTuning.headsUpRadiusM (debug panel), refreshed every tick.
     var onAhead: (([HeadsUpState.Due]) -> Void)?
-    /// Speak a heads-up as priority 4.
-    var speak: ((String) -> Void)?
+    /// Speak a heads-up as priority 4. `onDrop` runs if that phrase never starts.
+    var speak: ((String, _ onDrop: @escaping () -> Void) -> Void)?
+    private var taxonomy: [HazardTypeEntry]?
+    private let lang = TTSChoice.lang()
 
     init(api: APIClient, localizer: Localizer) {
         self.api = api
@@ -35,6 +37,11 @@ final class MapSync: @unchecked Sendable { // main-confined; tasks hop back to m
         state.reset()
         voter.reset()
         pins = [] // previous walk's pins must not heads-up before this walk's poll returns
+        let api = api
+        Task {
+            let entries = try? await api.getTaxonomy()
+            DispatchQueue.main.async { if let entries { self.taxonomy = entries } }
+        }
         poll()
         pollTimer = Timer.scheduledTimer(withTimeInterval: MapTuning.pollSeconds, repeats: true) { [weak self] _ in self?.poll() }
         // Heads-up and passive votes use the cached pins, so they keep up with walking between polls.
@@ -67,6 +74,8 @@ final class MapSync: @unchecked Sendable { // main-confined; tasks hop back to m
     /// A pin this device reported or merged into: never passively downvoted.
     func markOwn(_ id: String) { voter.own.insert(id) }
 
+    private func releaseHeadsUp(_ id: String) { state.release(id) }
+
     private func poll() {
         guard !polling, let fix = localizer.fix else { return }
         polling = true
@@ -86,7 +95,10 @@ final class MapSync: @unchecked Sendable { // main-confined; tasks hop back to m
         guard let walker = localizer.fix, let heading = localizer.walkingHeading else { return }
         onAhead?(HeadsUpState.ahead(pins, walker: walker, heading: heading))
         if let due = state.next(pins, walker: walker, heading: heading, now: now) {
-            speak?(Spoken.headsUp(due))
+            let id = due.pin.id
+            speak?(Spoken.headsUp(due, lang: lang, taxonomy: taxonomy)) { [weak self] in
+                self?.releaseHeadsUp(id)
+            }
         }
         guard let q = localizer.fixQuality else { return }
         let step = PassiveVoter.Step(walker: walker, heading: heading, accuracyM: q.accuracyM, fixAgeS: q.ageS,

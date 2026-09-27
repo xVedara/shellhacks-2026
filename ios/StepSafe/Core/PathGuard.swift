@@ -91,6 +91,33 @@ struct FloorPlane {
     }
 }
 
+/// One world-space camera ray per depth pixel (`rotation * dirCam`, PathGuard's formula).
+/// Built once per analysis frame and shared with ClosingDetector, which otherwise unprojects the same pixels again.
+enum DepthRays {
+    /// World ray through the centre of pixel (`u`, `v`). A point at depth `d` is `camera + ray * d`.
+    static func direction(u: Int, v: Int, intrinsics k: simd_float3x3, rotation rot: simd_float3x3) -> SIMD3<Float> {
+        let fx = k.columns.0.x, fy = k.columns.1.y
+        let cx = k.columns.2.x, cy = k.columns.2.y
+        return rot * SIMD3((Float(u) + 0.5 - cx) / fx, -(Float(v) + 0.5 - cy) / fy, -1)
+    }
+
+    /// Fills `storage` in row-major pixel order. Reuses the buffer when the depth size is unchanged.
+    static func fill(_ f: DepthFrame, into storage: inout [SIMD3<Float>]) {
+        let n = f.width * f.height
+        if storage.count != n { storage = Array(repeating: .zero, count: n) }
+        guard n > 0 else { return }
+        let rot = f.cameraTransform.rotation3
+        let k = f.intrinsics
+        var i = 0
+        for v in 0..<f.height {
+            for u in 0..<f.width {
+                storage[i] = direction(u: u, v: v, intrinsics: k, rotation: rot)
+                i += 1
+            }
+        }
+    }
+}
+
 struct PathGuardResult {
     var detections: [HazardKind: Detection] = [:]
     /// Per-pixel debug labels (see PixelLabel), empty unless requested.
@@ -105,17 +132,18 @@ enum PixelLabel {
 }
 
 enum PathGuard {
-    static func analyze(_ f: DepthFrame, wantLabels: Bool = false) -> PathGuardResult {
+    /// `rays`, when it has one entry per pixel, is the frame's `DepthRays` buffer. The direct path (tests, a
+    /// short buffer) computes the same rays itself.
+    static func analyze(_ f: DepthFrame, wantLabels: Bool = false, rays: [SIMD3<Float>]? = nil) -> PathGuardResult {
         var result = PathGuardResult()
         let count = f.width * f.height
         guard count > 0, f.depth.count == count, f.confidence.count == count else { return result }
         if wantLabels { result.labels = [UInt8](repeating: PixelLabel.none, count: count) }
 
         let t = f.cameraTransform
-        let cam = SIMD3(t.columns.3.x, t.columns.3.y, t.columns.3.z)
-        let rot = simd_float3x3(SIMD3(t.columns.0.x, t.columns.0.y, t.columns.0.z),
-                                SIMD3(t.columns.1.x, t.columns.1.y, t.columns.1.z),
-                                SIMD3(t.columns.2.x, t.columns.2.y, t.columns.2.z))
+        let cam = t.translation
+        let rot = t.rotation3
+        let sharedRays = rays?.count == count ? rays : nil
         // Walking direction = camera forward flattened onto the horizontal plane.
         let look = -rot.columns.2
         let flat = SIMD2(look.x, look.z)
@@ -123,9 +151,6 @@ enum PathGuard {
         let f2 = simd_normalize(flat)
         let fwd = SIMD3(f2.x, 0, f2.y)
         let right = SIMD3(-fwd.z, 0, fwd.x)
-
-        let fx = f.intrinsics.columns.0.x, fy = f.intrinsics.columns.1.y
-        let cx = f.intrinsics.columns.2.x, cy = f.intrinsics.columns.2.y
 
         var ground = Accumulator(), head = Accumulator(), drop = Accumulator()
         var expected = 0, drops = 0, missing = 0
@@ -136,8 +161,8 @@ enum PathGuard {
         for v in 0..<f.height {
             for u in 0..<f.width {
                 let i = v * f.width + u
-                let dirCam = SIMD3((Float(u) + 0.5 - cx) / fx, -(Float(v) + 0.5 - cy) / fy, -1) // pixel centre
-                let dir = rot * dirCam // world ray; a point at depth d is cam + dir * d
+                // World ray; a point at depth d is cam + dir * d. Shared with ClosingDetector when `rays` is set.
+                let dir = sharedRays?[i] ?? DepthRays.direction(u: u, v: v, intrinsics: f.intrinsics, rotation: rot)
                 let d = f.depth[i]
                 let valid = d > 0 && d.isFinite && f.confidence[i] >= Tuning.minConfidence
                 var h: Float = 0

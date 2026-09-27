@@ -29,8 +29,12 @@ final class ServerLink: ObservableObject {
         let map = map
         namer.onReported = { map.markOwn($0) }
         let tts = tts
-        namer.speak = { text in tts.clip(for: text) { alerts.sayServer(text, clip: $0) } }
-        map.speak = { text in tts.clip(for: text) { alerts.sayServer(text, clip: $0) } }
+        namer.speak = { text, onDrop in tts.clip(for: text) { alerts.sayServer(text, clip: $0, onDrop: onDrop) } }
+        map.speak = { text, onDrop in
+            // Mute drops priority 4. Skip the TTS fetch; MapSync will offer the pin again after unmute.
+            guard !alerts.isMuted else { onDrop(); return }
+            tts.clip(for: text) { alerts.sayServer(text, clip: $0, onDrop: onDrop) }
+        }
         map.onAhead = { [weak self] in
             self?.ahead = $0
             self?.pinCount = self?.map.pins.count ?? 0

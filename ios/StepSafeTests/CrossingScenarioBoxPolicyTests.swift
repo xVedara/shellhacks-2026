@@ -587,6 +587,9 @@ final class CrossingScenarioBoxPolicyTests: XCTestCase {
         XCTAssertNil(AlertPolicy.closingToPing([.closing: a], pinged: [3])) // once per track
         XCTAssertNil(AlertPolicy.closingToPing([.dropOff: Self.dropAt(1)], pinged: [])) // only closing objects
         XCTAssertEqual(AlertPolicy.closingToPing([.closing: Self.closingObj(4, ttc: 1, range: 2)], pinged: [3])?.closing?.trackId, 4)
+        let second = Self.closingObj(4, ttc: 1, range: 2)
+        XCTAssertEqual(AlertPolicy.unpingedClosings([a, second, a], pinged: []).compactMap { $0.closing?.trackId }, [3, 4])
+        XCTAssertEqual(AlertPolicy.unpingedClosings([a, second], pinged: [3]).compactMap { $0.closing?.trackId }, [4])
     }
 
     // MARK: Round 4: closing over a drop-off speaks in time; a due drop-off is not swallowed by a combo
