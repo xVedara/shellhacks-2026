@@ -18,7 +18,8 @@ StepSafe is a head-mounted iPhone Pro Max (LiDAR) plus AirPods for blind and low
 
 - **Path guard** watches a lane about 0.7 m wide and five meters ahead, calling out ground obstacles, head-height obstacles, and drop-offs with a spatial tone from the right direction — entirely on-device, no network needed.
 - **Crossing assist** warns about anything closing in fast at a crossing (car, bike, pushed cart) and is never silenced by mute.
-- **Hazard naming**: unrecognized obstacles are cropped, named by Gemini on our server, and pinned to the map with position and measurements.
+- **Hazard naming**: still obstacles (never moving people or vehicles) are cropped and pinned at once; Gemini names them in the background seconds later, so reporting never waits on a model.
+- **Self-cleaning map**: when two different walkers pass a pin and the phone sees nothing there, it is cleared, so stale hazards don't linger.
 - **Heads-up**: hazards other people already reported are announced by direction and distance before you reach them.
 - **Scout mode**: anyone can tap to report a hazard, or just walk with passive detection running, and can upvote, downvote, or reclassify nearby reports.
 - **Community map** (web, live at stepsafe.miami): a Leaflet/OpenStreetMap view that updates in real time, with a verify queue for remote volunteers.
@@ -31,11 +32,11 @@ Controls are two fixed AirPods presses — "what's ahead" and mute — nothing c
 
 **Voice.** ~70 fixed phrases per language (English/Spanish) are pre-generated with ElevenLabs (voice "Sarah") and bundled so alerts play instantly offline; live hazard names come from a `/tts` endpoint cached by content hash, falling back to on-device `AVSpeechSynthesizer` if ElevenLabs is unreachable. Safety detection never waits on any of this either way.
 
-**Server.** Node + TypeScript on Fastify with MongoDB Atlas. A new report merges into an existing pin within 10 m (city GPS error) sharing a height band, or gets named and becomes a new pin; naming and creation are serialized so concurrent reports never fork into duplicates. It exposes hazard CRUD, voting, reclassification, a taxonomy endpoint, and a Server-Sent Events stream that drives the live map.
+**Server.** Node + TypeScript on Fastify with MongoDB Atlas. A new report merges into an existing pin within 10 m (city GPS error) sharing a height band, or becomes a new pin right away; merge and creation are serialized so concurrent reports never fork into duplicates. A walker who passes a pin while the phone sees nothing there casts a fixed -0.6 vote; two such walkers clear a single-reporter pin. It exposes hazard CRUD, voting, reclassification, a taxonomy endpoint, and a Server-Sent Events stream that drives the live map.
 
 **Database.** MongoDB Atlas: a `2dsphere` index for proximity queries, TTL indexes so hazards expire by category (moving 6 h, temporary 7 d, permanent 90 d), and change streams feeding the live map over SSE. Tests run against an in-memory replica set; production is the Atlas cluster.
 
-**Naming.** Gemini (`gemini-flash-lite-latest`) gets the hazard crop and returns structured JSON — a taxonomy id, category, height band, and severity — in about 1.3 s end to end in our tests. During development we ran a local Qwen vision model through Ollama behind the same interface (warm p50 ~4.7 s); the server picks whichever provider is configured, and falls back to a generic "obstacle" if naming fails, so a slow or down model never blocks a report.
+**Naming.** Naming is retroactive: a background pass every 5 s sends each new pin's crop to Gemini (`gemini-flash-lite-latest`), which returns structured JSON — a taxonomy id, category, height band, and severity — in about 1.3 s in our tests. A pin that turns out to be a person or dog is deleted. Failed calls back off and retry for about 14 minutes. During development we ran a local Qwen vision model through Ollama behind the same interface (warm p50 ~4.7 s); the server picks whichever provider is configured, and falls back to a generic "obstacle" if naming fails, so a slow or down model never blocks a report.
 
 **Web map.** Next.js (App Router) + TypeScript + Tailwind, `react-leaflet` over OpenStreetMap tiles (no API key), plus an OSM reference layer of crossings, curbs, and tactile paving. A verify queue lets remote volunteers page through low-confidence hazards and vote, reclassify, or report them.
 
@@ -55,7 +56,7 @@ We also lost time to a subagent whose cleanup command matched too broadly and ki
 
 ## Accomplishments that we're proud of
 
-A full sense-decide-speak pipeline — LiDAR geometry, on-device vision, spatial audio, and a live community backend — built and deployed in one hacking window by two first-time hackers. It works on a physical iPhone: walker warnings, AirPods "what's ahead" and mute, a closing object still sounding while muted, reports named by Gemini, spoken back, and appearing on the live web map, and heads-up for hazards others reported. Real test coverage backs it (100 iOS tests including a crossing scenario and Monte Carlo suite, 67 server tests, 14 web tests), with an adversarial review pass on every multi-file slice before merging. "Closing objects are never muted" is enforced in one place in the code, with a dedicated test, not hoped-for behavior scattered across callers.
+A full sense-decide-speak pipeline — LiDAR geometry, on-device vision, spatial audio, and a live community backend — built and deployed in one hacking window by two first-time hackers. It works on a physical iPhone: walker warnings, AirPods "what's ahead" and mute, a closing object still sounding while muted, reports named by Gemini, spoken back, and appearing on the live web map, and heads-up for hazards others reported. Real test coverage backs it (128 iOS tests including a crossing scenario and Monte Carlo suite, 79 server tests, 36 web tests), with an adversarial review pass on every multi-file slice before merging. "Closing objects are never muted" is enforced in one place in the code, with a dedicated test, not hoped-for behavior scattered across callers.
 
 ## What we learned
 
@@ -81,7 +82,7 @@ Swift, SwiftUI, ARKit, Core ML, Vision, AVAudioEngine, Core Haptics, CoreLocatio
 
 **Microsoft.** No chat interface anywhere, by design — voice control is two fixed AirPods commands, not a conversation. AI runs inside perception (naming, path/crossing detection), never as a dialogue layer.
 
-**Gemini API (MLH).** Live: every unrecognized hazard crop is named by `gemini-flash-lite-latest` with a structured JSON response constrained to our 67-type taxonomy, about 1.3 s end to end in our tests, on the deployed server.
+**Gemini API (MLH).** Live: every new hazard pin is named in the background by `gemini-flash-lite-latest` with a structured JSON response constrained to our 67-type taxonomy (about 1.3 s per call in our tests), so walkers never wait on the model.
 
 **ElevenLabs (MLH).** Live: ~70 bundled fixed phrases per language generated with ElevenLabs, plus a live `/tts` endpoint for server-generated names, cached by content hash, with on-device speech as fallback.
 
