@@ -153,7 +153,15 @@ export default function VerifyPage() {
   const checked = all.filter((h) => voted.has(h.id)).length;
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto">
+    // scroll-pb: keyboard focus scrolls clear of the sticky vote bar (WCAG 2.4.11); the bar is static on a
+    // landscape phone and from md up. With no hazard card there may be nothing focusable to scroll with, so the
+    // region itself takes focus then (axe scrollable-region-focusable).
+    <div
+      className="min-h-0 flex-1 overflow-y-auto scroll-pb-[88px] short:scroll-pb-0 md:scroll-pb-0"
+      tabIndex={current ? undefined : 0}
+      role={current ? undefined : "region"}
+      aria-label={current ? undefined : "Verify queue"}
+    >
       <PageBar title="Verify queue">
         {/* U/D/S still fire when a keyboard is paired with a coarse pointer, so the off switch stays on screen (WCAG 2.1.4). */}
         {current && (

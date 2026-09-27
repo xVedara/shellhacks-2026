@@ -181,14 +181,34 @@ function OffstagePins({ sheet }: { sheet: number }) {
     const update = () => {
       const size = map.getSize();
       const origin = map.getContainer().getBoundingClientRect();
+      const region = map.getContainer().parentElement ?? map.getContainer();
+      const controls = [...region.querySelectorAll<HTMLElement>(".leaflet-control-container .leaflet-control, .map-locate")]
+        .filter((el) => el.offsetParent !== null)
+        .map((el) => {
+          const c = el.getBoundingClientRect();
+          return { l: c.left - origin.left, r: c.right - origin.left, t: c.top - origin.top, b: c.bottom - origin.top };
+        });
       for (const el of pane.querySelectorAll<HTMLElement>(".leaflet-marker-icon")) {
         // The drawn glyph, not the icon box (which carries padding for the ring).
         const r = (el.querySelector(".ss-pin, .ss-cluster") ?? el).getBoundingClientRect();
-        const left = Math.max(r.left - origin.left, 0);
-        const right = Math.min(r.right - origin.left, size.x);
-        const top = Math.max(r.top - origin.top, 0);
-        const bottom = Math.min(r.bottom - origin.top, size.y - sheet);
-        const off = right - left < MIN_EXPOSED || bottom - top < MIN_EXPOSED;
+        let v = {
+          l: Math.max(r.left - origin.left, 0),
+          r: Math.min(r.right - origin.left, size.x),
+          t: Math.max(r.top - origin.top, 0),
+          b: Math.min(r.bottom - origin.top, size.y - sheet),
+        };
+        // The zoom, locate and credit controls cover pins as well: keep the largest uncovered piece.
+        for (const c of controls) {
+          if (c.r <= v.l || c.l >= v.r || c.b <= v.t || c.t >= v.b) continue;
+          const pieces = [
+            { ...v, r: Math.min(v.r, c.l) },
+            { ...v, l: Math.max(v.l, c.r) },
+            { ...v, b: Math.min(v.b, c.t) },
+            { ...v, t: Math.max(v.t, c.b) },
+          ];
+          v = pieces.reduce((best, q) => (Math.min(q.r - q.l, q.b - q.t) > Math.min(best.r - best.l, best.b - best.t) ? q : best));
+        }
+        const off = v.r - v.l < MIN_EXPOSED || v.b - v.t < MIN_EXPOSED;
         if (off && el.contains(document.activeElement)) document.getElementById("hazard-panel")?.focus();
         // Idempotent (writes only on a difference), so the attribute observer below settles after one pass.
         if (el.classList.contains("ss-pin-offstage") !== off) el.classList.toggle("ss-pin-offstage", off);

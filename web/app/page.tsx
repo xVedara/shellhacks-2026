@@ -284,14 +284,17 @@ export default function MapPage() {
 
         <div key={showPeek ? "peek" : detailOpen ? "detail" : "list"} className="sheet-face flex min-h-0 flex-1 flex-col">
           {showPeek ? (
-            <div>
-              <LiveKicker connection={connection} count={loaded ? list.length : null} />
-              {/* A tiny peek has room only for the status; the handle above opens the sheet. */}
-              {!tiny && (
-                <button id="peek-action" type="button" className={`${primaryButton} mt-3.5 w-full`} onClick={() => setDetent("medium")}>
-                  {panel === "detail" && selectedId ? "Back to details" : "Open list"}
-                </button>
-              )}
+            // A tiny peek puts the status and the button on one row.
+            <div className={tiny ? "flex items-center justify-between gap-3" : ""}>
+              <LiveKicker connection={connection} count={loaded ? list.length : null} compact={tiny} />
+              <button
+                id="peek-action"
+                type="button"
+                className={tiny ? `${secondaryButton} shrink-0 px-4` : `${primaryButton} mt-3.5 w-full`}
+                onClick={() => setDetent("medium")}
+              >
+                {panel === "detail" && selectedId ? "Back to details" : "Open list"}
+              </button>
             </div>
           ) : detailOpen ? (
             <div className="flex min-h-0 flex-1 flex-col">
@@ -424,7 +427,7 @@ function LiveHazardList({
   const clearedToday = clearedSince(cleared.values(), new Date(now).setHours(0, 0, 0, 0));
   const option = SHOW_OPTIONS.find((o) => o.id === show) ?? SHOW_OPTIONS[0];
   return (
-    <div className={`flex min-h-0 flex-1 flex-col ${tiny ? "scroll-quiet overflow-y-auto" : ""}`}>
+    <div className={`flex min-h-0 flex-1 flex-col ${tiny ? "scroll-quiet overflow-y-auto overflow-x-hidden" : ""}`}>
       {/* On a landscape phone the status and the filters share one row to leave room for hazards. */}
       <div className="flex shrink-0 flex-col short:flex-row short:flex-wrap short:items-center short:justify-between short:gap-x-4">
         <div className="shrink-0">
@@ -435,7 +438,7 @@ function LiveHazardList({
         </div>
         {/* One choice at a time, so native radios: arrow keys move between them. The API only returns active
             hazards, so cleared ones are a count beside the choice, not a filter. */}
-        <fieldset className="mt-3 flex shrink-0 flex-wrap items-center gap-2 short:mt-0">
+        <fieldset className="mt-3 flex min-w-0 shrink-0 flex-wrap items-center gap-2 short:mt-0">
           <legend className="sr-only">Show</legend>
           {SHOW_OPTIONS.map((o) => {
             const on = show === o.id;
