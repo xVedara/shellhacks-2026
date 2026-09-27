@@ -116,6 +116,15 @@ describe('POST /hazards', () => {
     for (const c of ['hazards', 'votes', 'users']) expect(await db.collection(c).countDocuments()).toBe(0);
   });
 
+  it('still pins a drop-off when a person is in the crop, as an obstacle', async () => {
+    naming = { type: 'person', category: 'moving', heightBand: 'dropoff', severity: 2 };
+    const { body } = await create({ heightBand: 'dropoff' });
+    expect(body.id).not.toBe('');
+    expect(body.label).toBe('drop-off');
+    expect(await db.collection('hazards').countDocuments({ type: 'person' })).toBe(0);
+    expect(await db.collection('hazards').countDocuments({ type: 'obstacle', heightBand: 'dropoff' })).toBe(1);
+  });
+
   it('still pins a parked e-scooter', async () => {
     naming = SCOOTER;
     const { body } = await create();

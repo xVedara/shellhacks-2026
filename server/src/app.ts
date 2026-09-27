@@ -408,7 +408,10 @@ export function buildApp({
       if (early) return early;
       const naming = await namer(b64, b.heightBand); // outside the lock: can take up to NAMER_TIMEOUT_MS
       // spoken labels come only from the taxonomy, for the phone's band; never from model text
-      const type = naming ? taxonomyEntry(naming.type).id : OBSTACLE; // failure: "obstacle" + needsNaming
+      const named = naming ? taxonomyEntry(naming.type).id : OBSTACLE; // failure: "obstacle" + needsNaming
+      // A person cannot make a drop in the depth data: at a curb, a passer-by in the crop still leaves a real
+      // drop-off to pin, stored as a generic obstacle (read "drop-off") so no person is ever recorded.
+      const type = NEVER_PINNED.has(named) && b.heightBand === 'dropoff' ? OBSTACLE : named;
       const labels = labelsFor(type, b.heightBand);
       // A person or dog is never pinned and never upvotes a pin nearby. 200 with the usual {id, label, merged}
       // (id empty, nothing stored) so the phone marks the report done and does not retry. The early merge above

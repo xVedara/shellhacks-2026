@@ -89,7 +89,7 @@ final class ScoutModel: ObservableObject, @unchecked Sendable { // main-confined
                 guard let jpeg = FrameCrop.render(capture.region).flatMap(FrameCrop.jpeg) else { throw URLError(.cannotDecodeContentData) }
                 let r = try await api.report(crop: jpeg, lat: fix.lat, lng: fix.lng, heading: heading, heightBand: band)
                 DispatchQueue.main.async {
-                    map.markOwn(r.id) // never passively downvote our own pin
+                    if !r.id.isEmpty { map.markOwn(r.id) } // never passively downvote our own pin
                     self.report = r.id.isEmpty ? nil : Report(id: r.id, label: r.label, merged: r.merged) // no pin to correct
                     self.status = r.id.isEmpty ? "Not pinned: \(r.label)" : r.merged ? "Added to existing pin: \(r.label)" : "Reported: \(r.label)"
                     self.busy = false
