@@ -65,9 +65,17 @@ function Recenter({ center, zoom }: { center: [number, number]; zoom?: number })
   return null;
 }
 
+const PIN_EDGE = 24;
+// The map point is the pin center. The glyph plus the Sample tag hang about 60px below it.
+const PIN_AND_TAG = 60;
+
 function centerAboveSheet(map: L.Map, lat: number, lng: number, sheet: number) {
   const zoom = map.getZoom();
-  const point = map.project([lat, lng], zoom).add([0, sheet / 2]);
+  const size = map.getSize();
+  const visible = Math.max(0, size.y - sheet);
+  const lowest = visible - PIN_AND_TAG;
+  const y = Math.min(Math.max(visible / 2, PIN_EDGE), Math.max(lowest, PIN_EDGE));
+  const point = map.project([lat, lng], zoom).add([0, size.y / 2 - y]);
   return map.unproject(point, zoom);
 }
 
@@ -75,8 +83,12 @@ function pinClearsSheet(map: L.Map, lat: number, lng: number, sheet: number) {
   const size = map.getSize();
   if (!size.x || !size.y) return false;
   const pt = map.latLngToContainerPoint([lat, lng]);
-  const margin = 24;
-  return pt.x >= margin && pt.x <= size.x - margin && pt.y >= margin && pt.y <= size.y - sheet - margin;
+  return (
+    pt.x >= PIN_EDGE &&
+    pt.x <= size.x - PIN_EDGE &&
+    pt.y >= PIN_EDGE &&
+    pt.y <= size.y - sheet - PIN_AND_TAG
+  );
 }
 
 function PanToSelected({
