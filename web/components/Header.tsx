@@ -52,12 +52,11 @@ export function ThemeToggle({ className = "" }: { className?: string }) {
     <button
       type="button"
       onClick={toggle}
-      aria-label="Color theme"
       aria-pressed={theme === "dark"}
       className={`inline-flex min-h-11 items-center gap-2 rounded-full px-3 text-[13px] font-medium text-ink-2 hover:bg-hover hover:text-ink ${className}`}
     >
       <Icon name={theme === "dark" ? "moon" : "sun"} />
-      {theme === "dark" ? "Dark theme" : "Light theme"}
+      Dark theme
     </button>
   );
 }
