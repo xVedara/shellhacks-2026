@@ -432,7 +432,7 @@ struct ScoutView: View {
                     Button("Try again") { scout.refresh() }
                         .font(.headline)
                         .frame(minHeight: 44)
-                        .foregroundStyle(Color.control)
+                        .foregroundStyle(Color.controlInk)
                 }
             } else if scout.nearbyPhase == .loaded, scout.nearby.isEmpty {
                 Text("No hazards nearby").foregroundStyle(Color.ink3)

@@ -124,7 +124,7 @@ struct ContentView: View {
                 .tracking(-0.8)
                 .foregroundStyle(Color.ink)
             HStack(spacing: 8) {
-                Circle().fill(headerStatusColor).frame(width: 8, height: 8)
+                Circle().fill(headerMarkColor).frame(width: 8, height: 8)
                     .accessibilityHidden(true)
                 Text(model.running ? (model.muted ? "Scanning, muted" : "Scanning") : "Stopped")
                     .font(.subheadline.weight(.medium))
@@ -135,8 +135,14 @@ struct ContentView: View {
         .accessibilityAddTraits(.isHeader)
     }
 
-    /// Live scanning uses `--signal`. Muted is `--ink-2`. Stopped is `--ink-3`.
+    /// Live scanning words use the link ink. Muted is `--ink-2`. Stopped is `--ink-3`.
     private var headerStatusColor: Color {
+        if !model.running { return .ink3 }
+        return model.muted ? .ink2 : .signalText
+    }
+
+    /// The status dot is a fill, so it keeps `--signal` (`#087FF5` in light).
+    private var headerMarkColor: Color {
         if !model.running { return .ink3 }
         return model.muted ? .ink2 : .signal
     }
@@ -184,7 +190,7 @@ struct ContentView: View {
             if hazards.isEmpty {
                 Label(Notices.nothingAhead, systemImage: "checkmark.circle")
                     .font(.subheadline.weight(.medium))
-                    .foregroundStyle(Color.signal)
+                    .foregroundStyle(Color.signalText)
             }
             ForEach(hazards, id: \.kind) { d in
                 hazardRow(d)
@@ -207,12 +213,12 @@ struct ContentView: View {
                 LockedHazardIcon(name: "height-dropoff", side: 28)
             case .closing:
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(Color.hazard)
+                    .foregroundStyle(Color.warnInk)
             }
             Text(AlertPolicy.phrase(d))
                 .font(.body.weight(.semibold))
                 .tracking(-0.2)
-                .foregroundStyle(Color.hazard)
+                .foregroundStyle(Color.warnInk)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Hazard: \(AlertPolicy.phrase(d))")

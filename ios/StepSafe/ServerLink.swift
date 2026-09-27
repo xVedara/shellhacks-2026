@@ -92,10 +92,10 @@ struct ServerStatusView: View {
         .accessibilityElement(children: .contain)
     }
 
-    /// Reachable uses `--ok` / `--signal`. Unreachable uses `--ink-2`, the web offline dot.
+    /// Reachable words use the link ink. Unreachable uses `--ink-2`, the web offline dot.
     private var serverColor: Color {
         switch link.reachable {
-        case true: return .signal
+        case true: return .signalText
         case false: return .ink2
         case nil: return .ink3
         }

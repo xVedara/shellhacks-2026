@@ -45,11 +45,13 @@ enum Palette {
         tab.backgroundColor = PaletteTokens.page
         let ink = PaletteTokens.ink3
         let blue = PaletteTokens.blue
+        // Selected titles are text on the page. Light uses the link ink; the icon stays brand blue.
+        let title = PaletteTokens.controlInk
         for item in [tab.stackedLayoutAppearance, tab.inlineLayoutAppearance, tab.compactInlineLayoutAppearance] {
             item.normal.iconColor = ink
             item.normal.titleTextAttributes = [.foregroundColor: ink]
             item.selected.iconColor = blue
-            item.selected.titleTextAttributes = [.foregroundColor: blue]
+            item.selected.titleTextAttributes = [.foregroundColor: title]
         }
         UITabBar.appearance().standardAppearance = tab
         UITabBar.appearance().scrollEdgeAppearance = tab
@@ -80,6 +82,11 @@ enum PaletteTokens {
     static let ink3 = pair(dark: hex(0xA1A5AB), light: hex(0x3E4651))
     static let blue = hex(0x087FF5)
     static let signal = pair(dark: hex(0x13B9F2), light: hex(0x087FF5))
+    /// Status words. Dark matches `--signal`. Light matches web link `--accent` `#0757B0`
+    /// (6.37:1 on `#F4F4F5`, 7.00:1 on `#FFFFFF`). `#087FF5` stays the fill.
+    static let signalText = pair(dark: hex(0x13B9F2), light: hex(0x0757B0))
+    /// Links and selected tab titles. Dark stays `#087FF5` (4.66:1 on the page). Light is the same link ink.
+    static let controlInk = pair(dark: hex(0x087FF5), light: hex(0x0757B0))
     static let accentTint = pair(dark: hex(0x13B9F2, alpha: 0.16), light: hex(0x087FF5, alpha: 0.12))
     static let signalSoft = pair(dark: hex(0x13B9F2, alpha: 0.28), light: hex(0x087FF5, alpha: 0.22))
     /// Web `primary` / `primary-ink`. Dark pills are light; light pills are navy.
@@ -120,7 +127,9 @@ extension Color {
     static let ink2 = Color(uiColor: PaletteTokens.ink2)
     static let ink3 = Color(uiColor: PaletteTokens.ink3)
     static let control = Color(uiColor: PaletteTokens.blue)
+    static let controlInk = Color(uiColor: PaletteTokens.controlInk)
     static let signal = Color(uiColor: PaletteTokens.signal)
+    static let signalText = Color(uiColor: PaletteTokens.signalText)
     static let accentTint = Color(uiColor: PaletteTokens.accentTint)
     static let signalSoft = Color(uiColor: PaletteTokens.signalSoft)
     static let primaryFill = Color(uiColor: PaletteTokens.primary)

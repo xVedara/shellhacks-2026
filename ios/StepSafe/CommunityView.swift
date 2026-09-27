@@ -290,7 +290,7 @@ struct CommunityView: View {
                                 Button(t("Try again", "Reintentar")) { Task { await model.refresh() } }
                                     .font(.headline)
                                     .frame(minHeight: 44)
-                                    .foregroundStyle(Color.control)
+                                    .foregroundStyle(Color.controlInk)
                             }
                         }
                     }
