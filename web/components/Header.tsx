@@ -117,7 +117,8 @@ export default function Header() {
           </span>
         </Link>
         {/* Portrait phone: the theme and profile share the logo row, above the tabs. */}
-        <div className="ml-auto flex min-w-0 items-center gap-1 overflow-hidden short:hidden md:hidden">
+        {/* min-w-0 lets the name truncate (inside Profile); no overflow clip here, or the theme button's ring is cut. */}
+        <div className="ml-auto flex min-w-0 items-center gap-1 px-1 short:hidden md:hidden">
           <ThemeToggle compact />
           <Profile {...identity} />
         </div>
@@ -148,7 +149,7 @@ export default function Header() {
       </nav>
 
       {/* Landscape phone: one row, so the theme and profile come after the tabs, in reading and tab order. */}
-      <div className="hidden min-w-0 items-center gap-1 overflow-hidden pr-4 short:flex">
+      <div className="hidden min-w-0 items-center gap-1 pl-1 pr-4 short:flex">
         <ThemeToggle compact />
         <Profile {...identity} />
       </div>

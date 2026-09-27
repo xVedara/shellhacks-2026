@@ -29,7 +29,8 @@ import { useVotedIds } from "@/lib/use-voted";
 type Panel = null | "reclassify" | "report";
 
 const voteButton =
-  "flex min-h-11 flex-col items-center justify-center gap-0.5 whitespace-nowrap rounded-full border px-2 py-2 text-[14px] font-medium leading-tight transition-colors disabled:cursor-not-allowed disabled:opacity-50";
+  // Labels may wrap inside the pill on narrow phones (reflow at 320px); from md up they stay on one line.
+  "flex min-h-11 min-w-0 flex-col items-center justify-center gap-0.5 rounded-full border px-2 py-2 text-center text-[14px] font-medium leading-tight transition-colors disabled:cursor-not-allowed disabled:opacity-50 md:whitespace-nowrap";
 
 const subscribeLocation = (onChange: () => void) => {
   window.addEventListener("popstate", onChange);
