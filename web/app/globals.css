@@ -250,10 +250,14 @@ body {
 .map-stage .leaflet-bar a.leaflet-disabled {
   color: var(--ink-3) !important;
 }
+/* The OpenStreetMap credit looks the same on every map, including the /verify thumbnail: themed pill,
+   underlined accent link (WCAG 1.4.1: not told apart by colour alone). */
 .map-stage .leaflet-control-attribution {
   margin-bottom: 0 !important;
   margin-left: 8px !important;
   max-width: min(240px, 58vw);
+}
+.leaflet-control-attribution {
   font-size: 11px;
   line-height: 16px;
   color: var(--ink-2) !important;
@@ -261,7 +265,7 @@ body {
   border: 1px solid var(--line);
   border-radius: 999px;
 }
-.map-stage .leaflet-control-attribution a {
+.leaflet-container .leaflet-control-attribution a {
   color: var(--accent) !important;
   text-decoration: underline;
 }
@@ -338,6 +342,14 @@ main:focus-visible::after {
   pointer-events: none;
   outline: 2px solid var(--blue);
   outline-offset: -2px;
+}
+/* Tiny stage (landscape phone at 200% zoom): less padding so a hazard row fits. */
+.sheet-panel.is-tiny {
+  padding-bottom: max(8px, env(safe-area-inset-bottom, 0px));
+}
+/* A pin whose centre is under the sheet or off the map shows only a sliver: not a click or focus target. */
+.leaflet-marker-icon.ss-pin-offstage {
+  pointer-events: none;
 }
 .sheet-panel.is-dragging {
   transition: none;

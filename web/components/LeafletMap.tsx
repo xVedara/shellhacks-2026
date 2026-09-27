@@ -164,6 +164,51 @@ function PanFocusedMarker({ sheet }: { sheet: number }) {
   return null;
 }
 
+/**
+ * Pins whose centre sits under the phone sheet or past the map's edge show only a sliver (WCAG 2.5.8, 2.4.11):
+ * no pointer, no tab stop, hidden from the accessibility tree. The list below carries every hazard.
+ */
+function OffstagePins({ sheet }: { sheet: number }) {
+  const map = useMap();
+  useEffect(() => {
+    const pane = map.getPane("markerPane");
+    if (!pane) return;
+    const update = () => {
+      const size = map.getSize();
+      const origin = map.getContainer().getBoundingClientRect();
+      for (const el of pane.querySelectorAll<HTMLElement>(".leaflet-marker-icon")) {
+        const r = el.getBoundingClientRect();
+        const x = r.left + r.width / 2 - origin.left;
+        const y = r.top + r.height / 2 - origin.top;
+        const off = x < 0 || x > size.x || y < 0 || y > size.y - sheet;
+        // Idempotent (writes only on a difference), so the attribute observer below settles after one pass.
+        if (el.classList.contains("ss-pin-offstage") !== off) el.classList.toggle("ss-pin-offstage", off);
+        if (off) {
+          if (el.getAttribute("aria-hidden") !== "true") el.setAttribute("aria-hidden", "true");
+          if (el.tabIndex === 0) {
+            el.dataset.tab = "0";
+            el.tabIndex = -1;
+          }
+        } else {
+          if (el.hasAttribute("aria-hidden")) el.removeAttribute("aria-hidden");
+          if (el.dataset.tab === "0" && el.tabIndex !== 0) el.tabIndex = 0;
+        }
+      }
+    };
+    update();
+    map.on("moveend zoomend resize", update);
+    // Leaflet reuses a marker's element when its icon changes (selection, live updates) and resets its class and
+    // tabindex, so watch those attributes as well as new icons.
+    const mo = new MutationObserver(update);
+    mo.observe(pane, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "tabindex"] });
+    return () => {
+      map.off("moveend zoomend resize", update);
+      mo.disconnect();
+    };
+  }, [map, sheet]);
+  return null;
+}
+
 /** The map container is a tab stop for keyboard panning; not while an overlay hides it (WCAG 2.4.11). */
 function BlockKeyboard({ blocked }: { blocked: boolean }) {
   const map = useMap();
@@ -462,6 +507,7 @@ export default function LeafletMap({
         {compact ? <Recenter center={center} zoom={zoom} /> : <PanToSelected hazards={hazards} selectedId={selectedId} sheet={sheet} />}
         {!compact && <PanFocusedMarker sheet={sheet} />}
         {!compact && <BlockKeyboard blocked={blocked} />}
+        {!compact && <OffstagePins sheet={sheet} />}
         {showOsm && <OsmLayer />}
         {compact
           ? hazards.map((h) => (

@@ -106,7 +106,7 @@ export default function Header() {
   const identity = useIdentity();
 
   return (
-    <header className="app-chrome relative z-[1200] flex shrink-0 flex-col border-b border-line bg-[var(--header)] short:flex-row short:flex-wrap short:items-center md:w-[248px] md:border-b-0 md:border-r">
+    <header className="app-chrome relative z-[1200] flex shrink-0 flex-col border-b border-line bg-[var(--header)] short:flex-row short:items-center md:w-[248px] md:border-b-0 md:border-r">
       <div className="flex min-h-12 items-center gap-2.5 px-4 short:contents md:px-5 md:pb-2 md:pt-4">
         <Link href="/" className="flex min-h-11 shrink-0 items-center gap-2.5 rounded-md short:ml-4">
           <Image src="/logo-light.png" width={28} height={28} alt="" priority className="logo-light rounded-md" />

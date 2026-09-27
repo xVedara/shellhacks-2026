@@ -141,9 +141,12 @@ function HazardRecord({
       <p className="mt-2.5 text-[13px] text-ink-3">
         {detail.sample ? "Sample hazard, seeded for the demo." : "Reported by a StepSafe walker."}
       </p>
-      <Link href={`/verify?id=${encodeURIComponent(detail.id)}`} className={`${primaryButton} mt-3 w-full`}>
-        Verify this hazard
-      </Link>
+      {/* A cleared hazard is out of the queue, so there is nothing to verify. */}
+      {detail.status !== "cleared" && (
+        <Link href={`/verify?id=${encodeURIComponent(detail.id)}`} className={`${primaryButton} mt-3 w-full`}>
+          Verify this hazard
+        </Link>
+      )}
       <details className="group mt-4 border-t border-line pt-2">
         {/* display:flex drops the native disclosure triangle, so draw one. */}
         <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 text-[14px] font-medium [&::-webkit-details-marker]:hidden">

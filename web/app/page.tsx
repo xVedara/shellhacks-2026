@@ -24,6 +24,10 @@ const DETENTS: Detent[] = ["peek", "medium", "expanded"];
 /** Below this stage height (a landscape phone) medium could not show a row, so the sheet has only peek and expanded. */
 const SHORT_STAGE = 400;
 const detentsFor = (stage: number): Detent[] => (stage < SHORT_STAGE ? ["peek", "expanded"] : DETENTS);
+/** Below this (a landscape phone at 200% zoom) the open sheet takes the whole stage and its chrome tightens. */
+const TINY_STAGE = 240;
+/** Map left above a peeking sheet: room for the OpenStreetMap credit. */
+const MAP_STRIP = 52;
 /** Pins hide in a thin strip of map above the sheet: all but the selected one under 120px, every one under 84px. */
 function mapPinsClass(desktop: boolean, strip: number) {
   if (desktop || strip >= 120) return "";
@@ -35,10 +39,13 @@ function selectedFromLocation() {
 }
 
 function panelHeight(detent: Detent, stage: number) {
-  if (detent === "peek") return Math.round(Math.min(230, Math.max(188, stage * 0.24)));
+  // Every detent leaves at least MAP_STRIP of map, so the sheet never grows past the stage (under the header).
+  if (detent === "peek") return Math.round(Math.max(0, Math.min(230, Math.max(188, stage * 0.24), stage - MAP_STRIP)));
   if (detent === "medium") return Math.round(Math.min(stage - 96, Math.max(280, stage * 0.52)));
+  // On a tiny stage a 52px strip would leave no room for a row: the open sheet covers the map.
+  if (stage < TINY_STAGE) return Math.round(stage);
   // Keep a 52px strip of map so the OpenStreetMap credit stays on screen.
-  if (stage < SHORT_STAGE) return Math.round(stage - 52);
+  if (stage < SHORT_STAGE) return Math.round(stage - MAP_STRIP);
   return Math.round(Math.min(stage - 48, Math.max(360, stage * 0.88)));
 }
 
@@ -50,7 +57,7 @@ function connectionWord(connection: Connection) {
 }
 
 /** `count` is null until the first snapshot answers. */
-function LiveKicker({ connection, count }: { connection: Connection; count: number | null }) {
+function LiveKicker({ connection, count, compact = false }: { connection: Connection; count: number | null; compact?: boolean }) {
   const word = connectionWord(connection);
   return (
     <div>
@@ -63,7 +70,7 @@ function LiveKicker({ connection, count }: { connection: Connection; count: numb
           · {connection === "down" ? "retrying" : count === null ? "loading" : `${count} nearby`}
         </span>
       </p>
-      <p className="mt-0.5 text-[13px] text-ink-3">Within 3 mi of FIU Graham Center</p>
+      <p className={`mt-0.5 text-[13px] text-ink-3 ${compact ? "sr-only" : ""}`}>Within 3 mi of FIU Graham Center</p>
     </div>
   );
 }
@@ -124,10 +131,11 @@ export default function MapPage() {
   const mapCovered = mapPinsClass(desktop, stageH - sheet) === " map-covered";
   /** First contact failed: nothing to show, and the offline notice covers the map. */
   const blocking = connection === "down" && !loaded;
+  const tiny = !desktop && stageH < TINY_STAGE;
   const showOnMap = () => {
     setDetent("peek");
     // The details close; keep keyboard focus on the button that brings them back.
-    requestAnimationFrame(() => document.getElementById("peek-action")?.focus());
+    requestAnimationFrame(() => (document.getElementById("peek-action") ?? document.querySelector<HTMLElement>("[role=slider]"))?.focus());
   };
 
   const closePanel = () => {
@@ -209,7 +217,8 @@ export default function MapPage() {
           sheet={sheet}
           blocked={blocking}
         />
-        {blocking && (
+        {/* The notice needs about 120px of map; on a thinner strip the sheet's "Offline · retrying" says it. */}
+        {blocking && stageH - sheet >= 120 && (
           // Above the tiles and pins, below the map controls, so the OpenStreetMap credit stays readable. It stops
           // at the phone sheet's top edge so the sheet never cuts the notice.
           <div className="absolute inset-x-0 top-0 z-[950] flex items-center justify-center bg-page/85 p-4" style={{ bottom: sheet }}>
@@ -229,14 +238,14 @@ export default function MapPage() {
         ref={panelRef}
         id="hazard-panel"
         tabIndex={-1}
-        className={`sheet-panel${dragging ? " is-dragging" : ""}`}
+        className={`sheet-panel${dragging ? " is-dragging" : ""}${tiny ? " is-tiny" : ""}`}
         style={{ ["--panel-h" as string]: `${panelPx}px` }}
         aria-label={showPeek ? "Live status" : detailOpen ? "Hazard details" : "Nearby hazards"}
       >
         <h1 className="sr-only">Live map</h1>
         <button
           type="button"
-          className="flex h-11 w-full shrink-0 items-center justify-center md:hidden"
+          className={`flex w-full shrink-0 items-center justify-center md:hidden ${tiny ? "h-8" : "h-11"}`}
           role="slider"
           aria-valuemin={0}
           aria-valuemax={detents.length - 1}
@@ -271,9 +280,12 @@ export default function MapPage() {
           {showPeek ? (
             <div>
               <LiveKicker connection={connection} count={loaded ? list.length : null} />
-              <button id="peek-action" type="button" className={`${primaryButton} mt-3.5 w-full`} onClick={() => setDetent("medium")}>
-                {panel === "detail" && selectedId ? "Back to details" : "Open list"}
-              </button>
+              {/* A tiny peek has room only for the status; the handle above opens the sheet. */}
+              {!tiny && (
+                <button id="peek-action" type="button" className={`${primaryButton} mt-3.5 w-full`} onClick={() => setDetent("medium")}>
+                  {panel === "detail" && selectedId ? "Back to details" : "Open list"}
+                </button>
+              )}
             </div>
           ) : detailOpen ? (
             <div className="flex min-h-0 flex-1 flex-col">
@@ -285,7 +297,7 @@ export default function MapPage() {
                   All hazards
                 </button>
                 {/* A landscape phone's expanded sheet leaves no room for even the selected pin: drop to peek to see it. */}
-                {mapCovered && (
+                {mapCovered && !tiny && (
                   <button type="button" className={secondaryButton} onClick={showOnMap}>
                     Show on map
                   </button>
@@ -319,11 +331,14 @@ export default function MapPage() {
                 )}
                 {detailError && <Notice tone="warn" title="Couldn’t load this hazard">{detailError}</Notice>}
                 {detail && <HazardDetail hazard={detail} taxonomy={taxonomy} />}
-                <div className="mt-4">
-                  <Link href={`/verify?id=${encodeURIComponent(selectedId ?? "")}`} className={`${primaryButton} w-full`}>
-                    Verify this hazard
-                  </Link>
-                </div>
+                {/* A cleared hazard is out of the queue, so there is nothing to verify. */}
+                {selected && detail?.status !== "cleared" && (
+                  <div className="mt-4">
+                    <Link href={`/verify?id=${encodeURIComponent(selectedId ?? "")}`} className={`${primaryButton} w-full`}>
+                      Verify this hazard
+                    </Link>
+                  </div>
+                )}
                 <div className="mt-4">
                   <LegendBlock open={legendOpen} onToggle={toggleLegend} showOsm={showOsm} onOsm={setShowOsm} />
                 </div>
@@ -345,7 +360,8 @@ export default function MapPage() {
               cleared={cleared}
               legendOpen={legendOpen}
               onLegend={toggleLegend}
-              onShowMap={mapCovered ? showOnMap : undefined}
+              onShowMap={mapCovered && !tiny ? showOnMap : undefined}
+              tiny={tiny}
               showOsm={showOsm}
               onOsm={setShowOsm}
             />
@@ -373,6 +389,7 @@ function LiveHazardList({
   legendOpen,
   onLegend,
   onShowMap,
+  tiny,
   showOsm,
   onOsm,
 }: {
@@ -392,6 +409,8 @@ function LiveHazardList({
   onLegend: () => void;
   /** Set when the expanded sheet covers every pin: drops the sheet so the map shows. */
   onShowMap?: () => void;
+  /** Landscape phone at 200% zoom: the status and filters scroll with the rows, so a row shows. */
+  tiny: boolean;
   showOsm: boolean;
   onOsm: (next: boolean) => void;
 }) {
@@ -399,11 +418,11 @@ function LiveHazardList({
   const clearedToday = clearedSince(cleared.values(), new Date(now).setHours(0, 0, 0, 0));
   const option = SHOW_OPTIONS.find((o) => o.id === show) ?? SHOW_OPTIONS[0];
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className={`flex min-h-0 flex-1 flex-col ${tiny ? "scroll-quiet overflow-y-auto" : ""}`}>
       {/* On a landscape phone the status and the filters share one row to leave room for hazards. */}
       <div className="flex shrink-0 flex-col short:flex-row short:flex-wrap short:items-center short:justify-between short:gap-x-4">
         <div className="shrink-0">
-          <LiveKicker connection={connection} count={loaded ? total : null} />
+          <LiveKicker connection={connection} count={loaded ? total : null} compact={tiny} />
           {lastEventAt && connection === "live" && (
             <p className="sr-only">Updated {relativeTime(new Date(lastEventAt).toISOString(), now)}</p>
           )}
@@ -452,7 +471,7 @@ function LiveHazardList({
       <h2 id="list-heading" tabIndex={-1} className="sr-only">
         {option.heading} ({rows.length})
       </h2>
-      <div className="scroll-quiet mt-1 min-h-0 flex-1 overflow-y-auto">
+      <div className={tiny ? "mt-1" : "scroll-quiet mt-1 min-h-0 flex-1 overflow-y-auto"}>
         {!loaded && connection !== "down" && (
           <p role="status" className="py-3 text-ink-3">
             Loading hazards…
