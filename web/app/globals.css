@@ -347,8 +347,10 @@ main:focus-visible::after {
 .sheet-panel.is-tiny {
   padding-bottom: max(8px, env(safe-area-inset-bottom, 0px));
 }
-/* A pin whose centre is under the sheet or off the map shows only a sliver: not a click or focus target. */
-.leaflet-marker-icon.ss-pin-offstage {
+/* A pin whose centre is under the sheet or off the map shows only a sliver: not a click or focus target.
+   Leaflet's .leaflet-marker-icon.leaflet-interactive also sets pointer-events (same specificity), so the
+   container class has to win or the sliver stays clickable. */
+.leaflet-container .leaflet-marker-icon.ss-pin-offstage {
   pointer-events: none;
 }
 .sheet-panel.is-dragging {

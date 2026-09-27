@@ -177,7 +177,11 @@ export default function MapPage() {
     if (!drag.current) return;
     const dy = drag.current.y - e.clientY;
     if (Math.abs(dy) > 4) drag.current.moved = true;
-    setDragH(Math.min(panelHeight("expanded", stageH), Math.max(160, drag.current.h + dy)));
+    // Floor at this stage's peek. A fixed 160px floor sits above peek on a tiny stage (200% landscape),
+    // so a downward drag never leaves the open sheet.
+    const minH = panelHeight(detents[0], stageH);
+    const maxH = panelHeight(detents[detents.length - 1], stageH);
+    setDragH(Math.min(maxH, Math.max(minH, drag.current.h + dy)));
   };
   const onGrabUp = () => {
     if (!drag.current) return;

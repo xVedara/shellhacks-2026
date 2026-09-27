@@ -124,23 +124,24 @@ export default function Header() {
         </div>
       </div>
 
-      <nav aria-label="Main" className="px-2 short:flex-1 md:mt-2 md:flex-1">
+      {/* Grow from the label width. The profile name shrinks first; tabs ellipsize only once the theme button would leave the screen. */}
+      <nav aria-label="Main" className="px-2 short:min-w-0 short:grow short:shrink short:basis-auto md:mt-2 md:flex-1">
         <ul className="flex gap-1 md:flex-col md:gap-1">
           {NAV.map((item) => {
             const current = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
             return (
-              <li key={item.href} className="flex-1 md:flex-none">
+              <li key={item.href} className="min-w-0 flex-1 short:flex-none md:flex-none">
                 <Link
                   href={item.href}
                   aria-current={current ? "page" : undefined}
-                  className={`flex min-h-11 items-center justify-center gap-2 rounded-none border-b-2 px-2.5 text-[14px] font-medium md:justify-start md:rounded-md md:border-b-0 md:px-3 ${
+                  className={`flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-none border-b-2 px-2.5 text-[14px] font-medium md:justify-start md:rounded-md md:border-b-0 md:px-3 ${
                     current
                       ? "border-[var(--blue)] text-accent md:border-transparent md:bg-raised md:font-semibold md:shadow-[inset_2px_0_0_var(--blue)]"
                       : "border-transparent text-ink-2 hover:bg-hover hover:text-ink"
                   }`}
                 >
                   <Icon name={item.icon} />
-                  {item.label}
+                  <span className="min-w-0 truncate">{item.label}</span>
                 </Link>
               </li>
             );
@@ -149,7 +150,8 @@ export default function Header() {
       </nav>
 
       {/* Landscape phone: one row, so the theme and profile come after the tabs, in reading and tab order. */}
-      <div className="hidden min-w-0 items-center gap-1 pl-1 pr-4 short:flex">
+      {/* Shrink the name before the tabs. min-width keeps the theme button and avatar on screen. */}
+      <div className="hidden min-w-[5.5rem] shrink-[100] items-center gap-1 pl-1 pr-4 short:flex">
         <ThemeToggle compact />
         <Profile {...identity} />
       </div>
