@@ -12,6 +12,7 @@
 		09A66D5B22112C26ACF4AF02 /* CrossingScenarioTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF6AA8B3A6EDAB150F21873F /* CrossingScenarioTests.swift */; };
 		0A3E2B6AF638C53A3F6966C9 /* Geo.swift in Sources */ = {isa = PBXBuildFile; fileRef = A16E3AB89629CEEEBC438971 /* Geo.swift */; };
 		0D7B3358F8577CA26047623C /* LICENSE in Resources */ = {isa = PBXBuildFile; fileRef = 96EE2F787910EFD0498D4EFB /* LICENSE */; };
+		12403952DCCF14DBDDE3068A /* HazardMap.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3D1F6089654F7128F9896F7 /* HazardMap.swift */; };
 		221B4E0CFE4D2B215E8D24FC /* CrossingScenarioBoxPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C712FB0F4C6D87FFC94B9508 /* CrossingScenarioBoxPolicyTests.swift */; };
 		24E9C93544221CE03188C3E5 /* AlertPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 734358435B5F3C063F69C2E0 /* AlertPolicyTests.swift */; };
 		274FB8C9D81D6A3FCB753F45 /* TTSPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EBE1E5BD27CD71C4C7A7B96 /* TTSPlayer.swift */; };
@@ -96,6 +97,7 @@
 		E074A56398607FDE4729FD90 /* StepSafeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StepSafeApp.swift; sourceTree = "<group>"; };
 		E6EFDD0ECE64133E5D035ACF /* AlertPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlertPolicy.swift; sourceTree = "<group>"; };
 		F082091A4DDB2F07392C30FF /* PathGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PathGuardTests.swift; sourceTree = "<group>"; };
+		F3D1F6089654F7128F9896F7 /* HazardMap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HazardMap.swift; sourceTree = "<group>"; };
 		F4B340FE981BC9DFF3ABC653 /* MapRulesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapRulesTests.swift; sourceTree = "<group>"; };
 		FE17BC878D94A712EC820C35 /* PathGuard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PathGuard.swift; sourceTree = "<group>"; };
 		FF6AA8B3A6EDAB150F21873F /* CrossingScenarioTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrossingScenarioTests.swift; sourceTree = "<group>"; };
@@ -145,6 +147,7 @@
 				4A7EF0F08F24BA8163B05FEC /* Assets.xcassets */,
 				69550F1C63CC6AADD1540A4C /* CommunityView.swift */,
 				27F88CC2238BBF138080B767 /* ContentView.swift */,
+				F3D1F6089654F7128F9896F7 /* HazardMap.swift */,
 				DF9D950E58C20F8EC3D8C589 /* HazardNamer.swift */,
 				931296A1A1F89F0D9B96705B /* Info.plist */,
 				96EE2F787910EFD0498D4EFB /* LICENSE */,
@@ -292,6 +295,7 @@
 				335140E005C3501C87BCC6D4 /* CommunityView.swift in Sources */,
 				8FE50E5F163C9DF6EC6AF37C /* ContentView.swift in Sources */,
 				0A3E2B6AF638C53A3F6966C9 /* Geo.swift in Sources */,
+				12403952DCCF14DBDDE3068A /* HazardMap.swift in Sources */,
 				DC120DF47228415808187129 /* HazardNamer.swift in Sources */,
 				A356C0800AF369B9565C7AFE /* Localizer.swift in Sources */,
 				B15A0DB507DD2C2C518F04C5 /* MapRules.swift in Sources */,

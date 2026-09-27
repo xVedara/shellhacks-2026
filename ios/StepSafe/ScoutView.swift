@@ -68,9 +68,7 @@ final class ScoutModel: ObservableObject, @unchecked Sendable { // main-confined
     struct Report { var id: String; var label: String; var merged: Bool }
 
     @Published var band = "ground"
-    static let prompt = "Tap an obstacle to report it"
-    static let waitingForGPS = "Waiting for GPS"
-    @Published var status = ScoutModel.prompt
+    @Published var status = ScoutStatus.prompt
     @Published var report: Report?
     /// Hazard types for the correction picker; nil until loaded.
     @Published var taxonomy: [HazardTypeEntry]?
@@ -104,15 +102,15 @@ final class ScoutModel: ObservableObject, @unchecked Sendable { // main-confined
 
     func submit(_ capture: ScoutCapture) {
         guard let fix = capture.world.flatMap(link.localizer.locate) ?? link.localizer.fix else {
-            status = "No GPS fix yet, try again outdoors"
+            status = .noFixForReport
             return
         }
         awaitingFirstFix = false
         busy = true
         report = nil
         spoken = nil // a new report speaks even when the words match the last one
-        status = "Reporting, naming can take 15 seconds"
-        speak(status)
+        status = .message("Reporting, naming can take 15 seconds")
+        speak(status.text)
         let band = band, heading = link.localizer.heading, api = link.api, map = link.map
         Task {
             do {
@@ -121,16 +119,16 @@ final class ScoutModel: ObservableObject, @unchecked Sendable { // main-confined
                 DispatchQueue.main.async {
                     if !r.id.isEmpty { map.markOwn(r.id) } // never passively downvote our own pin
                     self.report = r.id.isEmpty ? nil : Report(id: r.id, label: r.label, merged: r.merged) // no pin to correct
-                    self.status = r.id.isEmpty ? "Not pinned: \(r.label)" : r.merged ? "Added to existing pin: \(r.label)" : "Reported: \(r.label)"
+                    self.status = .message(r.id.isEmpty ? "Not pinned: \(r.label)" : r.merged ? "Added to existing pin: \(r.label)" : "Reported: \(r.label)")
                     self.busy = false
-                    self.speak(self.status)
+                    self.speak(self.status.text)
                     self.refresh()
                 }
             } catch {
                 DispatchQueue.main.async {
-                    self.status = "Report failed: \(error.localizedDescription)"
+                    self.status = .message("Report failed: \(error.localizedDescription)")
                     self.busy = false
-                    self.speak(self.status)
+                    self.speak(self.status.text)
                 }
             }
         }
@@ -158,8 +156,8 @@ final class ScoutModel: ObservableObject, @unchecked Sendable { // main-confined
         Task {
             let r = try? await api.reclassify(id, type: entry.id)
             DispatchQueue.main.async {
-                self.status = r.map { $0.applied ? "Type changed to \(name)" : "Proposed \(name) (\($0.agreeing) of 3 agree)" }
-                    ?? "Correction failed"
+                self.status = .message(r.map { $0.applied ? "Type changed to \(name)" : "Proposed \(name) (\($0.agreeing) of 3 agree)" }
+                    ?? "Correction failed")
                 self.refresh()
             }
         }
@@ -168,12 +166,12 @@ final class ScoutModel: ObservableObject, @unchecked Sendable { // main-confined
     func refresh() {
         guard let fix = link.localizer.fix else {
             // No fix yet. Callers keep retrying off `hasFix`, so a rewritten status must not matter here.
-            if awaitingFirstFix && !busy && report == nil { status = Self.waitingForGPS }
+            if awaitingFirstFix && !busy && report == nil { status = .waitingForGPS }
             return
         }
         if awaitingFirstFix {
             awaitingFirstFix = false
-            if !busy && report == nil { status = Self.prompt } // first fix: back to the instruction
+            if !busy && report == nil { status = .prompt } // first fix: back to the instruction
         }
         nearToken += 1
         let token = nearToken
@@ -209,8 +207,8 @@ final class ScoutModel: ObservableObject, @unchecked Sendable { // main-confined
         Task {
             let r = try? await api.vote(pin.id, up: up, source: "scout")
             DispatchQueue.main.async {
-                self.status = r.map { "Voted \(up ? "up" : "down") on \(self.name(pin)): confidence \(String(format: "%.1f", $0.confidence)), \($0.status)" }
-                    ?? "Vote failed"
+                self.status = .message(r.map { "Voted \(up ? "up" : "down") on \(self.name(pin)): confidence \(String(format: "%.1f", $0.confidence)), \($0.status)" }
+                    ?? "Vote failed")
                 self.refresh()
             }
         }
@@ -296,7 +294,7 @@ struct ScoutView: View {
                 }
                 .pickerStyle(.segmented)
                 .accessibilityLabel("Height of the hazard")
-                Text(scout.status)
+                Text(scout.status.text)
                     .font(.title3).foregroundStyle(.white).multilineTextAlignment(.center)
                     .accessibilityAddTraits(.updatesFrequently)
                 if let report = scout.report { correctButton(PickTarget(id: report.id, name: report.label), wide: true) }
@@ -388,7 +386,7 @@ struct ScoutView: View {
                 layout {
                     VStack(alignment: .leading) {
                         Text(scout.name(pin) + (pin.sample == true ? " (sample)" : "")).foregroundStyle(.white)
-                        Text("\(Int((pin.distanceM ?? 0) * 3.28084)) ft, \(bandName(pin.heightBand)), confidence \(String(format: "%.1f", pin.confidence))")
+                        Text("\(Int((pin.distanceM ?? 0) * 3.28084)) ft, \(Community.band(pin.heightBand).lowercased()), confidence \(String(format: "%.1f", pin.confidence))")
                             .font(.footnote).foregroundStyle(Color.slate)
                     }
                     .accessibilityElement(children: .combine)
@@ -411,18 +409,28 @@ struct ScoutView: View {
                 .font(.title2)
                 .frame(minWidth: 56, minHeight: 56) // grows with the symbol at large text sizes
                 .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
-                .foregroundStyle(up ? Color.control : Color.white) // orange is for hazards, not controls
+                .foregroundStyle(up ? Color.controlOnCard : Color.white) // orange is for hazards, not controls
         }
         .accessibilityLabel(up ? "Still there: \(scout.name(pin))" : "Gone: \(scout.name(pin))")
     }
 }
 
-/// Height band as people say it (the API sends ground / head / dropoff).
-private func bandName(_ band: String) -> String {
-    switch band {
-    case "head": return "head height"
-    case "dropoff": return "drop-off"
-    default: return "ground"
+/// Scout status line. GPS states are cases, not strings, so code never compares display text.
+enum ScoutStatus: Equatable {
+    case prompt
+    case waitingForGPS
+    /// A camera tap arrived before the first fix.
+    case noFixForReport
+    /// Report, vote and correction results.
+    case message(String)
+
+    var text: String {
+        switch self {
+        case .prompt: return "Tap an obstacle to report it"
+        case .waitingForGPS: return "Waiting for GPS"
+        case .noFixForReport: return "No GPS fix yet, try again outdoors"
+        case .message(let m): return m
+        }
     }
 }
 

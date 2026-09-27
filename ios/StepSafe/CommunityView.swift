@@ -239,8 +239,8 @@ struct CommunityView: View {
     @AppStorage("communityMode") private var mode = "list"
     @State private var path: [String] = []
     @State private var openedLaunchHazard = false
-    @State private var mapPosition: MapCameraPosition = .automatic
-    @State private var mapCentered = false
+    /// Hazards stacked on one spot of the map, offered as a choice (nil: no dialog).
+    @State private var stacked: [String]?
     @Environment(\.dynamicTypeSize) private var typeSize
 
     /// AppModel.running: the Walker session is live, so this tab makes no VoiceOver announcements.
@@ -354,42 +354,24 @@ struct CommunityView: View {
     }
 
     private var map: some View {
-        Map(position: $mapPosition) {
-            UserAnnotation()
-            if let fix = model.fix {
-                MapCircle(center: CLLocationCoordinate2D(latitude: fix.lat, longitude: fix.lng), radius: Community.radiusM)
-                    .foregroundStyle(Color.control.opacity(0.08))
-                    .stroke(Color.control.opacity(0.6), lineWidth: 1.5)
-            }
-            ForEach(model.pins) { pin in
-                Annotation(model.name(type: pin.type, label: pin.label), coordinate: CLLocationCoordinate2D(latitude: pin.lat, longitude: pin.lng)) {
-                    Button { path.append(pin.id) } label: {
-                        Text(String(pin.category.prefix(1)).uppercased())
-                            .font(.caption.bold())
-                            .frame(width: 28, height: 28)
-                            .background(Color.hazard, in: Circle())
-                            .overlay(Circle().stroke(.white, lineWidth: 2))
-                            .foregroundStyle(Color.navy)
-                            .frame(width: 44, height: 44) // 28 pt pin, 44 pt hit area
-                            .contentShape(Rectangle())
-                    }
-                    .accessibilityLabel(model.rowLabel(pin))
+        HazardMap(pins: model.pins.map { pin in
+                      HazardMap.Pin(id: pin.id, coordinate: CLLocationCoordinate2D(latitude: pin.lat, longitude: pin.lng),
+                                    letter: String(pin.category.prefix(1)).uppercased(),
+                                    title: model.name(type: pin.type, label: pin.label), spoken: model.rowLabel(pin))
+                  },
+                  center: model.fix.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lng) },
+                  radiusM: Community.radiusM, lang: model.lang,
+                  onSelect: { path.append($0) }, onStack: { stacked = $0 })
+            .overlay(alignment: .top) { HazardMapLegend(lang: model.lang).padding(.top, 8) }
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .padding(.bottom, 8)
+            .confirmationDialog(t("Hazards at this spot", "Peligros en este punto"),
+                                isPresented: Binding(get: { stacked != nil }, set: { if !$0 { stacked = nil } }),
+                                titleVisibility: .visible) {
+                ForEach(model.pins.filter { stacked?.contains($0.id) == true }) { pin in
+                    Button(model.name(type: pin.type, label: pin.label)) { path.append(pin.id) }
                 }
             }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .padding(.bottom, 8)
-        .onAppear { mapCentered = false; centerMap() }
-        .onChange(of: model.fix) { if !mapCentered { centerMap() } }
-    }
-
-    /// Opens on the user with the whole 1-mile radius in view, plus 10% padding on each side.
-    private func centerMap() {
-        guard let fix = model.fix else { return }
-        let span = Community.radiusM * 2 * 1.2
-        mapPosition = .region(MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: fix.lat, longitude: fix.lng),
-                                                 latitudinalMeters: span, longitudinalMeters: span))
-        mapCentered = true
     }
 }
 
@@ -399,6 +381,8 @@ struct HazardDetailView: View {
     @State private var detail: HazardDetail?
     @State private var failed = false
     @State private var picking = false
+    /// Bumped by Try again; `.task(id:)` reloads, and cancels the load when the view goes away.
+    @State private var attempt = 0
     @Environment(\.dynamicTypeSize) private var typeSize
 
     /// Paired action buttons sit side by side, stacked at accessibility text sizes so labels never wrap mid-word.
@@ -413,19 +397,21 @@ struct HazardDetailView: View {
             VStack(alignment: .leading, spacing: 14) {
                 if let d = detail { content(d) } else if failed {
                     Text(t("Could not load this hazard", "No se pudo cargar este peligro")).foregroundStyle(Color.slate)
-                    Button { failed = false; Task { await load() } } label: {
+                    Button { failed = false; attempt += 1 } label: {
                         actionLabel(t("Try again", "Reintentar"), "arrow.clockwise")
                     }
                 } else {
-                    ProgressView().frame(maxWidth: .infinity)
+                    ProgressView(t("Loading hazard", "Cargando peligro")).frame(maxWidth: .infinity)
                 }
             }
             .padding(16)
         }
+        // Room past the last action so it scrolls fully clear of the floating tab bar at large text sizes.
+        .contentMargins(.bottom, 96, for: .scrollContent)
         .background(Color.navy.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
-        .task { await load() }
+        .task(id: attempt) { await load() }
         .sheet(isPresented: $picking) {
             if let d = detail {
                 TypePicker(title: model.name(type: d.type, label: d.label), entries: model.taxonomy ?? [], lang: model.lang,
@@ -468,7 +454,7 @@ struct HazardDetailView: View {
                 fact(t("Distance", "Distancia"), Community.distance(dist, lang: model.lang) + ", "
                      + Community.direction(bearing: Geo.bearing(from: fix, to: d.fix), heading: model.heading, lang: model.lang))
             }
-            fact(t("Height", "Altura"), band(d.heightBand))
+            fact(t("Height", "Altura"), Community.band(d.heightBand, lang: model.lang))
             if let c = d.measurements?.clearanceM { fact(t("Clearance", "Espacio libre"), Community.distance(c, lang: model.lang)) }
             if let w = d.measurements?.widthM { fact(t("Width", "Ancho"), Community.distance(w, lang: model.lang)) }
             fact(t("Severity", "Gravedad"), "\(Community.confidence(d.severity)) / 3")
@@ -544,14 +530,6 @@ struct HazardDetailView: View {
             .frame(maxWidth: .infinity, minHeight: 56)
             .background(fill, in: RoundedRectangle(cornerRadius: 12))
             .foregroundStyle(.white)
-    }
-
-    private func band(_ b: String) -> String {
-        switch b {
-        case "head": return t("Head height", "Altura de la cabeza")
-        case "dropoff": return t("Drop-off", "Desnivel")
-        default: return t("Ground", "Suelo")
-        }
     }
 
     private func relative(_ date: Date) -> String {

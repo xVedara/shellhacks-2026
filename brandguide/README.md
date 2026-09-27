@@ -26,7 +26,7 @@ Regenerate the derived files with `python3 make_icons.py` (needs Pillow).
 | Signal Blue | `#13B9F2` | Scanning and sensor visuals |
 | White | `#FFFFFF` | Text on dark, eye outline |
 | Cloud | `#F5F7FA` | Light surfaces |
-| Slate | `#66717E` | Secondary text |
+| Slate | `#9AA5B1` | Secondary text (7.29:1 on navy, 6.29:1 on a navy card). Replaces `#66717E`, which was 3.67:1 on navy, under the 4.5:1 text minimum, and is no longer used anywhere |
 | Blue gradient | `#13B9F2` to `#0868F8` | Light-mode icon background; accent |
 
 Never signal a hazard with color alone: pair it with an icon, text, sound or haptics.
