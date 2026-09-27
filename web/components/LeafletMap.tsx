@@ -209,7 +209,7 @@ function OffstagePins({ sheet }: { sheet: number }) {
           v = pieces.reduce((best, q) => (Math.min(q.r - q.l, q.b - q.t) > Math.min(best.r - best.l, best.b - best.t) ? q : best));
         }
         const off = v.r - v.l < MIN_EXPOSED || v.b - v.t < MIN_EXPOSED;
-        if (off && el.contains(document.activeElement)) document.getElementById("hazard-panel")?.focus();
+        if (off && el.contains(document.activeElement)) document.getElementById("hazard-panel")?.focus({ preventScroll: true });
         // Idempotent (writes only on a difference), so the attribute observer below settles after one pass.
         if (el.classList.contains("ss-pin-offstage") !== off) el.classList.toggle("ss-pin-offstage", off);
         if (off) {

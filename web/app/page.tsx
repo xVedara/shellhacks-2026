@@ -142,7 +142,7 @@ export default function MapPage() {
   useLayoutEffect(() => {
     const el = document.activeElement as HTMLElement | null;
     if (!el || !mapStageRef.current?.contains(el)) return;
-    if (mapFullyCovered || !el.checkVisibility({ visibilityProperty: true })) document.getElementById("hazard-panel")?.focus();
+    if (mapFullyCovered || !el.checkVisibility({ visibilityProperty: true })) document.getElementById("hazard-panel")?.focus({ preventScroll: true });
   }, [stageClass, mapFullyCovered]);
   const showOnMap = () => {
     setDetent("peek");
