@@ -10,6 +10,7 @@
  *
  * Usage: node scripts/slice-hazard-icons.mjs [path-to-sheet]
  */
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -361,9 +362,10 @@ async function main() {
     });
   }
 
+  const sourceSha256 = crypto.createHash("sha256").update(fs.readFileSync(src)).digest("hex");
   const manifest = {
     source: path.basename(src),
-    sourceSha256: "56b966cf16c6e4264b09bdd0cc7de0d19ac4c77aab87a6d32e6476f724e615fb",
+    sourceSha256,
     image: { width: info.width, height: info.height },
     rows: counts,
     count: manifestTiles.length,
