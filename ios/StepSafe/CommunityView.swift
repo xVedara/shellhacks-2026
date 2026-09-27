@@ -231,6 +231,8 @@ struct CommunityView: View {
     @AppStorage("communityMode") private var mode = "list"
     @State private var path: [String] = []
     @State private var openedLaunchHazard = false
+    @State private var mapPosition: MapCameraPosition = .automatic
+    @State private var mapCentered = false
 
     /// AppModel.running: the Walker session is live, so this tab makes no VoiceOver announcements.
     var walkerRunning: Bool
@@ -329,8 +331,13 @@ struct CommunityView: View {
     }
 
     private var map: some View {
-        Map(initialPosition: .automatic) {
+        Map(position: $mapPosition) {
             UserAnnotation()
+            if let fix = model.fix {
+                MapCircle(center: CLLocationCoordinate2D(latitude: fix.lat, longitude: fix.lng), radius: Community.radiusM)
+                    .foregroundStyle(Color.control.opacity(0.08))
+                    .stroke(Color.control.opacity(0.6), lineWidth: 1.5)
+            }
             ForEach(model.pins) { pin in
                 Annotation(model.name(type: pin.type, label: pin.label), coordinate: CLLocationCoordinate2D(latitude: pin.lat, longitude: pin.lng)) {
                     Button { path.append(pin.id) } label: {
@@ -347,6 +354,17 @@ struct CommunityView: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .padding(.bottom, 8)
+        .onAppear { mapCentered = false; centerMap() }
+        .onChange(of: model.fix) { if !mapCentered { centerMap() } }
+    }
+
+    /// Opens on the user with the whole 1-mile radius in view, plus 10% padding on each side.
+    private func centerMap() {
+        guard let fix = model.fix else { return }
+        let span = Community.radiusM * 2 * 1.2
+        mapPosition = .region(MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: fix.lat, longitude: fix.lng),
+                                                 latitudinalMeters: span, longitudinalMeters: span))
+        mapCentered = true
     }
 }
 
