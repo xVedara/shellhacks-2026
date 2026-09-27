@@ -122,6 +122,8 @@ export default function MapPage() {
   }, []);
 
   const mapCovered = mapPinsClass(desktop, stageH - sheet) === " map-covered";
+  /** First contact failed: nothing to show, and the offline notice covers the map. */
+  const blocking = connection === "down" && !loaded;
   const showOnMap = () => {
     setDetent("peek");
     // The details close; keep keyboard focus on the button that brings them back.
@@ -205,10 +207,12 @@ export default function MapPage() {
           showOsm={showOsm}
           label="Map of reported hazards around FIU Graham Center"
           sheet={sheet}
+          blocked={blocking}
         />
-        {connection === "down" && !loaded && (
-          // Above the tiles and pins, below the map controls, so the OpenStreetMap credit stays readable.
-          <div className="absolute inset-0 z-[950] flex items-center justify-center bg-page/85 p-4">
+        {blocking && (
+          // Above the tiles and pins, below the map controls, so the OpenStreetMap credit stays readable. It stops
+          // at the phone sheet's top edge so the sheet never cuts the notice.
+          <div className="absolute inset-x-0 top-0 z-[950] flex items-center justify-center bg-page/85 p-4" style={{ bottom: sheet }}>
             <div className="max-w-md rounded-xl bg-card shadow-[var(--float-shadow)]">
               <Notice tone="warn" title="Can’t reach the StepSafe server">
                 <p>
@@ -341,6 +345,7 @@ export default function MapPage() {
               cleared={cleared}
               legendOpen={legendOpen}
               onLegend={toggleLegend}
+              onShowMap={mapCovered ? showOnMap : undefined}
               showOsm={showOsm}
               onOsm={setShowOsm}
             />
@@ -367,6 +372,7 @@ function LiveHazardList({
   cleared,
   legendOpen,
   onLegend,
+  onShowMap,
   showOsm,
   onOsm,
 }: {
@@ -384,6 +390,8 @@ function LiveHazardList({
   cleared: Map<string, number>;
   legendOpen: boolean;
   onLegend: () => void;
+  /** Set when the expanded sheet covers every pin: drops the sheet so the map shows. */
+  onShowMap?: () => void;
   showOsm: boolean;
   onOsm: (next: boolean) => void;
 }) {
@@ -425,6 +433,11 @@ function LiveHazardList({
           )}
           {clearedToday > 0 && <span className="text-[13px] text-ink-3">{clearedToday} cleared today</span>}
         </fieldset>
+        {onShowMap && (
+          <button type="button" className={`${secondaryButton} mt-3 short:mt-0`} onClick={onShowMap}>
+            Show on map
+          </button>
+        )}
         <p className="sr-only" aria-live="polite">
           {show === "awaiting" && loaded ? `Showing ${rows.length} of ${total} hazards you have not checked.` : ""}
         </p>

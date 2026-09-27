@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import HazardDetail, { useHazardDetail } from "@/components/HazardDetail";
 import Map from "@/components/Map";
 import { Notice, TypeIcon, linkClass, primaryButton, secondaryButton } from "@/components/ui";
@@ -25,6 +25,11 @@ export default function HazardPage() {
 
   const name = detail ? detail.label || typeDisplayName(detail.type, taxonomy) : "Hazard";
   const miles = detail ? milesFromGraham(detail.lat, detail.lng) : "";
+  // The segment's metadata says "Hazard details"; once the record loads, the tab names the hazard.
+  useEffect(() => {
+    if (detail) document.title = `${name} | StepSafe`;
+    else if (missing) document.title = "Hazard not found | StepSafe";
+  }, [detail, missing, name]);
 
   return (
     <div ref={stageRef} className="relative flex min-h-0 flex-1">

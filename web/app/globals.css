@@ -322,9 +322,21 @@ body {
   transition: height 280ms ease-out;
 }
 /* The skip links focus <main> and the panel: draw their rings inside, where the header and screen edge cannot
-   hide them. */
-main:focus-visible,
+   hide them. main's own outline would sit under the map panes and the sheet, so it is drawn on an overlay. */
 .sheet-panel:focus-visible {
+  outline-offset: -2px;
+}
+main:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+main:focus-visible::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1150;
+  pointer-events: none;
+  outline: 2px solid var(--blue);
   outline-offset: -2px;
 }
 .sheet-panel.is-dragging {

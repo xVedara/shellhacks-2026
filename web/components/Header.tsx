@@ -106,7 +106,7 @@ export default function Header() {
   const identity = useIdentity();
 
   return (
-    <header className="app-chrome relative z-[1200] flex shrink-0 flex-col border-b border-line bg-[var(--header)] short:flex-row short:items-center md:w-[248px] md:border-b-0 md:border-r">
+    <header className="app-chrome relative z-[1200] flex shrink-0 flex-col border-b border-line bg-[var(--header)] short:flex-row short:flex-wrap short:items-center md:w-[248px] md:border-b-0 md:border-r">
       <div className="flex min-h-12 items-center gap-2.5 px-4 short:contents md:px-5 md:pb-2 md:pt-4">
         <Link href="/" className="flex min-h-11 shrink-0 items-center gap-2.5 rounded-md short:ml-4">
           <Image src="/logo-light.png" width={28} height={28} alt="" priority className="logo-light rounded-md" />
@@ -117,7 +117,7 @@ export default function Header() {
           </span>
         </Link>
         {/* Portrait phone: the theme and profile share the logo row, above the tabs. */}
-        <div className="ml-auto flex items-center gap-1 short:hidden md:hidden">
+        <div className="ml-auto flex min-w-0 items-center gap-1 overflow-hidden short:hidden md:hidden">
           <ThemeToggle compact />
           <Profile {...identity} />
         </div>
@@ -148,7 +148,7 @@ export default function Header() {
       </nav>
 
       {/* Landscape phone: one row, so the theme and profile come after the tabs, in reading and tab order. */}
-      <div className="hidden items-center gap-1 pr-4 short:flex">
+      <div className="hidden min-w-0 items-center gap-1 overflow-hidden pr-4 short:flex">
         <ThemeToggle compact />
         <Profile {...identity} />
       </div>

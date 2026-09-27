@@ -24,6 +24,8 @@ export type MapProps = {
   label: string;
   /** Phone sheet height in px. The selected pin is shifted up by about half of this. */
   sheet?: number;
+  /** An overlay covers the map (first contact failed): the map leaves the tab order, the controls stay. */
+  blocked?: boolean;
 };
 
 type OsmFeature = {
@@ -159,6 +161,15 @@ function PanFocusedMarker({ sheet }: { sheet: number }) {
     pane.addEventListener("focusin", onFocus);
     return () => pane.removeEventListener("focusin", onFocus);
   }, [map, sheet]);
+  return null;
+}
+
+/** The map container is a tab stop for keyboard panning; not while an overlay hides it (WCAG 2.4.11). */
+function BlockKeyboard({ blocked }: { blocked: boolean }) {
+  const map = useMap();
+  useEffect(() => {
+    map.getContainer().tabIndex = blocked ? -1 : 0;
+  }, [map, blocked]);
   return null;
 }
 
@@ -414,6 +425,7 @@ export default function LeafletMap({
   compact,
   label,
   sheet = 0,
+  blocked = false,
 }: MapProps) {
   const [map, setMap] = useState<L.Map | null>(null);
   // Leaflet reads its animation options only when the map is created, so a change to the reduced-motion
@@ -449,6 +461,7 @@ export default function LeafletMap({
         {!compact && <ZoomControl position="bottomright" />}
         {compact ? <Recenter center={center} zoom={zoom} /> : <PanToSelected hazards={hazards} selectedId={selectedId} sheet={sheet} />}
         {!compact && <PanFocusedMarker sheet={sheet} />}
+        {!compact && <BlockKeyboard blocked={blocked} />}
         {showOsm && <OsmLayer />}
         {compact
           ? hazards.map((h) => (

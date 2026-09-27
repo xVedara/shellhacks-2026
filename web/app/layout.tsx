@@ -8,7 +8,8 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
-  title: "StepSafe community map",
+  // Each route adds its own title in front (WCAG 2.4.2): "Verify queue | StepSafe".
+  title: { default: "StepSafe community map", template: "%s | StepSafe" },
   description: "Travel safe. Together. Live hazards reported by StepSafe walkers, checked by remote volunteers.",
   // Blue logo in light mode, navy in dark (brandguide/README.md).
   icons: {
@@ -44,7 +45,7 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
         <SkipLink target="main">Skip to content</SkipLink>
         <Header />
         {/* tabIndex -1: the skip link focuses it; a ring shows only for keyboard focus (:focus-visible). */}
-        <main id="main" tabIndex={-1} className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <main id="main" tabIndex={-1} className="relative flex min-h-0 min-w-0 flex-1 flex-col">
           {children}
         </main>
       </body>

@@ -53,7 +53,9 @@ export function TypeIcon({
       >
         {/* eslint-disable-next-line @next/next/no-img-element -- static crop, sized exactly */}
         <img className="ss-pin__glyph" src={typeIconSrc(type)} alt="" width={size} height={size} draggable={false} />
-        <span className="ss-pin__mark">{meta.letter}</span>
+        <span className="ss-pin__mark" aria-hidden="true">
+          {meta.letter}
+        </span>
       </span>
     </span>
   );
@@ -132,10 +134,21 @@ export function Legend({
   );
 }
 
-export function Notice({ tone, title, children }: { tone: "warn" | "info"; title: string; children?: React.ReactNode }) {
+/** `announce={false}` inside a container that is already a live region, so the message is read once. */
+export function Notice({
+  tone,
+  title,
+  children,
+  announce = true,
+}: {
+  tone: "warn" | "info";
+  title: string;
+  children?: React.ReactNode;
+  announce?: boolean;
+}) {
   return (
     <div
-      role={tone === "warn" ? "alert" : "status"}
+      role={announce ? (tone === "warn" ? "alert" : "status") : undefined}
       className={`flex gap-2.5 rounded-xl border px-3.5 py-3 text-[13px] ${tone === "warn" ? "border-[var(--field)] bg-warn-tint" : "border-line bg-raised"}`}
     >
       <svg

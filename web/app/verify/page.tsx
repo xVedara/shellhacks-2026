@@ -29,7 +29,7 @@ import { useVotedIds } from "@/lib/use-voted";
 type Panel = null | "reclassify" | "report";
 
 const voteButton =
-  "flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-full border px-2 py-2 text-[14px] font-medium leading-tight transition-colors disabled:cursor-not-allowed disabled:opacity-50 md:px-4";
+  "flex min-h-11 flex-col items-center justify-center gap-0.5 whitespace-nowrap rounded-full border px-2 py-2 text-[14px] font-medium leading-tight transition-colors disabled:cursor-not-allowed disabled:opacity-50";
 
 const subscribeLocation = (onChange: () => void) => {
   window.addEventListener("popstate", onChange);
@@ -209,7 +209,7 @@ export default function VerifyPage() {
           </div>
         )}
         <div aria-live="polite" className={message ? "mb-4" : undefined}>
-          {message && <Notice tone={message.tone} title={message.text} />}
+          {message && <Notice tone={message.tone} title={message.text} announce={false} />}
         </div>
 
         {!loaded && connection !== "down" && (
@@ -313,18 +313,18 @@ export default function VerifyPage() {
 
             {/* Direct child of the article so it can stick to the bottom of a phone screen. A landscape phone is
                 too short for a sticky bar (it would cover most of the card), so there it stays in the flow. */}
-            <div className="sticky bottom-0 z-[1100] -mx-4 grid grid-cols-3 gap-2 border-t border-line bg-card p-3 pb-[max(12px,env(safe-area-inset-bottom))] short:static md:static md:mx-0 md:border-0 md:bg-transparent md:p-0">
+            <div className="sticky bottom-0 z-[1100] -mx-4 grid grid-cols-3 gap-2 border-t border-line bg-card p-3 pb-[max(12px,env(safe-area-inset-bottom))] short:static md:static md:mx-0 md:self-start md:border-0 md:bg-transparent md:p-0">
               <button type="button" disabled={busy || !ready} aria-keyshortcuts={shortcutsOn ? "U" : undefined} onClick={() => vote("up")} className={`${voteButton} border-primary bg-primary text-primary-ink hover:bg-[var(--primary-hover)]`}>
                 <span><span aria-hidden="true">▲ </span>Still there</span>
-                <span className="text-[12px] font-normal">Upvote{shortcutsOn && <span className="hidden md:inline"> · U</span>}</span>
+                <span className="text-[12px] font-normal">Upvote{shortcutsOn && <span className="hidden xl:inline"> · U</span>}</span>
               </button>
               <button type="button" disabled={busy || !ready} aria-keyshortcuts={shortcutsOn ? "D" : undefined} onClick={() => vote("down")} className={`${voteButton} border-field bg-card text-ink hover:bg-hover`}>
                 <span><span aria-hidden="true">▼ </span>Gone</span>
-                <span className="text-[12px] font-normal text-ink-3">Not a hazard{shortcutsOn && <span className="hidden md:inline"> · D</span>}</span>
+                <span className="text-[12px] font-normal text-ink-3">Not a hazard{shortcutsOn && <span className="hidden xl:inline"> · D</span>}</span>
               </button>
               <button type="button" disabled={busy} aria-keyshortcuts={shortcutsOn ? "S" : undefined} onClick={skip} className={`${voteButton} border-field bg-card text-ink hover:bg-hover`}>
                 <span>Skip</span>
-                <span className="text-[12px] font-normal text-ink-3">Decide later{shortcutsOn && <span className="hidden md:inline"> · S</span>}</span>
+                <span className="text-[12px] font-normal text-ink-3">Decide later{shortcutsOn && <span className="hidden xl:inline"> · S</span>}</span>
               </button>
             </div>
 
@@ -513,7 +513,7 @@ function ReclassifyForm({
           {busy ? "Sending…" : "Submit correction"}
         </button>
       </fieldset>
-      <div aria-live="polite">{result && <Notice tone={result.tone} title={result.text} />}</div>
+      <div aria-live="polite">{result && <Notice tone={result.tone} title={result.text} announce={false} />}</div>
     </form>
   );
 }
@@ -560,7 +560,7 @@ function ReportForm({ hazardId }: { hazardId: string }) {
           {busy ? "Sending…" : "Send report"}
         </button>
       </fieldset>
-      <div aria-live="polite">{result && <Notice tone={result.tone} title={result.text} />}</div>
+      <div aria-live="polite">{result && <Notice tone={result.tone} title={result.text} announce={false} />}</div>
     </form>
   );
 }
