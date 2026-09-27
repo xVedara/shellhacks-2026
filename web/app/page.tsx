@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import HazardDetail, { useHazardDetail } from "@/components/HazardDetail";
 import Map from "@/components/Map";
 import SkipLink from "@/components/SkipLink";
@@ -92,6 +92,7 @@ export default function MapPage() {
   }, selectedFromLocation, () => null);
   const voted = useVotedIds();
   const stageRef = useRef<HTMLDivElement>(null);
+  const mapStageRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLElement>(null);
   const panelHeading = useRef<HTMLHeadingElement>(null);
   const returnFocusTo = useRef<string | null>(null);
@@ -134,6 +135,15 @@ export default function MapPage() {
   /* Tiny expanded sheet covers the whole stage: the map and its credit would stay tab stops under the header. */
   const mapFullyCovered = !desktop && stageH - sheet < 24;
   const tiny = !desktop && stageH < TINY_STAGE;
+  const stageClass = `map-stage relative min-h-0 min-w-0 flex-1${mapControlsHidden(desktop, stageH, sheet) ? " controls-hidden" : ""}${mapPinsClass(desktop, stageH - sheet)}${mapFullyCovered ? " map-fully-covered" : ""}`;
+  // One handoff for every map-stage class that hides things (controls-hidden, pins-thin, map-covered,
+  // map-fully-covered): right after the class lands and before the browser drops focus to <body>, anything in
+  // the map that has focus and is now hidden or covered hands focus to the panel (WCAG 2.4.3, 2.4.11).
+  useLayoutEffect(() => {
+    const el = document.activeElement as HTMLElement | null;
+    if (!el || !mapStageRef.current?.contains(el)) return;
+    if (mapFullyCovered || !el.checkVisibility({ visibilityProperty: true })) document.getElementById("hazard-panel")?.focus();
+  }, [stageClass, mapFullyCovered]);
   const showOnMap = () => {
     setDetent("peek");
     // The details close; keep keyboard focus on the button that brings them back.
@@ -208,7 +218,8 @@ export default function MapPage() {
       </SkipLink>
       {/* The zoom and locate buttons need a clear strip of map above the sheet. */}
       <div
-        className={`map-stage relative min-h-0 min-w-0 flex-1${mapControlsHidden(desktop, stageH, sheet) ? " controls-hidden" : ""}${mapPinsClass(desktop, stageH - sheet)}${mapFullyCovered ? " map-fully-covered" : ""}`}
+        ref={mapStageRef}
+        className={stageClass}
         style={{ ["--sheet" as string]: `${sheet}px` }}
       >
         <Map
