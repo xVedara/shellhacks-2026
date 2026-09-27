@@ -2,11 +2,13 @@
 
 Travel safe. Together.
 
-StepSafe warns blind and low-vision pedestrians about hazards ahead. A head-mounted iPhone uses LiDAR to detect ground obstacles, head-height hazards, and drop-offs. ClosingDetector warns about anything closing fast, including a pushed cart. YOLO11s warns about cars and bikes beyond LiDAR range. Sighted people report and verify hazards in the Scout tab. The web map shows those reports.
+StepSafe warns blind and low-vision pedestrians about hazards ahead. A head-mounted iPhone uses LiDAR to detect ground obstacles, head-height hazards, and drop-offs. ClosingDetector warns about anything closing fast, including a pushed cart. YOLO11s warns about cars and bikes beyond LiDAR range. Sighted people report and verify hazards in the Scout tab. The Community tab and the web map show those reports on a clustered map. Moving people and vehicles are never pinned.
 
 StepSafe does not replace a guide dog or your own judgment. It does not give walking directions.
 
 Built at ShellHacks 2026 at FIU Graham Center in Miami.
+
+Live map: https://stepsafe.miami. API: https://api.stepsafe.miami (the app calls only this address).
 
 ## Architecture
 
@@ -16,22 +18,27 @@ Built at ShellHacks 2026 at FIU Graham Center in Miami.
  │                        (ground / head / drop-off lane)    │
  │  Camera ──► YOLO11s ──► BoxTracker ─┐                     │
  │  LiDAR ───► ClosingDetector ────────┴─► crossing assist   │
- │                         │                                 │
+ │                         │   (+ standing fast-car path)  │
  │                         ▼                                 │
  │               AlertPolicy ──► AlertManager                │
  │               (priority, mute) (spatial tone, haptics,    │      AirPods
  │                                 voice) ───────────────────┼────► what's ahead / mute
  │                                                           │
- │  HazardNamer (still objects only) + Scout tab             │
+ │  HazardNamer (still objects only; moving people and       │
+ │  vehicles are never pinned) + MapSync walk-past misses    │
+ │  Scout tab + Community tab (clustered map, stacked-       │
+ │  hazard chooser, one shared vote store)                   │
  └─────────┬────────────────────────────────▲────────────────┘
            │ POST /hazards                  │ GET /hazards/near
-           │ (crop, lat/lng, band)          │ GET /tts (spoken name)
+           │ (crop, lat/lng, band)          │ GET /events (SSE)
+           │ POST /hazards/:id/votes        │ GET /tts (spoken name)
            ▼                                │
  ┌───────────────── API server (Fastify) ───┴────────────────┐
- │  merge within 10 m ─or─ name the crop ──► taxonomy label  │
- │                          │                                │
- │               Gemini ────┘ (or Qwen via Ollama)           │
- │               ElevenLabs ──► /tts cache                   │
+ │  merge within 10 m ─or─ new pin (needsNaming)             │
+ │  renamer every 5 s ──► one of 67 taxonomy labels          │
+ │               Gemini (or Qwen via Ollama)                 │
+ │  votes: walk-past miss = 0.6; 2 walkers' misses clear     │
+ │  ElevenLabs ──► /tts cache                                │
  └─────────┬──────────────────────▲──────────────────┬───────┘
            │ reads / writes       │ change stream    │ GET /events (SSE)
            ▼                      │                  │ GET /hazards, votes
@@ -40,7 +47,8 @@ Built at ShellHacks 2026 at FIU Graham Center in Miami.
  │  votes, users                          │          │
  └────────────────────────────────────────┘          ▼
  ┌──────────── Web map (Next.js + Leaflet / OSM) ────────────┐
- │  live pins, hazard details, verify queue (vote/retype)    │
+ │  live pins (clustered), hazard details, verify queue      │
+ │  (vote/retype), per-route titles, 404 page                │
  └───────────────────────────────────────────────────────────┘
 ```
 
@@ -48,7 +56,9 @@ The phone detects an obstacle on the device. On-device alerts do not need a netw
 
 The phone crops the obstacle and sends `POST /hazards` with the crop, latitude, longitude, height band, and `deviceId`. That post is a PathGuard hazard or a Scout report. `ServerLink.handle` does not pin a closing alert.
 
-The server merges the report into a nearby pin, or stores a new pin as type `obstacle` with `needsNaming` and answers at once. It never names a crop inline. A renamer names new pins every 5 seconds: a `GEMINI_API_KEY` selects Google Gemini; with no key, Ollama names the crop when `qwen3.8:27b-mlx` is available.
+The server merges the report into a nearby pin, or stores a new pin as type `obstacle` with `needsNaming` and answers at once. It never names a crop inline. A renamer names new pins every 5 seconds: a `GEMINI_API_KEY` selects Google Gemini; with no key, Ollama names the crop when `qwen3.8:27b-mlx` is available. The pin is live before it has a name. A failed name is retried with backoff, up to 8 attempts.
+
+A walker who passes a pin and sees nothing sends one walker down-vote of weight 0.6. One device counts once per pin. A pin clears once its confidence drops below 0 after 2 different walkers passed it, or below -2 from explicit votes.
 
 The phone requests a spoken hazard name from `GET /tts`. With no `ELEVENLABS_API_KEY`, that route returns 503 and the phone uses on-device speech.
 
@@ -102,4 +112,4 @@ StepSafe is licensed under the [GNU AGPL-3.0](LICENSE). The iOS app bundles the 
 
 ## AI tools used
 
-Ara Babigian and Dev Goswami can explain how this code works. The build used Claude Code (Anthropic), Claude Opus (Anthropic) and Codex (OpenAI) for review, and Cursor cloud agents. Logos were made with GPT Image 2 (OpenAI). The short account is in [CREDITS.md](CREDITS.md).
+Dev Goswami used Cursor (IDE and cloud agents) and Grok (including Grok Bot). Ara Babigian used Claude Code (Anthropic). Models used: Grok 4.7, Claude Code, Claude Opus, Codex, GPT Image 2.5 (the logos). The short account is in [CREDITS.md](CREDITS.md).

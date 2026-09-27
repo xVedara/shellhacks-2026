@@ -1,17 +1,23 @@
 # StepSafe iOS
 
 Head-mounted iPhone (LiDAR + ARKit) app: path guard, crossing assist, the community
-server link, and the Scout tab. Swift, SwiftUI, ARKit, Core Haptics, Core ML.
+server link, and the Scout and Community tabs. Swift, SwiftUI, ARKit, Core Haptics, Core ML.
 
 ## Modules
 
 App / UI:
 - `StepSafeApp.swift` — app entry point; launches `RootView` in dark mode.
-- `ScoutView.swift` (`RootView`) — hosts the Walker and Scout tabs.
+- `ScoutView.swift` (`RootView`) — hosts the Walker, Scout, and Community tabs.
 - `ContentView.swift` (`AppModel`) — Walker tab: wires `SensorSession` to
   `AlertManager`, big buttons for "What's ahead" / mute, status view.
 - `ScoutView.swift` (`ScoutView`, `ScoutModel`) — Scout tab: tap-to-report, nearby
   list with votes, the taxonomy type picker.
+- `CommunityView.swift` — Community tab: nearby list and map (1 mi), live over
+  `GET /events`, and a "Hazards at this spot" chooser for stacked pins.
+- `HazardMap.swift` — clustered MKMapView: overlapping pins merge into one count
+  marker; tap to zoom in.
+- `VoteStore.swift` — one vote per hazard per device, shared by the Community and
+  Scout tabs.
 
 Sensing:
 - `SensorSession.swift` — ARKit world tracking + LiDAR scene depth, feeding
@@ -23,7 +29,8 @@ Sensing:
 - `VehicleDetector.swift` — YOLO11s (WiSE blend) Core ML detector (cars, bikes, people) beyond
   LiDAR range.
 - `Core/BoxTracker.swift` — IoU tracking of YOLO boxes plus closing math from box
-  growth, roll- and rotation-compensated.
+  growth, roll- and rotation-compensated. Standing with the head still, a close car
+  growing fast can alert on 0.4 s of samples (a car crossing in front).
 - `Core/TrackingDebounce.swift` — when to announce "Path guard paused" without
   flapping on short tracking blips.
 - `Core/Geo.swift` — flat-earth lat/lng math shared by `Localizer` and heads-ups.
@@ -52,7 +59,8 @@ Server link:
 - `HazardNamer.swift` — crops a hazard out of the AR frame and encodes it for
   naming, off the AR queue.
 - `Localizer.swift` — AR world point -> lat/lng using the phone's GPS fix.
-- `MapSync.swift` — polls `/hazards/near`, announces pins ahead as heads-ups.
+- `MapSync.swift` — polls `/hazards/near`, announces pins ahead as heads-ups, and
+  casts the passive walker downvote when you walk past a pin and see nothing.
 
 ## Build and test
 
