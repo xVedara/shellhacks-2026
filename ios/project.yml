@@ -53,6 +53,8 @@ targets:
     sources:
       - StepSafeTests
       - StepSafe/Core
+      # The shared vote store (VoteStoreTests), plain Foundation.
+      - StepSafe/VoteStore.swift
       # The vehicle model, compiled into the test bundle for VehicleModelTests (I/O contract).
       - StepSafe/Models
     settings:

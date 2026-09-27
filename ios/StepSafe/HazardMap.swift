@@ -19,6 +19,8 @@ struct HazardMap: UIViewRepresentable {
     var pins: [Pin]
     var center: CLLocationCoordinate2D?
     var radiusM: Double
+    /// The first nearby answer arrived (frames the first camera; an empty answer frames the radius).
+    var loaded: Bool
     var lang: String
     var onSelect: (String) -> Void
     /// Hazards stacked on the same spot, which zooming cannot separate: the caller lets people pick one.
@@ -54,9 +56,18 @@ struct HazardMap: UIViewRepresentable {
         c.parent = self
         c.sync(pins, on: map)
         guard let center else { return }
-        if !c.centered { // open on the user with the whole radius in view, plus 10% padding on each side
-            let span = radiusM * 2 * 1.2
-            map.setRegion(MKCoordinateRegion(center: center, latitudinalMeters: span, longitudinalMeters: span), animated: false)
+        if !c.centered, loaded { // once: frame what is there, so the first view is not one big cluster
+            if pins.isEmpty { // nothing nearby: the whole radius, plus 10% padding on each side
+                let span = radiusM * 2 * 1.2
+                map.setRegion(MKCoordinateRegion(center: center, latitudinalMeters: span, longitudinalMeters: span), animated: false)
+            } else { // the user and every hazard, at least 400 m across
+                var rect = pins.reduce(MKMapRect(origin: MKMapPoint(center), size: MKMapSize(width: 0, height: 0))) {
+                    $0.union(MKMapRect(origin: MKMapPoint($1.coordinate), size: MKMapSize(width: 0, height: 0)))
+                }
+                let minSide = 400 * MKMapPointsPerMeterAtLatitude(center.latitude)
+                rect = rect.insetBy(dx: -max(0, minSide - rect.width) / 2, dy: -max(0, minSide - rect.height) / 2)
+                map.setVisibleMapRect(rect, edgePadding: UIEdgeInsets(top: 60, left: 30, bottom: 40, right: 30), animated: false)
+            }
             c.centered = true
         }
         if c.circle.map({ $0.coordinate.latitude != center.latitude || $0.coordinate.longitude != center.longitude }) ?? true {
@@ -111,6 +122,12 @@ struct HazardMap: UIViewRepresentable {
             set {}
         }
 
+        /// At least 44 x 44 pt to tap, whatever the marker's drawn size.
+        override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+            let dx = max(0, 44 - bounds.width) / 2, dy = max(0, 44 - bounds.height) / 2
+            return bounds.insetBy(dx: -dx, dy: -dy).contains(point)
+        }
+
         /// A cluster outranks the hazards and smaller clusters stacked under it.
         var weight: Int { (annotation as? MKClusterAnnotation)?.memberAnnotations.count ?? 1 }
 
@@ -143,10 +160,22 @@ struct HazardMap: UIViewRepresentable {
                     return abs(a.minY - b.minY) > 8 ? a.minY < b.minY : a.minX < b.minX
                 }
                 var elements: [Any] = sorted
-                if let me = view(for: userLocation), me.window != nil { elements.insert(me, at: 0) }
-                return elements
+                if let me = view(for: userLocation), me.window != nil, bounds.intersects(me.convert(me.bounds, to: self)) {
+                    elements.insert(me, at: 0)
+                }
+                return elements + attribution(in: self) // keep MapKit's Apple Maps logo and Legal link reachable
             }
             set {}
+        }
+
+        /// MapKit's own accessible views that are not annotations: the Maps logo and the Legal link.
+        private func attribution(in view: UIView) -> [UIView] {
+            view.subviews.flatMap { sub -> [UIView] in
+                if sub is MKAnnotationView { return [] }
+                if sub.isAccessibilityElement, sub.window != nil, !sub.isHidden,
+                   bounds.intersects(sub.convert(sub.bounds, to: self)) { return [sub] }
+                return attribution(in: sub)
+            }
         }
 
         private func markers(in view: UIView) -> [Marker] {

@@ -207,10 +207,11 @@ final class ScoutModel: ObservableObject, @unchecked Sendable { // main-confined
     /// Hazard ids with a vote being sent (both buttons disabled), as in Community.
     @Published private(set) var voting: Set<String> = []
 
-    /// "up" / "down" once this device voted on the hazard, from either tab (Community's store: one vote per hazard).
-    func myVote(_ id: String) -> String? {
-        (UserDefaults.standard.dictionary(forKey: CommunityModel.votedKey) as? [String: String])?[id]
-    }
+    /// One vote per hazard per device, the same store Community uses.
+    let votes = VoteStore.shared
+
+    /// "up" / "down" once this device voted on the hazard, from either tab.
+    func myVote(_ id: String) -> String? { votes.vote(id) }
 
     /// Same rules as the Community detail: one vote per hazard, a fresh accurate fix, disabled while sending,
     /// and the result spoken through the Walker and tab gate.
@@ -219,7 +220,12 @@ final class ScoutModel: ObservableObject, @unchecked Sendable { // main-confined
         let name = name(pin)
         guard let q = link.localizer.fixQuality,
               Community.canVote(from: link.localizer.fix, accuracyM: q.accuracyM, ageS: q.ageS, to: pin.fix) else {
-            announce(.message("Waiting for a GPS fix to vote on \(name)"))
+            // Same distinctions as Community: no fix yet, a fix too weak or old to count, or too far away.
+            let fix = link.localizer.fixQuality
+            announce(.message(fix == nil ? "Waiting for GPS to vote on \(name)"
+                              : !Community.fixUsable(accuracyM: fix!.accuracyM, ageS: fix!.ageS)
+                                ? "GPS too weak to vote on \(name). Try again in the open"
+                                : "Get closer to vote on \(name)"))
             return
         }
         voting.insert(pin.id)
@@ -228,11 +234,7 @@ final class ScoutModel: ObservableObject, @unchecked Sendable { // main-confined
             let ok = (try? await api.vote(pin.id, up: up, source: "scout")) != nil
             DispatchQueue.main.async {
                 self.voting.remove(pin.id)
-                if ok {
-                    var all = UserDefaults.standard.dictionary(forKey: CommunityModel.votedKey) as? [String: String] ?? [:]
-                    all[pin.id] = up ? "up" : "down"
-                    UserDefaults.standard.set(all, forKey: CommunityModel.votedKey)
-                }
+                if ok { self.votes.record(pin.id, up: up) }
                 self.announce(.message(ok ? (up ? "Marked still there by you: " : "Marked gone by you: ") + name
                                           : "Vote failed: \(name)"))
                 self.refresh()
@@ -260,7 +262,8 @@ struct ARPreview: UIViewRepresentable {
         view.automaticallyUpdatesLighting = false
         view.addGestureRecognizer(UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.tap)))
         view.isAccessibilityElement = true
-        view.accessibilityLabel = "Camera. Double tap to report what is in the middle of the view"
+        view.accessibilityLabel = "Camera"
+        view.accessibilityHint = "Double tap to report what is in the middle of the view"
         view.accessibilityTraits = .button
         setLive(view, cameraLive)
         return view
@@ -416,9 +419,20 @@ struct ScoutView: View {
                 let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
                                                           : AnyLayout(HStackLayout(spacing: 8))
                 layout {
-                    VStack(alignment: .leading) {
-                        Text(scout.name(pin) + (pin.sample == true ? " (sample)" : "")).foregroundStyle(.white)
-                        Text("\(Int((pin.distanceM ?? 0) * 3.28084)) ft, \(Community.band(pin.heightBand).lowercased()), confidence \(String(format: "%.1f", pin.confidence))")
+                    // Same formatting as the Community list: Sample badge, "220 feet · ground · confidence 3".
+                    VStack(alignment: .leading, spacing: 4) {
+                        let titleRow = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+                                                                    : AnyLayout(HStackLayout())
+                        titleRow {
+                            Text(scout.name(pin)).foregroundStyle(.white)
+                            if pin.sample == true {
+                                Text("Sample").font(.caption.bold()).padding(.horizontal, 6).padding(.vertical, 2)
+                                    .background(Color.slate, in: Capsule()).foregroundStyle(Color.navy)
+                            }
+                        }
+                        Text([pin.distanceM.map { Community.distance($0) }, Community.band(pin.heightBand).lowercased(),
+                              "confidence " + Community.confidence(pin.confidence)]
+                            .compactMap { $0 }.joined(separator: " · "))
                             .font(.footnote).foregroundStyle(Color.slate)
                     }
                     .accessibilityElement(children: .combine)

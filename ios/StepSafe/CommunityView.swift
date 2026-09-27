@@ -17,10 +17,10 @@ final class CommunityModel: ObservableObject {
     @Published var loaded = false
     /// Hazard ids with a vote being sent (both buttons disabled).
     @Published private(set) var voting: Set<String> = []
-    /// Hazard id -> "up"/"down": one vote per hazard per device.
-    @Published private(set) var voted: [String: String] = UserDefaults.standard.dictionary(forKey: CommunityModel.votedKey) as? [String: String] ?? [:]
-
-    static let votedKey = "communityVotes"
+    /// One vote per hazard per device, the same store Scout uses.
+    let votes = VoteStore.shared
+    /// The last refresh failed (shown with a Try again button; SSE-up failures are not retried on their own).
+    @Published var unreachable = false
     let api: APIClient
     let lang = TTSChoice.lang()
     private let localizer = Localizer()
@@ -105,10 +105,12 @@ final class CommunityModel: ObservableObject {
             resort()
             loaded = true
             status = nil
+            unreachable = false
         } catch {
             guard !Task.isCancelled else { return }
             // SSE-up failures are not retried (the 15 s poll runs only while disconnected).
             status = t("Server unreachable", "Servidor no disponible")
+            unreachable = true
         }
     }
 
@@ -176,12 +178,12 @@ final class CommunityModel: ObservableObject {
 
     /// "Marked still there by you" / "Marked gone by you", or nil before this device voted.
     func votedText(_ id: String) -> String? {
-        voted[id].map { $0 == "up" ? t("Marked still there by you", "Marcado como presente por ti")
+        votes.vote(id).map { $0 == "up" ? t("Marked still there by you", "Marcado como presente por ti")
                                    : t("Marked gone by you", "Marcado como ya no está por ti") }
     }
 
     func vote(_ id: String, at pin: Geo.Fix, up: Bool) async {
-        guard voted[id] == nil, !voting.contains(id) else { return }
+        guard votes.vote(id) == nil, !voting.contains(id) else { return }
         guard canVote(pin) else {
             announce(fixUsable ? t("Get closer to confirm", "Acércate para confirmar") : t("Waiting for GPS", "Esperando GPS"))
             return
@@ -190,8 +192,7 @@ final class CommunityModel: ObservableObject {
         defer { voting.remove(id) }
         do {
             _ = try await api.vote(id, up: up, source: "scout")
-            voted[id] = up ? "up" : "down"
-            UserDefaults.standard.set(voted, forKey: Self.votedKey)
+            votes.record(id, up: up)
             announce(votedText(id)!)
             user = try? await api.user()
             await refresh()
@@ -241,8 +242,13 @@ struct CommunityView: View {
     @AppStorage("communityMode") private var mode = "list"
     @State private var path: [String] = []
     @State private var openedLaunchHazard = false
-    /// Hazards stacked on one spot of the map, offered as a choice (nil: no dialog).
-    @State private var stacked: [String]?
+    /// Hazards stacked on one spot of the map, offered as a choice (nil: no sheet).
+    @State private var stacked: StackedSpot?
+
+    struct StackedSpot: Identifiable {
+        let ids: [String]
+        var id: String { ids.joined(separator: ",") }
+    }
     @Environment(\.dynamicTypeSize) private var typeSize
 
     /// AppModel.running: the Walker session is live, so this tab makes no VoiceOver announcements.
@@ -269,7 +275,14 @@ struct CommunityView: View {
                     }
                     .pickerStyle(.segmented)
                     if let status = model.status {
-                        Text(status).foregroundStyle(Color.slate).accessibilityAddTraits(.updatesFrequently)
+                        HStack {
+                            Text(status).foregroundStyle(Color.slate).accessibilityAddTraits(.updatesFrequently)
+                            if model.unreachable {
+                                Button(t("Try again", "Reintentar")) { Task { await model.refresh() } }
+                                    .font(.headline)
+                                    .frame(minHeight: 44)
+                            }
+                        }
                     }
                     if mode == "map" { map }
                 }
@@ -286,9 +299,48 @@ struct CommunityView: View {
             model.start()
             // `-openHazard <id>` opens one detail at launch (demo and screenshots).
             if !openedLaunchHazard, let id = UserDefaults.standard.string(forKey: "openHazard") { path = [id] }
+            // `-showStack <id,id>` opens the "Hazards at this spot" chooser at launch (screenshots, no map tap needed).
+            if !openedLaunchHazard, let ids = UserDefaults.standard.string(forKey: "showStack") {
+                stacked = StackedSpot(ids: ids.split(separator: ",").map(String.init))
+            }
             openedLaunchHazard = true
         }
         .onDisappear { model.stop() }
+        .sheet(item: $stacked) { spot in stackSheet(spot) }
+    }
+
+    /// Opaque navy sheet (the system dialog put blue text on glass over the map at about 1.5:1).
+    private func stackSheet(_ spot: StackedSpot) -> some View {
+        NavigationStack {
+            List(model.pins.filter { spot.ids.contains($0.id) }) { pin in
+                Button {
+                    stacked = nil
+                    path.append(pin.id)
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(model.name(type: pin.type, label: pin.label)).font(.headline).foregroundStyle(.white)
+                        // Category and distance: stacked hazards often share a name.
+                        Text([HazardMap.category(pin.category, lang: model.lang),
+                              pin.distanceM.map { Community.distance($0, lang: model.lang) }]
+                            .compactMap { $0 }.joined(separator: " · "))
+                            .foregroundStyle(Color.slate)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityHint(t("Opens details", "Abre los detalles"))
+                .listRowBackground(Color.white.opacity(0.06))
+            }
+            .scrollContentBackground(.hidden)
+            .background(Color.navy)
+            .navigationTitle(t("Hazards at this spot", "Peligros en este punto"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button(t("Cancel", "Cancelar")) { stacked = nil } }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationBackground(Color.navy)
     }
 
     private var header: some View {
@@ -366,22 +418,18 @@ struct CommunityView: View {
                                     title: model.name(type: pin.type, label: pin.label), spoken: model.rowLabel(pin))
                   },
                   center: model.fix.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lng) },
-                  radiusM: Community.radiusM, lang: model.lang,
-                  onSelect: { path.append($0) }, onStack: { stacked = $0 })
-            .overlay(alignment: .top) { HazardMapLegend(lang: model.lang).padding(.top, 8) }
+                  radiusM: Community.radiusM, loaded: model.loaded, lang: model.lang,
+                  onSelect: { path.append($0) }, onStack: { stacked = StackedSpot(ids: $0) })
+            // On the map normally; under it at accessibility sizes, where the taller legend would cover markers.
+            .overlay(alignment: .top) {
+                if !typeSize.isAccessibilitySize { HazardMapLegend(lang: model.lang).padding(.top, 8) }
+            }
             .overlay { mapState } // the list's loading and empty states, on the map too
             .clipShape(RoundedRectangle(cornerRadius: 16))
-            .padding(.bottom, 8)
-            .confirmationDialog(t("Hazards at this spot", "Peligros en este punto"),
-                                isPresented: Binding(get: { stacked != nil }, set: { if !$0 { stacked = nil } }),
-                                titleVisibility: .visible) {
-                ForEach(model.pins.filter { stacked?.contains($0.id) == true }) { pin in
-                    // Name, category and distance: stacked hazards often share a name.
-                    Button([model.name(type: pin.type, label: pin.label), HazardMap.category(pin.category, lang: model.lang).lowercased(),
-                            pin.distanceM.map { Community.distance($0, lang: model.lang) }]
-                        .compactMap { $0 }.joined(separator: ", ")) { path.append(pin.id) }
-                }
+            .safeAreaInset(edge: .bottom) {
+                if typeSize.isAccessibilitySize { HazardMapLegend(lang: model.lang).frame(maxWidth: .infinity, alignment: .leading) }
             }
+            .padding(.bottom, 8)
     }
 
     @ViewBuilder
@@ -529,7 +577,9 @@ struct HazardDetailView: View {
             .disabled(model.voting.contains(d.id))
             .opacity(model.voting.contains(d.id) ? 0.4 : 1) // explicit fills ignore the system disabled fade
         } else if d.status == "active", !model.fixUsable {
-            Text(t("Waiting for GPS", "Esperando GPS")).foregroundStyle(Color.slate)
+            if model.status != t("Waiting for GPS", "Esperando GPS") { // the status line below already says it
+                Text(t("Waiting for GPS", "Esperando GPS")).foregroundStyle(Color.slate)
+            }
         } else if d.status == "active" {
             Text(t("Get closer to confirm. Votes need you within 1 mile.",
                    "Acércate para confirmar. Para votar debes estar a menos de 1 milla."))
