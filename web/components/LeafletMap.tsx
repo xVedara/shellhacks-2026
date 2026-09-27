@@ -50,8 +50,10 @@ function hazardIcon(h: HazardSummary, selected: boolean, highlighted: boolean) {
 /** Selected pin radius with its ring (about 31px) plus the cluster's 22px radius, plus a little air. */
 const SELECTED_CLEARANCE = 56;
 
+const CLUSTER_SIZE = 44;
+
 function clusterIcon(count: number) {
-  const size = 44;
+  const size = CLUSTER_SIZE;
   return L.divIcon({
     html: `<span class="ss-cluster" style="width:${size}px;height:${size}px">${count}</span>`,
     className: "ss-pin-wrap",
@@ -128,6 +130,35 @@ function PanToSelected({
       map.off("resize", place);
     };
   }, [map, lat, lng, sheet]);
+  return null;
+}
+
+/**
+ * WCAG 2.4.11: a pin that takes keyboard focus under the phone sheet (or at the map's edge) is panned
+ * into the clear strip. Leaflet's own autoPanOnFocus only knows the container, which runs under the sheet.
+ */
+function PanFocusedMarker({ sheet }: { sheet: number }) {
+  const map = useMap();
+  useEffect(() => {
+    const pane = map.getPane("markerPane");
+    if (!pane) return;
+    const onFocus = (e: FocusEvent) => {
+      const el = e.target as HTMLElement;
+      if (!el.classList?.contains("leaflet-marker-icon")) return;
+      // The browser scrolls the (overflow: hidden) container to reveal a focused pin, and Leaflet snaps that
+      // scroll back a moment later, which would hide the pin again. Undo it first, then measure.
+      const container = map.getContainer();
+      container.scrollTop = 0;
+      container.scrollLeft = 0;
+      const box = el.getBoundingClientRect();
+      const origin = container.getBoundingClientRect();
+      const at = map.containerPointToLatLng([box.left + box.width / 2 - origin.left, box.top + box.height / 2 - origin.top]);
+      if (pinClearsSheet(map, at.lat, at.lng, sheet)) return;
+      map.panTo(centerAboveSheet(map, at.lat, at.lng, sheet), { animate: false });
+    };
+    pane.addEventListener("focusin", onFocus);
+    return () => pane.removeEventListener("focusin", onFocus);
+  }, [map, sheet]);
   return null;
 }
 
@@ -221,6 +252,7 @@ const HazardMarker = memo(function HazardMarker({
       title={name}
       keyboard={interactive}
       interactive={interactive}
+      autoPanOnFocus={false}
       zIndexOffset={selected ? 1000 : 0}
       eventHandlers={{
         click: () => onSelect?.(h.id),
@@ -269,7 +301,8 @@ function ClusteredHazards({
         const p = map.latLngToContainerPoint([selected.lat, selected.lng]);
         split.push({ hazards: [selected], x: p.x, y: p.y });
         // Slide the leftover cluster out from under the selected pin so it stays a whole 44px target.
-        split.push({ hazards: rest, ...pushClear(group, p, SELECTED_CLEARANCE) });
+        const size = map.getSize();
+        split.push({ hazards: rest, ...pushClear(group, p, SELECTED_CLEARANCE, { w: size.x, h: size.y }, CLUSTER_SIZE / 2) });
       } else {
         split.push({ hazards: group.items, x: group.x, y: group.y });
       }
@@ -303,6 +336,7 @@ function ClusteredHazards({
             icon={clusterIcon(group.hazards.length)}
             title={name}
             zIndexOffset={500}
+            autoPanOnFocus={false}
             eventHandlers={{
               click: () => {
                 const bounds = L.latLngBounds(group.hazards.map((h) => [h.lat, h.lng]));
@@ -398,6 +432,7 @@ export default function LeafletMap({
         <AttributionControl position="bottomleft" />
         {!compact && <ZoomControl position="bottomright" />}
         {compact ? <Recenter center={center} zoom={zoom} /> : <PanToSelected hazards={hazards} selectedId={selectedId} sheet={sheet} />}
+        {!compact && <PanFocusedMarker sheet={sheet} />}
         {showOsm && <OsmLayer />}
         {compact
           ? hazards.map((h) => (

@@ -35,7 +35,8 @@ const subscribeTheme = (cb: () => void) => {
 };
 const readTheme = () => (document.documentElement.dataset.theme === "light" ? "light" : "dark");
 
-export function ThemeToggle({ className = "" }: { className?: string }) {
+/** `compact`: icon only (phone header); the name stays "Dark theme" and the icon shows the state. */
+export function ThemeToggle({ className = "", compact = false }: { className?: string; compact?: boolean }) {
   const theme = useSyncExternalStore(subscribeTheme, readTheme, () => "dark");
 
   const toggle = () => {
@@ -48,15 +49,22 @@ export function ThemeToggle({ className = "" }: { className?: string }) {
     }
   };
 
+  const on = theme === "dark";
   return (
     <button
       type="button"
       onClick={toggle}
-      aria-pressed={theme === "dark"}
-      className={`inline-flex min-h-11 items-center gap-2 rounded-full px-3 text-[13px] font-medium text-ink-2 hover:bg-hover hover:text-ink ${className}`}
+      aria-pressed={on}
+      className={`inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-full text-[13px] font-medium text-ink-2 hover:bg-hover hover:text-ink ${compact ? "" : "px-3"} ${className}`}
     >
-      <Icon name={theme === "dark" ? "moon" : "sun"} />
-      Dark theme
+      <Icon name={on ? "moon" : "sun"} />
+      <span className={compact ? "sr-only" : ""}>Dark theme</span>
+      {!compact && (
+        // A switch track so the on/off state is visible, not only announced.
+        <span aria-hidden="true" className={`relative ml-auto h-5 w-9 shrink-0 rounded-full ${on ? "bg-[var(--blue)]" : "bg-ink-3"}`}>
+          <span className={`absolute left-0 top-0.5 h-4 w-4 rounded-full bg-white transition-transform motion-reduce:transition-none ${on ? "translate-x-[18px]" : "translate-x-0.5"}`} />
+        </span>
+      )}
     </button>
   );
 }
@@ -98,9 +106,9 @@ export default function Header() {
   const identity = useIdentity();
 
   return (
-    <header className="app-chrome relative z-[1200] flex shrink-0 flex-col border-b border-line bg-[var(--header)] md:w-[248px] md:border-b-0 md:border-r">
-      <div className="flex min-h-12 items-center gap-2.5 px-4 md:px-5 md:pb-2 md:pt-4">
-        <Link href="/" className="flex min-h-11 shrink-0 items-center gap-2.5 rounded-md">
+    <header className="app-chrome relative z-[1200] flex shrink-0 flex-col border-b border-line bg-[var(--header)] short:flex-row short:items-center md:w-[248px] md:border-b-0 md:border-r">
+      <div className="flex min-h-12 items-center gap-2.5 px-4 short:contents md:px-5 md:pb-2 md:pt-4">
+        <Link href="/" className="flex min-h-11 shrink-0 items-center gap-2.5 rounded-md short:ml-4">
           <Image src="/logo-light.png" width={28} height={28} alt="" priority className="logo-light rounded-md" />
           <Image src="/logo-dark.png" width={28} height={28} alt="" priority className="logo-dark rounded-md" />
           <span className="min-w-0 leading-tight">
@@ -108,12 +116,13 @@ export default function Header() {
             <span className="hidden text-[12px] text-ink-3 md:block">Community hazard map</span>
           </span>
         </Link>
-        <div className="ml-auto md:hidden">
+        <div className="ml-auto flex items-center gap-1 short:order-3 short:ml-0 short:pr-4 md:hidden">
+          <ThemeToggle compact />
           <Profile {...identity} />
         </div>
       </div>
 
-      <nav aria-label="Main" className="px-2 md:mt-2 md:flex-1">
+      <nav aria-label="Main" className="px-2 short:order-2 short:flex-1 md:mt-2 md:flex-1">
         <ul className="flex gap-1 md:flex-col md:gap-1">
           {NAV.map((item) => {
             const current = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);

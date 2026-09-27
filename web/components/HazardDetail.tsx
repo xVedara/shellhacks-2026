@@ -122,6 +122,8 @@ export default function HazardDetail({
   const ticking = useNow(15_000, nowFromParent === undefined);
   const now = nowFromParent ?? ticking;
   const m = hazard.measurements;
+  // Under the page's h1 (the /hazard card) the sections are h2; under a hazard h2 they are h3.
+  const Section = hideHeading ? "h2" : "h3";
   return (
     <div className="space-y-4 text-ink">
       {!hideHeading && <HazardHeading hazard={hazard} taxonomy={taxonomy} />}
@@ -172,9 +174,9 @@ export default function HazardDetail({
       </dl>
 
       <section aria-labelledby={`pending-${hazard.id}`}>
-        <h3 id={`pending-${hazard.id}`} className="mb-1.5 text-[13px] font-semibold text-heading">
+        <Section id={`pending-${hazard.id}`} className="mb-1.5 text-[13px] font-semibold text-heading">
           Pending reclassifications
-        </h3>
+        </Section>
         {hazard.pendingReclassifications.length === 0 ? (
           <p className="text-[13px] text-ink-3">None. A change applies when {RECLASSIFY_THRESHOLD} people propose it.</p>
         ) : (
@@ -195,9 +197,9 @@ export default function HazardDetail({
       </section>
 
       <section aria-labelledby={`votes-${hazard.id}`}>
-        <h3 id={`votes-${hazard.id}`} className="mb-1.5 text-[13px] font-semibold text-heading">
+        <Section id={`votes-${hazard.id}`} className="mb-1.5 text-[13px] font-semibold text-heading">
           Vote history ({hazard.votes.length})
-        </h3>
+        </Section>
         {hazard.votes.length === 0 ? (
           <p className="text-[13px] text-ink-3">No votes yet.</p>
         ) : (

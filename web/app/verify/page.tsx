@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Crop, HazardHeading, useHazardDetail } from "@/components/HazardDetail";
 import Map from "@/components/Map";
 import { ConnectionBadge, Notice, PageBar, linkClass, primaryButton, secondaryButton } from "@/components/ui";
@@ -31,6 +31,13 @@ type Panel = null | "reclassify" | "report";
 const voteButton =
   "flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-full border px-2 py-2 text-[14px] font-medium leading-tight transition-colors disabled:cursor-not-allowed disabled:opacity-50 md:px-4";
 
+const subscribeLocation = (onChange: () => void) => {
+  window.addEventListener("popstate", onChange);
+  return () => window.removeEventListener("popstate", onChange);
+};
+/** `/verify?id=<hazard>` (the Verify button on a hazard) reviews that hazard first. */
+const requestedFromLocation = () => new URLSearchParams(window.location.search).get("id");
+
 export default function VerifyPage() {
   const { hazards, connection, loaded, error, detailVersion } = useLiveHazards();
   const { taxonomy, error: taxonomyError, retry: retryTaxonomy } = useTaxonomy();
@@ -41,6 +48,7 @@ export default function VerifyPage() {
   const [message, setMessage] = useState<{ tone: "warn" | "info"; text: string } | null>(null);
   const [panel, setPanel] = useState<Panel>(null);
   const [shortcutsOn, setShortcutsOn] = useState(true);
+  const requestedId = useSyncExternalStore(subscribeLocation, requestedFromLocation, () => null);
 
   const all = useMemo(() => [...hazards.values()], [hazards]);
   const queue = useMemo(
@@ -52,8 +60,15 @@ export default function VerifyPage() {
   );
 
   // Keep the hazard on screen stable while live updates reorder the queue.
-  const pinnedValid = pinnedId && hazards.has(pinnedId) && !voted.has(pinnedId) && !skipped.has(pinnedId);
-  const currentId = pinnedValid ? pinnedId : (queue[0]?.id ?? null);
+  const reviewable = (id: string | null): id is string => !!id && hazards.has(id) && !voted.has(id) && !skipped.has(id);
+  const currentId = reviewable(pinnedId) ? pinnedId : reviewable(requestedId) ? requestedId : (queue[0]?.id ?? null);
+  // Say why the linked hazard is not the one on screen (a skip is the volunteer's own choice).
+  const requestedNote =
+    loaded && requestedId && currentId !== requestedId && !skipped.has(requestedId)
+      ? voted.has(requestedId)
+        ? "You already checked that hazard from this device. Showing the next one in the queue."
+        : "That hazard is no longer active. Showing the next one in the queue."
+      : null;
   if (currentId !== pinnedId) {
     setPinnedId(currentId);
     setPanel(null);
@@ -136,12 +151,13 @@ export default function VerifyPage() {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <PageBar title="Verify queue">
-        <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 text-[13px] font-medium text-ink">
+        {/* Single-key shortcuts only matter with a keyboard; touch screens get the buttons. */}
+        <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 text-[13px] font-medium text-ink pointer-coarse:hidden">
           <input
             type="checkbox"
             checked={shortcutsOn}
             onChange={(e) => setShortcutsOn(e.target.checked)}
-            className="h-4 w-4 accent-[var(--accent)]"
+            className="h-4 w-4 accent-[var(--blue)]"
           />
           Keyboard shortcuts
         </label>
@@ -152,10 +168,10 @@ export default function VerifyPage() {
         <p className="text-ink-2">
           Least-confident hazards first. Is it still there?
           {shortcutsOn && (
-            <>
+            <span className="pointer-coarse:hidden">
               {" "}Shortcuts: <kbd className="kbd">U</kbd> upvote, <kbd className="kbd">D</kbd> downvote, <kbd className="kbd">S</kbd> skip
               (when no button or link is focused).
-            </>
+            </span>
           )}
         </p>
         {loaded && (
@@ -182,6 +198,11 @@ export default function VerifyPage() {
         )}
       </div>
 
+      {requestedNote && (
+        <div className="mb-4">
+          <Notice tone="info" title={requestedNote} />
+        </div>
+      )}
       <div aria-live="polite" className={message ? "mb-4" : undefined}>
         {message && <Notice tone={message.tone} title={message.text} />}
       </div>
@@ -278,8 +299,8 @@ export default function VerifyPage() {
           </div>
 
           {/* Direct child of the article so it can stick to the bottom of a phone screen. */}
-          <div className="sticky bottom-0 z-[1100] -mx-4 grid grid-cols-3 gap-2 border-t border-line bg-card p-3 md:static md:mx-0 md:border-0 md:bg-transparent md:p-0">
-            <button type="button" disabled={busy || !ready} aria-keyshortcuts={shortcutsOn ? "U" : undefined} onClick={() => vote("up")} className={`${voteButton} border-primary bg-primary text-primary-ink hover:opacity-90`}>
+          <div className="sticky bottom-0 z-[1100] -mx-4 grid grid-cols-3 gap-2 border-t border-line bg-card p-3 pb-[max(12px,env(safe-area-inset-bottom))] md:static md:mx-0 md:border-0 md:bg-transparent md:p-0">
+            <button type="button" disabled={busy || !ready} aria-keyshortcuts={shortcutsOn ? "U" : undefined} onClick={() => vote("up")} className={`${voteButton} border-primary bg-primary text-primary-ink hover:bg-[var(--primary-hover)]`}>
               <span><span aria-hidden="true">▲ </span>Still there</span>
               <span className="text-[12px] font-normal">Upvote{shortcutsOn && <span className="hidden md:inline"> · U</span>}</span>
             </button>
@@ -517,7 +538,7 @@ function ReportForm({ hazardId }: { hazardId: string }) {
           ] as const
         ).map(([value, text]) => (
           <label key={value} className="flex items-center gap-2 text-[13px] text-ink">
-            <input type="radio" name="reason" value={value} checked={reason === value} onChange={() => setReason(value)} className="h-4 w-4 accent-[var(--accent)]" />
+            <input type="radio" name="reason" value={value} checked={reason === value} onChange={() => setReason(value)} className="h-4 w-4 accent-[var(--blue)]" />
             {text}
           </label>
         ))}

@@ -1,12 +1,18 @@
 @import "tailwindcss";
 
+/* Landscape phones: under 500px tall while still on the bottom-sheet layout. */
+@custom-variant short (@media (max-height: 500px) and (width < theme(--breakpoint-md)));
+
 /* StepSafe palette tokens.
    Dark is the default. Light is the same system inverted.
-   Orange #FF7900 is warning chrome. Temporary hazards use that same orange as a category color.
+   Orange #FF7900 marks hazards only (categories, the hazard status dot). System warnings such as a
+   lost server are neutral: ink text, a strong border and a warning icon (--warn-*).
    Controls, links, active states and the selected ring use brand blue #087FF5 (brandguide/README.md).
-   Primary buttons are blue with navy text: 4.66:1 (white on #087FF5 is only 3.91:1).
+   Primary buttons are blue with navy text: 4.66:1 (white on #087FF5 is only 3.91:1). Hover lightens the
+   blue to #3999F7, which raises it to 6.15:1.
    Dark-mode link text is blue lifted 20% toward white (#3999F7): 5.8:1 on the card, 5.05:1 on the sheet
-   top, where #087FF5 text would be 4.40:1. Cyan #13B9F2 stays only on the live-signal dot (--ok). */
+   top, where #087FF5 text would be 4.40:1 on the card and 3.83:1 on the sheet top.
+   Cyan #13B9F2 stays only on the live-signal dot (--ok). */
 :root,
 :root[data-theme="dark"] {
   color-scheme: dark;
@@ -17,7 +23,7 @@
   --hover: #1a2c40;
   --line: rgb(255 255 255 / 0.08);
   --border-strong: rgb(255 255 255 / 0.22);
-  --field: rgb(255 255 255 / 0.22);
+  --field: rgb(255 255 255 / 0.4);
   --heading: #f5f5f5;
   --ink: #f5f5f5;
   --ink-2: #c5c8cc;
@@ -28,9 +34,10 @@
   --signal: #087ff5;
   --signal-soft: rgb(8 127 245 / 0.32);
   --primary: #087ff5;
+  --primary-hover: #3999f7;
   --primary-ink: #081624;
-  --warn-ink: #ffb473;
-  --warn-tint: #2a1a0c;
+  --warn-ink: var(--ink);
+  --warn-tint: var(--raised);
   --ok: #13b9f2;
   --hazard: #ff7900;
   --float-shadow: 0 8px 24px rgb(0 0 0 / 0.28);
@@ -50,7 +57,7 @@
   --hover: #e7eaee;
   --line: rgb(8 22 36 / 0.1);
   --border-strong: rgb(8 22 36 / 0.22);
-  --field: rgb(8 22 36 / 0.28);
+  --field: rgb(8 22 36 / 0.5);
   --heading: #0a0a0a;
   --ink: #0a0a0a;
   --ink-2: #3e4651;
@@ -61,9 +68,10 @@
   --signal: #087ff5;
   --signal-soft: rgb(8 127 245 / 0.22);
   --primary: #087ff5;
+  --primary-hover: #3999f7;
   --primary-ink: #081624;
-  --warn-ink: #8a4200;
-  --warn-tint: #fff4ea;
+  --warn-ink: var(--ink);
+  --warn-tint: var(--raised);
   --ok: #087ff5;
   --hazard: #ff7900;
   --float-shadow: 0 8px 24px rgb(8 22 36 / 0.1);
@@ -126,6 +134,12 @@ html {
   padding-top: calc(12px + env(safe-area-inset-top, 0px));
   padding-right: env(safe-area-inset-right, 0px);
   padding-left: env(safe-area-inset-left, 0px);
+}
+@media (max-height: 500px) and (width < theme(--breakpoint-md)) {
+  /* One-row header on a landscape phone: every pixel goes to the map and the sheet. */
+  .app-chrome {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
 }
 @media (min-width: theme(--breakpoint-md)) {
   .app-chrome {
@@ -240,6 +254,18 @@ body {
 .map-stage.controls-hidden .map-locate {
   display: none;
 }
+/* A strip of map this thin (the expanded sheet) leaves pins half under the sheet, as small or hidden
+   targets that still take focus (WCAG 2.4.11, 2.5.8). Only the selected pin stays (.pins-thin), and not
+   even that one when the strip cannot show it whole (.map-covered). visibility also drops them from the
+   tab order. */
+.map-stage.pins-thin .leaflet-marker-icon:not(:has(.ss-pin--selected)),
+.map-stage.map-covered .leaflet-marker-icon {
+  visibility: hidden;
+}
+/* A focused pin rises above neighbours and clusters that would otherwise cover it (WCAG 2.4.11). */
+.leaflet-marker-icon:focus-visible {
+  z-index: 100000 !important;
+}
 
 .map-locate {
   position: absolute;
@@ -282,6 +308,13 @@ body {
 }
 .instrument-card {
   --panel-h: min(640px, 68%);
+}
+@media (max-height: 500px) and (width < theme(--breakpoint-md)) {
+  /* Landscape phone: leave the zoom and locate buttons their strip of map (MAP_CONTROLS_CLEARANCE);
+     the card scrolls instead. */
+  .instrument-card {
+    --panel-h: calc(100% - 176px);
+  }
 }
 @media (min-width: theme(--breakpoint-md)) {
   .sheet-panel {

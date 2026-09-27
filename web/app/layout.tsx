@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import type { ReactNode } from "react";
 import { Inter } from "next/font/google";
 import Header from "@/components/Header";
 import "./globals.css";
@@ -31,7 +32,8 @@ export const viewport: Viewport = {
 // Dark-first. A stored choice wins; otherwise the canvas stays navy. Storage can throw.
 const THEME_BOOT = `(function(){var t;try{t=localStorage.getItem("stepsafe.theme")}catch(e){}if(t!=="light"&&t!=="dark")t="dark";document.documentElement.dataset.theme=t})()`;
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+// Typed by hand, not with the generated LayoutProps, so `tsc --noEmit` passes on a fresh clone before any build.
+export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
     <html lang="en" className={`h-full ${inter.variable}`} suppressHydrationWarning>
       <head>

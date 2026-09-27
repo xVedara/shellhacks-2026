@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import HazardDetail, { useHazardDetail } from "@/components/HazardDetail";
-import { ThemeToggle } from "@/components/Header";
 import Map from "@/components/Map";
 import { DESKTOP_QUERY, Legend, LiveDot, Notice, SampleBadge, TypeIcon, linkClass, primaryButton, secondaryButton } from "@/components/ui";
 import { API_URL, CATEGORY_META, GRAHAM_CENTER, HEIGHT_META, relativeTime, typeDisplayName, type HazardSummary } from "@/lib/api";
@@ -22,6 +21,14 @@ const FILTERS: { id: FilterId; label: string }[] = [
 ];
 
 const DETENTS: Detent[] = ["peek", "medium", "expanded"];
+/** Below this stage height (a landscape phone) medium could not show a row, so the sheet has only peek and expanded. */
+const SHORT_STAGE = 400;
+const detentsFor = (stage: number): Detent[] => (stage < SHORT_STAGE ? ["peek", "expanded"] : DETENTS);
+/** Pins hide in a thin strip of map above the sheet: all but the selected one under 120px, every one under 84px. */
+function mapPinsClass(desktop: boolean, strip: number) {
+  if (desktop || strip >= 120) return "";
+  return strip < 84 ? " map-covered" : " pins-thin";
+}
 
 function useDesktop() {
   return useSyncExternalStore(
@@ -42,6 +49,8 @@ function selectedFromLocation() {
 function panelHeight(detent: Detent, stage: number) {
   if (detent === "peek") return Math.round(Math.min(230, Math.max(188, stage * 0.24)));
   if (detent === "medium") return Math.round(Math.min(stage - 96, Math.max(280, stage * 0.52)));
+  // Keep a 52px strip of map so the OpenStreetMap credit stays on screen.
+  if (stage < SHORT_STAGE) return Math.round(stage - 52);
   return Math.round(Math.min(stage - 48, Math.max(360, stage * 0.88)));
 }
 
@@ -76,7 +85,7 @@ export default function MapPage() {
   const [panel, setPanel] = useState<"list" | "detail">("list");
   const [detent, setDetent] = useState<Detent>("peek");
   const [filters, setFilters] = useState<FilterId[]>(["active"]);
-  const [legendOpen, setLegendOpen] = useState(false);
+  const [legendChoice, setLegendChoice] = useState<boolean | null>(null);
   const [showOsm, setShowOsm] = useState(false);
   const [dragH, setDragH] = useState<number | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -138,11 +147,17 @@ export default function MapPage() {
     };
   }, []);
 
-  const panelPx = dragH ?? panelHeight(detent, stageH);
+  const detents = detentsFor(stageH);
+  // "medium" on a short stage shows as expanded; every step below works on the detents this stage offers.
+  const shown: Detent = detents.includes(detent) ? detent : "expanded";
+  const step = (to: number) => setDetent(detents[Math.min(detents.length - 1, Math.max(0, to))]);
+  const legendOpen = legendChoice ?? desktop;
+  const toggleLegend = () => setLegendChoice(!legendOpen);
+  const panelPx = dragH ?? panelHeight(shown, stageH);
   const sheet = desktop ? 0 : (measuredSheet ?? panelPx);
 
-  const detailOpen = panel === "detail" && !!selectedId && (desktop || detent !== "peek");
-  const showPeek = !desktop && detent === "peek" && !detailOpen;
+  const detailOpen = panel === "detail" && !!selectedId && (desktop || shown !== "peek");
+  const showPeek = !desktop && shown === "peek" && !detailOpen;
 
   const select = useCallback((id: string) => {
     setSelectedId(id);
@@ -167,10 +182,10 @@ export default function MapPage() {
   }, [detailOpen]);
 
   const snap = (height: number) => {
-    const options = DETENTS.map((d) => panelHeight(d, stageH));
-    let best: Detent = "medium";
+    const options = detents.map((d) => panelHeight(d, stageH));
+    let best: Detent = detents[1];
     let gap = Infinity;
-    DETENTS.forEach((d, i) => {
+    detents.forEach((d, i) => {
       const next = Math.abs(options[i] - height);
       if (next < gap) {
         gap = next;
@@ -189,7 +204,7 @@ export default function MapPage() {
     if (!drag.current) return;
     const dy = drag.current.y - e.clientY;
     if (Math.abs(dy) > 4) drag.current.moved = true;
-    setDragH(Math.min(stageH - 48, Math.max(160, drag.current.h + dy)));
+    setDragH(Math.min(panelHeight("expanded", stageH), Math.max(160, drag.current.h + dy)));
   };
   const onGrabUp = () => {
     if (!drag.current) return;
@@ -198,7 +213,7 @@ export default function MapPage() {
     drag.current = null;
     setDragging(false);
     setDragH(null);
-    if (!moved) setDetent(DETENTS[(DETENTS.indexOf(detent) + 1) % DETENTS.length]);
+    if (!moved) setDetent(detents[(detents.indexOf(shown) + 1) % detents.length]);
     else snap(height);
   };
 
@@ -210,13 +225,16 @@ export default function MapPage() {
     <div ref={stageRef} className="relative flex min-h-0 flex-1">
       <a
         href="#hazard-panel"
+        onClick={() => {
+          if (showPeek) setDetent("medium");
+        }}
         className="sr-only z-[1300] rounded-md bg-card px-3 py-2 font-medium text-heading focus:not-sr-only focus:absolute focus:left-2 focus:top-2"
       >
-        Skip to hazard list
+        Skip to hazard panel
       </a>
       {/* The zoom and locate buttons need a clear strip of map above the sheet. */}
       <div
-        className={`map-stage relative min-h-0 min-w-0 flex-1${mapControlsHidden(desktop, stageH, sheet) ? " controls-hidden" : ""}`}
+        className={`map-stage relative min-h-0 min-w-0 flex-1${mapControlsHidden(desktop, stageH, sheet) ? " controls-hidden" : ""}${mapPinsClass(desktop, stageH - sheet)}`}
         style={{ ["--sheet" as string]: `${sheet}px` }}
       >
         <Map
@@ -249,7 +267,7 @@ export default function MapPage() {
         ref={panelRef}
         id="hazard-panel"
         tabIndex={-1}
-        className={`sheet-panel focus-visible:outline-none${dragging ? " is-dragging" : ""}`}
+        className={`sheet-panel focus-visible:[outline-offset:-2px]${dragging ? " is-dragging" : ""}`}
         style={{ ["--panel-h" as string]: `${panelPx}px` }}
         aria-label={showPeek ? "Live status" : detailOpen ? "Hazard details" : "Nearby hazards"}
       >
@@ -259,9 +277,9 @@ export default function MapPage() {
           className="flex h-11 w-full shrink-0 items-center justify-center md:hidden"
           role="slider"
           aria-valuemin={0}
-          aria-valuemax={2}
-          aria-valuenow={DETENTS.indexOf(detent)}
-          aria-valuetext={detent}
+          aria-valuemax={detents.length - 1}
+          aria-valuenow={detents.indexOf(shown)}
+          aria-valuetext={shown}
           aria-label="Hazard list size"
           onPointerDown={onGrabDown}
           onPointerMove={onGrabMove}
@@ -269,18 +287,18 @@ export default function MapPage() {
           onPointerCancel={onGrabUp}
           // Enter/Space and a screen reader's double-tap arrive as a click with detail 0; a tap is handled on pointer up.
           onClick={(e) => {
-            if (e.detail === 0) setDetent(DETENTS[(DETENTS.indexOf(detent) + 1) % DETENTS.length]);
+            if (e.detail === 0) setDetent(detents[(detents.indexOf(shown) + 1) % detents.length]);
           }}
           onKeyDown={(e) => {
-            const i = DETENTS.indexOf(detent);
-            const byKey: Record<string, number> = { ArrowUp: i + 1, ArrowRight: i + 1, ArrowDown: i - 1, ArrowLeft: i - 1, Home: 0, End: 2 };
+            const i = detents.indexOf(shown);
+            const byKey: Record<string, number> = { ArrowUp: i + 1, ArrowRight: i + 1, ArrowDown: i - 1, ArrowLeft: i - 1, Home: 0, End: detents.length - 1 };
             const next = byKey[e.key];
             if (next === undefined) return;
             e.preventDefault();
-            setDetent(DETENTS[Math.min(2, Math.max(0, next))]);
+            step(next);
           }}
         >
-          <span className="block h-[5px] w-9 rounded-full bg-[var(--border-strong)]" />
+          <span className="block h-[5px] w-9 rounded-full bg-ink-3" />
         </button>
 
         <p className="sr-only" aria-live="polite">
@@ -340,9 +358,12 @@ export default function MapPage() {
                 {detailError && <Notice tone="warn" title="Couldn’t load this hazard">{detailError}</Notice>}
                 {detail && <HazardDetail hazard={detail} taxonomy={taxonomy} />}
                 <div className="mt-4">
-                  <Link href="/verify" className={`${primaryButton} w-full`}>
-                    Verify
+                  <Link href={`/verify?id=${encodeURIComponent(selectedId ?? "")}`} className={`${primaryButton} w-full`}>
+                    Verify this hazard
                   </Link>
+                </div>
+                <div className="mt-4">
+                  <LegendBlock open={legendOpen} onToggle={toggleLegend} showOsm={showOsm} onOsm={setShowOsm} />
                 </div>
               </div>
             </div>
@@ -360,15 +381,11 @@ export default function MapPage() {
               taxonomy={taxonomy}
               onSelect={select}
               cleared={cleared}
-              desktop={desktop}
               legendOpen={legendOpen}
-              onLegend={() => setLegendOpen((v) => !v)}
+              onLegend={toggleLegend}
               showOsm={showOsm}
               onOsm={setShowOsm}
             />
-          )}
-          {detailOpen && (
-            <LegendBlock open={legendOpen} toggle onToggle={() => setLegendOpen((v) => !v)} showOsm={showOsm} onOsm={setShowOsm} />
           )}
         </div>
       </aside>
@@ -390,7 +407,6 @@ function LiveHazardList({
   taxonomy,
   onSelect,
   cleared,
-  desktop,
   legendOpen,
   onLegend,
   showOsm,
@@ -408,7 +424,6 @@ function LiveHazardList({
   taxonomy: ReturnType<typeof useTaxonomy>["taxonomy"];
   onSelect: (id: string) => void;
   cleared: Map<string, number>;
-  desktop: boolean;
   legendOpen: boolean;
   onLegend: () => void;
   showOsm: boolean;
@@ -419,30 +434,33 @@ function LiveHazardList({
   const clearedToday = [...cleared.values()].filter((t) => t >= midnight).length;
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="shrink-0">
-        <LiveKicker connection={connection} count={loaded ? total : 0} />
-        {lastEventAt && connection === "live" && (
-          <p className="sr-only">Updated {relativeTime(new Date(lastEventAt).toISOString(), now)}</p>
-        )}
-      </div>
-      <div className="mt-3 flex shrink-0 flex-wrap gap-2" role="group" aria-label="Filter hazards">
-        {FILTERS.map((f) => {
-          const on = filters.includes(f.id);
-          return (
-            <button
-              key={f.id}
-              type="button"
-              aria-pressed={on}
-              onClick={() => onToggleFilter(f.id)}
-              className={`filter-chip inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3.5 text-[14px] font-medium tracking-[-0.011em] ${
-                on ? "border-[var(--signal)] bg-accent-tint text-accent shadow-[0_0_0_3px_var(--signal-soft)]" : "border-[var(--border-strong)] bg-transparent text-ink"
-              }`}
-            >
-              {f.label}
-              {on && <span aria-hidden="true">×</span>}
-            </button>
-          );
-        })}
+      {/* On a landscape phone the status and the filters share one row to leave room for hazards. */}
+      <div className="flex shrink-0 flex-col short:flex-row short:flex-wrap short:items-center short:justify-between short:gap-x-4">
+        <div className="shrink-0">
+          <LiveKicker connection={connection} count={loaded ? total : 0} />
+          {lastEventAt && connection === "live" && (
+            <p className="sr-only">Updated {relativeTime(new Date(lastEventAt).toISOString(), now)}</p>
+          )}
+        </div>
+        <div className="mt-3 flex shrink-0 flex-wrap gap-2 short:mt-0" role="group" aria-label="Filter hazards">
+          {FILTERS.map((f) => {
+            const on = filters.includes(f.id);
+            return (
+              <button
+                key={f.id}
+                type="button"
+                aria-pressed={on}
+                onClick={() => onToggleFilter(f.id)}
+                className={`filter-chip inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3.5 text-[14px] font-medium tracking-[-0.011em] ${
+                  on ? "border-[var(--signal)] bg-accent-tint text-accent" : "border-[var(--border-strong)] bg-transparent text-ink"
+                }`}
+              >
+                {f.label}
+                {on && <span aria-hidden="true">×</span>}
+              </button>
+            );
+          })}
+        </div>
       </div>
       {(connection === "reconnecting" || (connection === "down" && loaded)) && (
         <div className="mt-3 shrink-0">
@@ -493,8 +511,9 @@ function LiveHazardList({
             />
           ))}
         </ul>
+        {/* Inside the scroller so it never takes rows' space on a short screen. */}
+        <LegendBlock open={legendOpen} onToggle={onLegend} showOsm={showOsm} onOsm={onOsm} />
       </div>
-      <LegendBlock open={desktop || legendOpen} toggle={!desktop} onToggle={onLegend} showOsm={showOsm} onOsm={onOsm} />
     </div>
   );
 }
@@ -526,14 +545,18 @@ function HazardRow({
         aria-current={selected ? "true" : undefined}
         className={`flex min-h-[60px] w-full items-center gap-3 border-t border-line py-2 text-left transition-[background-color,box-shadow] duration-200 ease-out ${selected ? "-mx-2 w-[calc(100%+16px)] rounded-xl bg-raised px-2 shadow-[inset_0_0_0_1px_var(--signal)]" : ""}`}
       >
-        <TypeIcon type={h.type} category={h.category} selected={selected} />
+        {/* The selected frame is 4px wider per side; pull it back so the text column does not shift. */}
+        <span className={`flex shrink-0 ${selected ? "-m-1" : ""}`}>
+          <TypeIcon type={h.type} category={h.category} selected={selected} />
+        </span>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[15px] font-medium tracking-[-0.02em] text-ink">
             {name} {h.sample && <SampleBadge />}
             {isNew && <span className="ml-1.5 rounded-full bg-accent-tint px-1.5 text-[11px] font-semibold text-accent">New</span>}
           </span>
           <span className="mt-0.5 block truncate text-[12px] text-ink-3">
-            {CATEGORY_META[h.category].label} · {HEIGHT_META[h.heightBand].label} · {milesFromGraham(h.lat, h.lng)} · {relativeTime(h.lastSeen, now)}
+            <span className="sr-only">{CATEGORY_META[h.category].label} · </span>
+            {HEIGHT_META[h.heightBand].label} · {milesFromGraham(h.lat, h.lng)} · {relativeTime(h.lastSeen, now)}
           </span>
         </span>
         <span className="w-16 shrink-0 text-right">
@@ -547,28 +570,23 @@ function HazardRow({
 
 function LegendBlock({
   open,
-  toggle,
   onToggle,
   showOsm,
   onOsm,
 }: {
   open: boolean;
-  toggle: boolean;
   onToggle: () => void;
   showOsm: boolean;
   onOsm: (next: boolean) => void;
 }) {
   return (
     <div className="shrink-0 border-t border-line">
-      {toggle && (
-        <button type="button" className="flex min-h-11 w-full items-center justify-between gap-3 text-left text-[14px] font-medium" aria-expanded={open} onClick={onToggle}>
-          <span>Legend</span>
-          <span className="text-[12px] font-normal text-ink-3">{open ? "Hide" : "Height and category"}</span>
-        </button>
-      )}
+      <button type="button" className="flex min-h-11 w-full items-center justify-between gap-3 text-left text-[14px] font-medium" aria-expanded={open} onClick={onToggle}>
+        <span>Legend</span>
+        <span className="text-[12px] font-normal text-ink-3">{open ? "Hide" : "Height and category"}</span>
+      </button>
       {open && (
         <div className="legend-fold pb-2">
-          {!toggle && <div className="pt-3" />}
           <Legend osm={showOsm} onOsm={onOsm} />
           {showOsm && (
             <p className="mt-2 text-[12px] text-ink-3">
@@ -579,9 +597,6 @@ function LegendBlock({
               .
             </p>
           )}
-          <div className="md:hidden">
-            <ThemeToggle />
-          </div>
         </div>
       )}
     </div>

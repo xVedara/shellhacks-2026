@@ -34,12 +34,30 @@ export function clusterByPixel<T>(items: PixelItem<T>[], radius: number): PixelG
   return groups;
 }
 
-/** `point` moved directly away from `from` until it is at least `min` px away (straight up if they coincide). */
-export function pushClear(point: { x: number; y: number }, from: { x: number; y: number }, min: number) {
+type Pt = { x: number; y: number };
+
+/**
+ * `point` moved directly away from `from` until it is at least `min` px away (straight up if they coincide).
+ * With `bounds` (the map size) and `edge` (the bubble radius), a spot that would leave the map tries the
+ * opposite side, then the two sides at right angles, and is clamped inside as a last resort.
+ */
+export function pushClear(point: Pt, from: Pt, min: number, bounds?: { w: number; h: number }, edge = 0): Pt {
+  const inside = (p: Pt) => !bounds || (p.x >= edge && p.x <= bounds.w - edge && p.y >= edge && p.y <= bounds.h - edge);
   const dx = point.x - from.x;
   const dy = point.y - from.y;
   const d = Math.hypot(dx, dy);
-  if (d >= min) return { x: point.x, y: point.y };
+  if (d >= min && inside(point)) return { x: point.x, y: point.y };
   const [ux, uy] = d ? [dx / d, dy / d] : [0, -1];
-  return { x: from.x + ux * min, y: from.y + uy * min };
+  const tries = [
+    [ux, uy],
+    [-ux, -uy],
+    [uy, -ux],
+    [-uy, ux],
+  ].map(([x, y]) => ({ x: from.x + x * min, y: from.y + y * min }));
+  const fit = tries.find(inside);
+  if (fit || !bounds) return fit ?? tries[0];
+  return {
+    x: Math.min(bounds.w - edge, Math.max(edge, tries[0].x)),
+    y: Math.min(bounds.h - edge, Math.max(edge, tries[0].y)),
+  };
 }

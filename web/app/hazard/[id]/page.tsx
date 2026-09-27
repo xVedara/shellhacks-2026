@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import HazardDetail, { useHazardDetail } from "@/components/HazardDetail";
 import Map from "@/components/Map";
-import { DESKTOP_QUERY, Notice, TypeIcon, primaryButton } from "@/components/ui";
+import { DESKTOP_QUERY, Notice, TypeIcon, linkClass, primaryButton, secondaryButton } from "@/components/ui";
 import { CATEGORY_META, HEIGHT_META, relativeTime, typeDisplayName, type HazardDetail as Detail } from "@/lib/api";
 import { milesFromGraham } from "@/lib/geo";
 import { mapControlsHidden } from "@/lib/map-controls";
@@ -68,10 +68,16 @@ export default function HazardPage() {
           </div>
         )}
       </div>
-      <aside ref={panelRef} className="sheet-panel instrument-card" aria-label="Hazard status">
+      {/* Without a record there is only a notice to show, so the phone sheet shrinks to fit it. */}
+      <aside
+        ref={panelRef}
+        className="sheet-panel instrument-card"
+        style={detail ? undefined : { ["--panel-h" as string]: "auto" }}
+        aria-label="Hazard status"
+      >
         <div className="sheet-face scroll-quiet min-h-0 flex-1 overflow-y-auto pb-2">
-          <Link href={`/?selected=${encodeURIComponent(hazardId)}`} className="inline-flex min-h-11 items-center text-[14px] font-medium text-accent">
-            Live map
+          <Link href={`/?selected=${encodeURIComponent(hazardId)}`} className={`${linkClass} inline-flex min-h-11 items-center text-[14px]`}>
+            Back to the live map
           </Link>
           {!detail && <h1 className="sr-only">Hazard</h1>}
           {loading && (
@@ -79,7 +85,14 @@ export default function HazardPage() {
               Loading hazard details…
             </p>
           )}
-          {error && <Notice tone="warn" title="Couldn’t load this hazard">{error}</Notice>}
+          {error && (
+            <Notice tone="warn" title="Couldn’t load this hazard">
+              <p>{error}</p>
+              <button type="button" className={`${secondaryButton} mt-2`} onClick={() => window.location.reload()}>
+                Try again
+              </button>
+            </Notice>
+          )}
           {detail && <HazardRecord detail={detail} taxonomy={taxonomy} name={name} miles={miles} />}
         </div>
       </aside>
@@ -135,8 +148,8 @@ function HazardRecord({
       <p className="mt-2.5 text-[13px] text-ink-3">
         {detail.sample ? "Sample hazard, seeded for the demo." : "Reported by a StepSafe walker."}
       </p>
-      <Link href="/verify" className={`${primaryButton} mt-3 w-full`}>
-        Verify
+      <Link href={`/verify?id=${encodeURIComponent(detail.id)}`} className={`${primaryButton} mt-3 w-full`}>
+        Verify this hazard
       </Link>
       <details className="group mt-4 border-t border-line pt-2">
         {/* display:flex drops the native disclosure triangle, so draw one. */}

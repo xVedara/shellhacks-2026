@@ -137,10 +137,10 @@ export function Notice({ tone, title, children }: { tone: "warn" | "info"; title
   return (
     <div
       role={tone === "warn" ? "alert" : "status"}
-      className={`flex gap-2.5 rounded-xl border px-3.5 py-3 text-[13px] ${tone === "warn" ? "border-alert/70 bg-warn-tint" : "border-line bg-raised"}`}
+      className={`flex gap-2.5 rounded-xl border px-3.5 py-3 text-[13px] ${tone === "warn" ? "border-[var(--border-strong)] bg-warn-tint" : "border-line bg-raised"}`}
     >
       <svg
-        className={`mt-px shrink-0 ${tone === "warn" ? "text-alert" : "text-ink-3"}`}
+        className={`mt-px shrink-0 ${tone === "warn" ? "text-ink" : "text-ink-3"}`}
         width="16"
         height="16"
         viewBox="0 0 24 24"
@@ -154,7 +154,7 @@ export function Notice({ tone, title, children }: { tone: "warn" | "info"; title
         {tone === "warn" ? <path d="M12 3.5 2.8 19.5h18.4L12 3.5Zm0 6v4.5m0 2.6v.1" /> : <path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0-10v5m0-8.2v.1" />}
       </svg>
       <div className="min-w-0">
-        <p className={`font-medium ${tone === "warn" ? "text-warn-ink" : "text-ink"}`}>{title}</p>
+        <p className={`${tone === "warn" ? "font-semibold text-warn-ink" : "font-medium text-ink"}`}>{title}</p>
         {children && <div className="mt-0.5 text-ink-2">{children}</div>}
       </div>
     </div>
@@ -163,7 +163,7 @@ export function Notice({ tone, title, children }: { tone: "warn" | "info"; title
 
 const base =
   "inline-flex min-h-11 items-center justify-center gap-2 rounded-full px-5 text-[14px] tracking-[-0.02em] transition-[opacity,background-color,box-shadow] duration-200 ease-out disabled:cursor-not-allowed disabled:opacity-50";
-export const primaryButton = `${base} bg-primary font-semibold text-primary-ink shadow-[var(--elev-hairline)] hover:opacity-90`;
+export const primaryButton = `${base} bg-primary font-semibold text-primary-ink shadow-[var(--elev-hairline)] hover:bg-[var(--primary-hover)]`;
 export const secondaryButton = `${base} border border-[var(--border-strong)] bg-transparent font-medium text-ink hover:bg-hover`;
 export const linkClass = "font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent";
 
