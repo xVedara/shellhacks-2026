@@ -8,6 +8,7 @@ import Map from "@/components/Map";
 import { DESKTOP_QUERY, Legend, LiveDot, Notice, SampleBadge, TypeIcon, linkClass, primaryButton, secondaryButton } from "@/components/ui";
 import { API_URL, CATEGORY_META, GRAHAM_CENTER, HEIGHT_META, relativeTime, typeDisplayName, type HazardSummary } from "@/lib/api";
 import { milesFromGraham } from "@/lib/geo";
+import { mapControlsHidden } from "@/lib/map-controls";
 import { useLiveHazards, useNow, useTaxonomy, type Connection } from "@/lib/hooks";
 import { useVotedIds } from "@/lib/use-voted";
 
@@ -213,9 +214,9 @@ export default function MapPage() {
       >
         Skip to hazard list
       </a>
-      {/* The zoom and locate buttons need about 170px of map above the sheet. */}
+      {/* The zoom and locate buttons need a clear strip of map above the sheet. */}
       <div
-        className={`map-stage relative min-h-0 min-w-0 flex-1${!desktop && stageH - sheet < 170 ? " controls-hidden" : ""}`}
+        className={`map-stage relative min-h-0 min-w-0 flex-1${mapControlsHidden(desktop, stageH, sheet) ? " controls-hidden" : ""}`}
         style={{ ["--sheet" as string]: `${sheet}px` }}
       >
         <Map

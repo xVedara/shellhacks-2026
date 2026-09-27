@@ -8,6 +8,7 @@ import Map from "@/components/Map";
 import { DESKTOP_QUERY, Notice, TypeIcon, primaryButton } from "@/components/ui";
 import { CATEGORY_META, HEIGHT_META, relativeTime, typeDisplayName, type HazardDetail as Detail } from "@/lib/api";
 import { milesFromGraham } from "@/lib/geo";
+import { mapControlsHidden } from "@/lib/map-controls";
 import { useHazardRevision, useNow, useTaxonomy } from "@/lib/hooks";
 
 export default function HazardPage() {
@@ -16,18 +17,25 @@ export default function HazardPage() {
   const revision = useHazardRevision(hazardId);
   const { detail, error, loading } = useHazardDetail(hazardId, String(revision));
   const { taxonomy } = useTaxonomy();
+  const stageRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLElement>(null);
   const [sheet, setSheet] = useState(0);
+  const [stageH, setStageH] = useState(700);
+  const [desktop, setDesktop] = useState(false);
 
   useEffect(() => {
-    const el = panelRef.current;
-    if (!el) return;
+    const panel = panelRef.current;
+    const stage = stageRef.current;
+    if (!panel || !stage) return;
     const read = () => {
-      const desktop = matchMedia(DESKTOP_QUERY).matches;
-      setSheet(desktop ? 0 : el.getBoundingClientRect().height);
+      const wide = matchMedia(DESKTOP_QUERY).matches;
+      setDesktop(wide);
+      setSheet(wide ? 0 : panel.getBoundingClientRect().height);
+      setStageH(stage.getBoundingClientRect().height || 700);
     };
     const ro = new ResizeObserver(read);
-    ro.observe(el);
+    ro.observe(panel);
+    ro.observe(stage);
     const mq = matchMedia(DESKTOP_QUERY);
     mq.addEventListener("change", read);
     return () => {
@@ -40,8 +48,11 @@ export default function HazardPage() {
   const miles = detail ? milesFromGraham(detail.lat, detail.lng) : "";
 
   return (
-    <div className="relative flex min-h-0 flex-1">
-      <div className="map-stage relative min-h-0 min-w-0 flex-1" style={{ ["--sheet" as string]: `${sheet}px` }}>
+    <div ref={stageRef} className="relative flex min-h-0 flex-1">
+      <div
+        className={`map-stage relative min-h-0 min-w-0 flex-1${mapControlsHidden(desktop, stageH, sheet) ? " controls-hidden" : ""}`}
+        style={{ ["--sheet" as string]: `${sheet}px` }}
+      >
         {detail ? (
           <Map
             hazards={[detail]}
