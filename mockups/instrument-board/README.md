@@ -28,4 +28,4 @@ The map image is a static OpenStreetMap render of FIU Graham Center, not a live 
 
 Votes, reclassify, and report stay in the page. They confirm the control, they do not call the API.
 
-`shots/` holds rendered stills of the boards (desktop live, verify, hazard, and the phone shells). Open the HTML for the full set.
+`shots/` is one PNG for every page, named `{surface}-{screen}-{theme}.png` (18 files). Surfaces are `desktop`, `mobile-web`, and `mobile-app`. Screens are `live-map`, `verify`, and `hazard`. Themes are `light` and `dark`.
