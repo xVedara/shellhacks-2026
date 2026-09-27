@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* Quiet Signal: SameHere craft on the StepSafe palette.
+/* StepSafe palette tokens.
    Dark is the default. Light is the same system inverted.
    Orange #FF7900 is the selected ring and hazard warnings only.
    Category colors (moving / temporary / permanent) are separate from that orange. */

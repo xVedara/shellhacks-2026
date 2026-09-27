@@ -1,14 +1,11 @@
 /**
- * Crop the locked Quiet Signal sheet 1:1 into hazard icon tiles.
+ * Crop a locked hazard icon sheet 1:1 into hazard icon tiles.
  *
  * Pixels are not redrawn, resized, or recolored. Each tile is the bounding box of its
  * blue hairline; corners of the sheet background outside that rounded square may be
  * made transparent. Anything else is left untouched.
  *
- * Source (not committed): Dev's locked sheet
- *   internal/quiet-signal-redesign/refs/qs-icon-system-LOCKED.png
- *
- * Usage: node scripts/slice-hazard-icons.mjs [path-to-sheet]
+ * Usage: node scripts/slice-hazard-icons.mjs <path-to-sheet>
  */
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -17,8 +14,6 @@ import { fileURLToPath } from "node:url";
 import sharp from "sharp";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DEFAULT_SRC =
-  "/cursor/stores/bc-c41b5a77-ceee-49f8-9456-20c06116b45b/internal/quiet-signal-redesign/refs/qs-icon-system-LOCKED.png";
 const OUT_DIR = path.join(__dirname, "../public/hazard-icons");
 
 /** Reading order within each panel. Ids match server/src/taxonomy.ts except the three height tiles. */
@@ -320,9 +315,13 @@ function punchCorners(raw, width, height, channels) {
 }
 
 async function main() {
-  const src = process.argv[2] || DEFAULT_SRC;
+  const src = process.argv[2];
+  if (!src) {
+    console.error("Usage: node scripts/slice-hazard-icons.mjs <path-to-sheet>");
+    process.exit(1);
+  }
   if (!fs.existsSync(src)) {
-    console.error(`Locked sheet not found: ${src}`);
+    console.error(`Sheet not found: ${src}`);
     process.exit(1);
   }
   const { data, info } = await sharp(src).ensureAlpha().raw().toBuffer({ resolveWithObject: true });

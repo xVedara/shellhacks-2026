@@ -47,7 +47,7 @@ free text.
 
 - The glyph is the hazard type: a 1:1 crop from the locked sheet in `public/hazard-icons/<id>.png`
   (plus `height-ground`, `height-head`, `height-dropoff` for the legend). Regenerate with
-  `npm run slice-icons` only from that sheet; do not redraw the glyphs.
+  `npm run slice-icons -- path/to/sheet.png` only from that sheet; do not redraw the glyphs.
 - Category is a colored edge and a small M / T / P mark: moving `#FFC23D`, temporary `#FF7900`,
   permanent `#D93A1E`. The letter is the category mark, not the pin's label.
 - Height uses those three height tiles in the legend, and the height name in the row text.
@@ -74,7 +74,7 @@ The OSM dots are distinguished by color only (with tooltips); accepted because i
 
 ## Look
 
-Quiet Signal: navy canvas, hairline surfaces, pill buttons at least 44px tall. Sidebar on the left
+Design: navy canvas, hairline surfaces, pill buttons at least 44px tall. Sidebar on the left
 from 768px (logo, Live map, Verify, theme, profile); a top bar with those two tabs on phones.
 The live map is full bleed. Inter throughout, sentence case, tabular numbers. Colors are semantic
 roles in `app/globals.css`. Orange `#FF7900` is the selected ring and warning chrome. Category
