@@ -7,7 +7,7 @@ struct StepSafeApp: App {
     var body: some Scene {
         WindowGroup {
             RootView(model: model)
-                .preferredColorScheme(.dark)
+                .onAppear { Palette.applyChrome() }
         }
     }
 }

@@ -14,9 +14,13 @@ targets:
     platform: iOS
     sources:
       - path: StepSafe
-        excludes: ["Phrases"]
+        excludes: ["Phrases", "HazardIcons"]
       # Bundled StepSafe-voice clips (scripts/gen-phrases.ts), kept as a Phrases/ folder in the bundle.
       - path: StepSafe/Phrases
+        type: folder
+        buildPhase: resources
+      # Byte copies of web/public/hazard-icons. Folder reference so the crops stay 1:1.
+      - path: StepSafe/HazardIcons
         type: folder
         buildPhase: resources
       # AGPL text for the bundled YOLO11s weights. No in-app screen.
@@ -38,7 +42,6 @@ targets:
         UILaunchScreen: {}
         UIRequiredDeviceCapabilities: [arkit]
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
-        UIUserInterfaceStyle: Dark
         NSCameraUsageDescription: StepSafe uses the camera and LiDAR to find obstacles, head-height hazards and drop-offs in your path.
         NSLocationWhenInUseUsageDescription: StepSafe uses your location to place hazards on the community map and warn you about hazards ahead.
         NSMotionUsageDescription: StepSafe uses motion sensors to track where your head is pointing so warnings come from the right direction.

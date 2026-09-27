@@ -78,16 +78,26 @@ struct ServerStatusView: View {
         VStack(alignment: .leading, spacing: 6) {
             let reach = link.reachable.map { $0 ? "reachable" : "unreachable" } ?? "not contacted"
             Label("Server \(reach)", systemImage: link.reachable == false ? "wifi.slash" : "network")
-                .foregroundStyle(link.reachable == false ? Color.hazard : .white)
-            Text("Last report: \(link.lastReport)").font(.footnote).foregroundStyle(Color.slate)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(serverColor)
+            Text("Last report: \(link.lastReport)").font(.footnote).foregroundStyle(Color.ink3)
             Text("Pins within 195 ft: \(link.pinCount). Ahead within 35 ft:\(link.ahead.isEmpty ? " none" : "")")
-                .font(.footnote).foregroundStyle(Color.slate)
+                .font(.footnote).foregroundStyle(Color.ink3)
             ForEach(link.ahead, id: \.pin.id) { due in
                 Text(Spoken.headsUp(due) + (due.pin.sample == true ? " (sample)" : ""))
-                    .font(.footnote).foregroundStyle(.white)
+                    .font(.footnote).foregroundStyle(Color.ink)
             }
-            Text(APIClient.baseURL.absoluteString).font(.footnote.monospaced()).foregroundStyle(Color.slate)
+            Text(APIClient.baseURL.absoluteString).font(.footnote.monospaced()).foregroundStyle(Color.ink3)
         }
         .accessibilityElement(children: .contain)
+    }
+
+    /// Reachable uses `--ok` / `--signal`. Unreachable uses `--ink-2`, the web offline dot.
+    private var serverColor: Color {
+        switch link.reachable {
+        case true: return .signal
+        case false: return .ink2
+        case nil: return .ink3
+        }
     }
 }
