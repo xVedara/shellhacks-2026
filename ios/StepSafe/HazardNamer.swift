@@ -136,6 +136,10 @@ final class HazardNamer: @unchecked Sendable { // main-confined state; tasks hop
             case let .known(pin):
                 gate.mark(d)
                 gate.succeeded(d) // the map already has it
+                guard pin.isNamed else { // "obstacle" / "drop-off": path guard already said as much
+                    onResult?("Known pin, not named yet, not reported")
+                    continue
+                }
                 let name = lang == "es"
                     ? Taxonomy.displayName(type: pin.type, label: pin.label, in: taxonomy, lang: "es")
                     : pin.spokenName

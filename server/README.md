@@ -107,7 +107,8 @@ Additive to PLAN.md section 6; nothing existing changed shape.
   Re-voting replaces the device's previous vote (unique `(hazardId, deviceId)`). Vote `source` is
   `walker | scout | verifier` (the Spotter role was renamed Scout; `spotter` is rejected).
 - **Expiry.** An upvote on an active hazard sets `expiresAt = max(expiresAt, now + lifespan)` (moving 6 h,
-  temporary 7 d, permanent 90 d). Below 0 (a weight-1 pin after two walkers' misses: 1 - 0.6 - 0.6) the hazard becomes `cleared`, `expiresAt = now + 24 h`, and karma
+  temporary 7 d, permanent 90 d). Below -2, or below 0 once at least 2 different devices sent a
+  walker (passive) downvote (a weight-1 pin after two walkers' misses: 1 - 0.6 - 0.6 = -0.2), the hazard becomes `cleared`, `expiresAt = now + 24 h`, and karma
   settles once (down voters +1, everyone else -1, creator included). Votes on a cleared hazard return
   `400 {error: "bad_request", message: "hazard cleared"}`. Karma does not settle on TTL expiry. `/near` also
   filters `expiresAt > now` because Mongo's TTL sweep runs only every ~60 s.

@@ -172,29 +172,43 @@ describe('votes', () => {
     expect(second.confidence).toBeCloseTo(-0.2, 9);
   });
 
-  it('a scout down-vote still uses the karma weight; re-votes replace', async () => {
+  it('a single scout or verifier down-vote never clears a weight-1 pin; it still uses the karma weight; re-votes replace', async () => {
     const first = await create();
-    await db.collection('users').insertOne({ deviceId: 'dev-B', displayName: 'B', karma: 3 });
+    await db.collection('users').insertMany([
+      { deviceId: 'dev-B', displayName: 'B', karma: 3 },
+      { deviceId: 'dev-V', displayName: 'V', karma: 3 },
+    ]);
     const wB = voteWeight(3);
     expect(wB).toBeCloseTo(1 + Math.log(4));
     expect((await vote(first.body.id, 'dev-B', 'up')).confidence).toBeCloseTo(1 + wB);
     const res = await vote(first.body.id, 'dev-B', 'down'); // replaces dev-B's upvote
-    expect(res.confidence).toBeCloseTo(1 - wB);
-    expect(res.status).toBe('cleared');
+    expect(res.confidence).toBeCloseTo(1 - wB); // -1.39: below 0, not below -2, no walker misses
+    expect(res.status).toBe('active');
     expect((await detail(first.body.id)).votes).toHaveLength(2);
 
     const second = await create({ lat: north(50), deviceId: 'dev-X' });
-    expect(await vote(second.body.id, 'dev-C', 'down')).toEqual({ confidence: 0, status: 'active' }); // weight 1: not below 0
+    const verifier = await vote(second.body.id, 'dev-V', 'down', 'verifier');
+    expect(verifier.confidence).toBeCloseTo(1 - wB);
+    expect(verifier.status).toBe('active');
   });
 
-  it('clears below 0 and settles karma', async () => {
+  it('one walker miss plus explicit down-votes still needs -2', async () => {
     const { body } = await create();
-    expect(await vote(body.id, 'dev-B', 'down')).toEqual({ confidence: 0, status: 'active' });
-    const res = await vote(body.id, 'dev-C', 'down');
-    expect(res).toEqual({ confidence: -1, status: 'cleared' });
+    expect((await vote(body.id, 'dev-W', 'down', 'walker')).confidence).toBeCloseTo(0.4, 9);
+    const res = await vote(body.id, 'dev-B', 'down'); // 0.4 - 1 = -0.6 with only one walker miss
+    expect(res.status).toBe('active');
+    expect(res.confidence).toBeCloseTo(-0.6, 9);
+  });
+
+  it('clears below -2 and settles karma', async () => {
+    const { body } = await create();
+    for (const d of ['dev-B', 'dev-C', 'dev-D']) await vote(body.id, d, 'down');
+    expect(await vote(body.id, 'dev-D', 'down')).toEqual({ confidence: -2, status: 'active' });
+    const res = await vote(body.id, 'dev-E', 'down');
+    expect(res).toEqual({ confidence: -3, status: 'cleared' });
 
     const karma = Object.fromEntries((await db.collection('users').find().toArray()).map((u) => [u.deviceId, u.karma]));
-    expect(karma).toEqual({ 'dev-A': -1, 'dev-B': 1, 'dev-C': 1 });
+    expect(karma).toEqual({ 'dev-A': -1, 'dev-B': 1, 'dev-C': 1, 'dev-D': 1, 'dev-E': 1 });
     const d = await detail(body.id);
     expect(d.status).toBe('cleared');
     expect(new Date(d.expiresAt).getTime() - Date.now()).toBeGreaterThan(23.9 * 3600_000);

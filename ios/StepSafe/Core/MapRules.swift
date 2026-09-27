@@ -72,6 +72,8 @@ struct NearHazard: Codable, Identifiable, Equatable {
     var fix: Geo.Fix { Geo.Fix(lat: lat, lng: lng) }
     var isActive: Bool { (status ?? "active") == "active" }
     var spokenName: String { Spoken.capitalized(label ?? type) }
+    /// False while the pin still has the server's generic label (the renamer has not named it yet).
+    var isNamed: Bool { !Spoken.isGeneric(label ?? type) }
 }
 
 /// A row of GET /taxonomy: the only hazard types the server accepts (reclassify sends the id).

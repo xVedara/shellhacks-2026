@@ -82,6 +82,12 @@ export const voteWeight = (karma: number) => 1 + Math.log(1 + Math.max(karma, 0)
  * device's miss (-0.2). One vote per device per pin, so the same walker passing twice does not stack.
  */
 export const WALKER_MISS_WEIGHT = 0.6;
+/**
+ * A pin clears below -2 (explicit scout/verifier votes, so one remote click never erases a hazard), or below 0 once
+ * at least 2 different walkers passed it and saw nothing ("deleted if 2 people walk past and see nothing").
+ */
+export const shouldClear = (confidence: number, walkerMisses: number) =>
+  confidence < -2 || (confidence < 0 && walkerMisses >= 2);
 const toId = (s: string) => (/^[a-f0-9]{24}$/i.test(s) ? new ObjectId(s) : null);
 const defaultName = (id: string) => `Neighbor-${id.slice(0, 4)}`;
 /** Public stand-in for a device id: the raw id works as a credential, so never echo it. */
@@ -311,10 +317,17 @@ export function buildApp({
     );
     // ponytail: recompute-then-set can lose a concurrent vote's contribution until the next vote;
     // switch to a $inc of the signed delta if votes on one hazard ever race in practice.
+    // misses: walker down-votes, one per device (the upsert above), so this counts distinct devices
     const [agg] = await votes
-      .aggregate<{ c: number }>([
+      .aggregate<{ c: number; misses: number }>([
         { $match: { hazardId: h._id } },
-        { $group: { _id: null, c: { $sum: { $cond: [{ $eq: ['$vote', 'up'] }, '$weight', { $multiply: ['$weight', -1] }] } } } },
+        {
+          $group: {
+            _id: null,
+            c: { $sum: { $cond: [{ $eq: ['$vote', 'up'] }, '$weight', { $multiply: ['$weight', -1] }] } },
+            misses: { $sum: { $cond: [{ $and: [{ $eq: ['$vote', 'down'] }, { $eq: ['$source', 'walker'] }] }, 1, 0] } },
+          },
+        },
       ])
       .toArray();
     const confidence = agg?.c ?? 0;
@@ -328,7 +341,7 @@ export function buildApp({
       await votes.deleteMany({ hazardId: h._id }); // hazard vanished (TTL) mid-request: drop the orphan vote
       return null;
     }
-    if (updated.status === 'active' && confidence < 0) {
+    if (updated.status === 'active' && shouldClear(confidence, agg?.misses ?? 0)) {
       // conditional on status so only one concurrent voter settles karma
       const cleared = await hazards.findOneAndUpdate(
         { _id: h._id, status: 'active' },

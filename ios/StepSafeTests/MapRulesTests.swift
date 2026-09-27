@@ -444,6 +444,19 @@ final class MapRulesTests: XCTestCase {
         }
     }
 
+    func testKnownPinIsSpokenOnlyOnceNamed() {
+        var p = pin("k", 0, 0) // "trash bin"
+        XCTAssertTrue(p.isNamed)
+        for label in ["obstacle", "drop-off", "obstacle at head height"] {
+            p.label = label
+            XCTAssertFalse(p.isNamed, label)
+        }
+        p.type = "obstacle"; p.label = nil
+        XCTAssertFalse(p.isNamed)
+        p.type = "pothole"; p.label = "drop-off: pothole"
+        XCTAssertTrue(p.isNamed)
+    }
+
     func testTTSFallbackSelection() {
         XCTAssertTrue(TTSChoice.useClip(status: 200, contentType: "audio/mpeg", bytes: 4000, elapsed: 1.2))
         for status in [404, 503, 502, 429, 500] {
