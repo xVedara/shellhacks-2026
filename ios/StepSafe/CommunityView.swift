@@ -32,6 +32,8 @@ final class CommunityModel: ObservableObject {
     /// While the Walker session runs, VoiceOver announcements from this tab stay quiet so they never talk
     /// over its hazard alerts (the status text still updates).
     var walkerRunning = false
+    /// False while another tab shows: late results (an SSE hazard, a vote answer) are not spoken there.
+    var tabVisible = false
 
     init(api: APIClient) { self.api = api }
 
@@ -155,7 +157,7 @@ final class CommunityModel: ObservableObject {
                 pins.append(h)
                 if Community.isFresh(lastSeen: h.lastSeen) {
                     postVoiceOverAnnouncement(t("New hazard reported, ", "Nuevo peligro reportado, ") + Community.distance(d, lang: lang),
-                                              walkerRunning: walkerRunning)
+                                              walkerRunning: walkerRunning, tabVisible: tabVisible)
                 }
             }
             pins.sort { ($0.distanceM ?? .infinity) < ($1.distanceM ?? .infinity) }
@@ -222,7 +224,7 @@ final class CommunityModel: ObservableObject {
 
     func announce(_ text: String) {
         status = text
-        postVoiceOverAnnouncement(text, walkerRunning: walkerRunning)
+        postVoiceOverAnnouncement(text, walkerRunning: walkerRunning, tabVisible: tabVisible)
     }
 }
 
@@ -245,9 +247,12 @@ struct CommunityView: View {
 
     /// AppModel.running: the Walker session is live, so this tab makes no VoiceOver announcements.
     var walkerRunning: Bool
+    /// RootView's tab == .community.
+    var visible: Bool
 
-    init(api: APIClient, walkerRunning: Bool) {
+    init(api: APIClient, walkerRunning: Bool, visible: Bool = true) {
         self.walkerRunning = walkerRunning
+        self.visible = visible
         _model = StateObject(wrappedValue: CommunityModel(api: api))
     }
 
@@ -276,6 +281,7 @@ struct CommunityView: View {
             .navigationDestination(for: String.self) { HazardDetailView(id: $0, model: model) }
         }
         .onChange(of: walkerRunning, initial: true) { model.walkerRunning = walkerRunning }
+        .onChange(of: visible, initial: true) { model.tabVisible = visible }
         .onAppear {
             model.start()
             // `-openHazard <id>` opens one detail at launch (demo and screenshots).
@@ -363,15 +369,35 @@ struct CommunityView: View {
                   radiusM: Community.radiusM, lang: model.lang,
                   onSelect: { path.append($0) }, onStack: { stacked = $0 })
             .overlay(alignment: .top) { HazardMapLegend(lang: model.lang).padding(.top, 8) }
+            .overlay { mapState } // the list's loading and empty states, on the map too
             .clipShape(RoundedRectangle(cornerRadius: 16))
             .padding(.bottom, 8)
             .confirmationDialog(t("Hazards at this spot", "Peligros en este punto"),
                                 isPresented: Binding(get: { stacked != nil }, set: { if !$0 { stacked = nil } }),
                                 titleVisibility: .visible) {
                 ForEach(model.pins.filter { stacked?.contains($0.id) == true }) { pin in
-                    Button(model.name(type: pin.type, label: pin.label)) { path.append(pin.id) }
+                    // Name, category and distance: stacked hazards often share a name.
+                    Button([model.name(type: pin.type, label: pin.label), HazardMap.category(pin.category, lang: model.lang).lowercased(),
+                            pin.distanceM.map { Community.distance($0, lang: model.lang) }]
+                        .compactMap { $0 }.joined(separator: ", ")) { path.append(pin.id) }
                 }
             }
+    }
+
+    @ViewBuilder
+    private var mapState: some View {
+        if !model.loaded && model.status == nil {
+            ProgressView(t("Loading hazards", "Cargando peligros"))
+                .padding(12)
+                .background(Color.navy.opacity(0.9), in: RoundedRectangle(cornerRadius: 12))
+        } else if model.loaded && model.pins.isEmpty {
+            Text(t("No hazards reported within 1 mile", "Sin peligros reportados a menos de 1 milla"))
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+                .padding(12)
+                .background(Color.navy.opacity(0.9), in: RoundedRectangle(cornerRadius: 12))
+                .padding(16)
+        }
     }
 }
 

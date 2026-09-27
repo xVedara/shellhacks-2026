@@ -80,8 +80,6 @@ extension Color {
     static let navy = Color(red: 8 / 255, green: 22 / 255, blue: 36 / 255)
     static let hazard = Color(red: 1, green: 121 / 255, blue: 0)           // #FF7900, hazards only
     static let control = Color(red: 8 / 255, green: 127 / 255, blue: 245 / 255) // #087FF5
-    /// Blue for a symbol on a neutral button inside a card (#2E3A46): #087FF5 is only 2.96:1 there, #3D9BFF is 4.05:1.
-    static let controlOnCard = Color(red: 61 / 255, green: 155 / 255, blue: 1)
     /// Slate #9AA5B1, secondary text (brandguide/README.md): 7.29:1 on navy, 6.29:1 on a card. The old #66717E was
     /// only 3.67:1 on navy, below the 4.5:1 text minimum.
     static let slate = Color(red: 154 / 255, green: 165 / 255, blue: 177 / 255)

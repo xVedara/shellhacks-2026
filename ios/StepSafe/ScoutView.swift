@@ -19,7 +19,7 @@ struct RootView: View {
             ScoutView(model: model, cameraLive: tab == .scout)
                 .tabItem { Label("Scout", systemImage: "camera.viewfinder") }
                 .tag(Tab.scout)
-            CommunityView(api: model.link.api, walkerRunning: model.running)
+            CommunityView(api: model.link.api, walkerRunning: model.running, visible: tab == .community)
                 .tabItem { Label(TTSChoice.lang() == "es" ? "Comunidad" : "Community", systemImage: "person.3") }
                 .tag(Tab.community)
         }
@@ -158,6 +158,8 @@ final class ScoutModel: ObservableObject, @unchecked Sendable { // main-confined
             DispatchQueue.main.async {
                 self.status = .message(r.map { $0.applied ? "Type changed to \(name)" : "Proposed \(name) (\($0.agreeing) of 3 agree)" }
                     ?? "Correction failed")
+                self.spoken = nil
+                self.speak(self.status.text)
                 self.refresh()
             }
         }
@@ -202,16 +204,46 @@ final class ScoutModel: ObservableObject, @unchecked Sendable { // main-confined
         postVoiceOverAnnouncement(text, walkerRunning: walkerRunning, tabVisible: scoutVisible)
     }
 
+    /// Hazard ids with a vote being sent (both buttons disabled), as in Community.
+    @Published private(set) var voting: Set<String> = []
+
+    /// "up" / "down" once this device voted on the hazard, from either tab (Community's store: one vote per hazard).
+    func myVote(_ id: String) -> String? {
+        (UserDefaults.standard.dictionary(forKey: CommunityModel.votedKey) as? [String: String])?[id]
+    }
+
+    /// Same rules as the Community detail: one vote per hazard, a fresh accurate fix, disabled while sending,
+    /// and the result spoken through the Walker and tab gate.
     func vote(_ pin: NearHazard, up: Bool) {
+        guard myVote(pin.id) == nil, !voting.contains(pin.id) else { return }
+        let name = name(pin)
+        guard let q = link.localizer.fixQuality,
+              Community.canVote(from: link.localizer.fix, accuracyM: q.accuracyM, ageS: q.ageS, to: pin.fix) else {
+            announce(.message("Waiting for a GPS fix to vote on \(name)"))
+            return
+        }
+        voting.insert(pin.id)
         let api = link.api
         Task {
-            let r = try? await api.vote(pin.id, up: up, source: "scout")
+            let ok = (try? await api.vote(pin.id, up: up, source: "scout")) != nil
             DispatchQueue.main.async {
-                self.status = .message(r.map { "Voted \(up ? "up" : "down") on \(self.name(pin)): confidence \(String(format: "%.1f", $0.confidence)), \($0.status)" }
-                    ?? "Vote failed")
+                self.voting.remove(pin.id)
+                if ok {
+                    var all = UserDefaults.standard.dictionary(forKey: CommunityModel.votedKey) as? [String: String] ?? [:]
+                    all[pin.id] = up ? "up" : "down"
+                    UserDefaults.standard.set(all, forKey: CommunityModel.votedKey)
+                }
+                self.announce(.message(ok ? (up ? "Marked still there by you: " : "Marked gone by you: ") + name
+                                          : "Vote failed: \(name)"))
                 self.refresh()
             }
         }
+    }
+
+    private func announce(_ s: ScoutStatus) {
+        status = s
+        spoken = nil // the same words after a new action are still news
+        speak(s.text)
     }
 }
 
@@ -346,7 +378,7 @@ struct ScoutView: View {
                     .font(wide ? .title3.bold() : .title2)
                     .frame(maxWidth: wide ? .infinity : nil)
                     .frame(minWidth: 56, minHeight: 56)
-                    .background(wide ? Color.control : Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+                    .background(wide ? Color.control : Color.navy, in: RoundedRectangle(cornerRadius: 12))
                     .foregroundStyle(.white)
             }
             .accessibilityLabel("Correct type: \(target.name)")
@@ -404,14 +436,20 @@ struct ScoutView: View {
     }
 
     private func voteButton(_ pin: NearHazard, up: Bool) -> some View {
-        Button { scout.vote(pin, up: up) } label: {
+        let mine = scout.myVote(pin.id)
+        let sending = scout.voting.contains(pin.id)
+        return Button { scout.vote(pin, up: up) } label: {
             Image(systemName: up ? "hand.thumbsup.fill" : "hand.thumbsdown.fill")
                 .font(.title2)
                 .frame(minWidth: 56, minHeight: 56) // grows with the symbol at large text sizes
-                .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
-                .foregroundStyle(up ? Color.controlOnCard : Color.white) // orange is for hazards, not controls
+                // Navy well inside the card: #087FF5 is 4.66:1 on it (2.96:1 on the old white-10% surface).
+                .background(Color.navy, in: RoundedRectangle(cornerRadius: 12))
+                .foregroundStyle(up ? Color.control : Color.white) // orange is for hazards, not controls
         }
+        .disabled(sending || mine != nil)
+        .opacity(sending || (mine != nil && mine != (up ? "up" : "down")) ? 0.4 : 1) // your vote stays bright
         .accessibilityLabel(up ? "Still there: \(scout.name(pin))" : "Gone: \(scout.name(pin))")
+        .accessibilityValue(mine == (up ? "up" : "down") ? "Marked by you" : "")
     }
 }
 
