@@ -7,7 +7,7 @@ import { buildApp, ipKey, renamePending, voteWeight } from '../src/app.ts';
 import { ensureIndexes } from '../src/db.ts';
 import type { Naming } from '../src/gemini.ts';
 import { ollamaNamer } from '../src/namer.ts';
-import { envBudget, TtsBudgetError, type Tts } from '../src/tts.ts';
+import { elevenLabsTts, envBudget, TtsBudgetError, type Tts } from '../src/tts.ts';
 import { TAXONOMY } from '../src/taxonomy.ts';
 import { PROBES } from './probes.ts';
 
@@ -670,6 +670,22 @@ describe('GET /tts', () => {
       while ((await get('x'.repeat(100) + i, `10.1.0.${i}`)).statusCode === 200) i++;
       expect(i).toBe(4); // 4 x 101 chars fit under 500 with ~50 already used
       expect((await get('p0', '10.9.9.9')).statusCode).toBe(200); // hits still served after the daily cap
+    } finally {
+      await withTts.close();
+    }
+  });
+
+  it('refunds the daily character budget when ElevenLabs fails, so the next miss is not 429', async () => {
+    const tts = elevenLabsTts({
+      apiKey: 'k',
+      cacheDir: '/tmp/stepsafe-tts-refund-missing',
+      fetchImpl: async () => new Response('no', { status: 500, headers: { 'content-type': 'application/json' } }),
+    });
+    const withTts = buildApp({ db, namer, tts, rateLimitPerMin: 100_000, ttsDailyChars: 10, ttsMissPerMin: 100 });
+    try {
+      expect((await withTts.inject({ url: '/tts?text=hello' })).statusCode).toBe(502); // 5 chars, reserved then refunded
+      // 6 more would exceed a budget that still held the first 5; a refund leaves room and upstream fails again
+      expect((await withTts.inject({ url: '/tts?text=hello!' })).statusCode).toBe(502);
     } finally {
       await withTts.close();
     }

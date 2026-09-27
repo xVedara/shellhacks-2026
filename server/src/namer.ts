@@ -110,7 +110,7 @@ export async function selectNamer(env: NodeJS.ProcessEnv = process.env, fetchImp
   if (env.GEMINI_API_KEY) {
     const model = env.GEMINI_MODEL || 'gemini-flash-lite-latest';
     const ms = timeout(DEFAULT_TIMEOUT_MS.gemini);
-    // ponytail: no concurrency cap for Gemini (cloud, 4 s timeout); wrap it in limitConcurrency if quota bites
+    // ponytail: no concurrency cap for Gemini (cloud, 6 s default timeout); wrap it in limitConcurrency if quota bites
     return {
       provider: 'gemini', namer: geminiNamer(env.GEMINI_API_KEY, model, ms), busy: () => false, warm: async () => null,
       detail: `gemini ${model}, timeout ${ms} ms`,

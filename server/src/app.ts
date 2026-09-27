@@ -637,6 +637,14 @@ export function buildApp({
         if (ttsDay.day !== today) Object.assign(ttsDay, { day: today, chars: 0, perIp: new Map() });
         const ip = clientIp(req);
         const ipChars = ttsDay.perIp.get(ip) ?? 0;
+        if (chars < 0) {
+          // Refund a reservation after a failed upstream call. Does not touch the per-minute miss counter.
+          ttsDay.chars = Math.max(0, ttsDay.chars + chars);
+          const next = Math.max(0, ipChars + chars);
+          if (next === 0) ttsDay.perIp.delete(ip);
+          else ttsDay.perIp.set(ip, next);
+          return true;
+        }
         if (ttsDay.chars + chars > ttsDailyChars || ipChars + chars > ttsIpDailyChars) return false;
         if (over(`ttsmiss:${ip}`, ttsMissPerMin, Date.now())) return false;
         ttsDay.chars += chars;

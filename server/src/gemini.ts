@@ -42,6 +42,24 @@ const SCHEMA = {
   required: ['type', 'category', 'heightBand', 'severity'],
 };
 
+/**
+ * Races `work` against an abort. If the abort wins, a later rejection of `work` is swallowed so it
+ * does not surface as an unhandledRejection (the Gemini call rejects again once the signal fires).
+ */
+export async function raceAbort<T>(work: Promise<T>, signal: AbortSignal, timeoutError: Error): Promise<T> {
+  try {
+    return await Promise.race([
+      work,
+      new Promise<never>((_, reject) => {
+        if (signal.aborted) reject(timeoutError);
+        else signal.addEventListener('abort', () => reject(timeoutError), { once: true });
+      }),
+    ]);
+  } finally {
+    void work.catch(() => {});
+  }
+}
+
 const oneOf = <T extends string>(v: unknown, allowed: readonly T[]) => {
   const s = typeof v === 'string' ? v.trim().toLowerCase() : '';
   return allowed.includes(s as T) ? (s as T) : null;
@@ -79,29 +97,25 @@ export function geminiNamer(apiKey: string | undefined, model = 'gemini-flash-li
   return async (cropBase64, heightBand, typeHint) => {
     const abort = new AbortController();
     const timer = setTimeout(() => abort.abort(), timeoutMs);
-    try {
-      const res = await Promise.race([
-        ai.models.generateContent({
-          model,
-          contents: [
-            {
-              role: 'user',
-              parts: [
-                { inlineData: { mimeType: 'image/jpeg', data: cropBase64 } },
-                { text: namingPrompt(heightBand, typeHint) },
-              ],
-            },
+    const pending = ai.models.generateContent({
+      model,
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { inlineData: { mimeType: 'image/jpeg', data: cropBase64 } },
+            { text: namingPrompt(heightBand, typeHint) },
           ],
-          config: {
-            responseMimeType: 'application/json',
-            responseSchema: SCHEMA,
-            abortSignal: abort.signal,
-          },
-        }),
-        new Promise<never>((_, reject) =>
-          abort.signal.addEventListener('abort', () => reject(new Error('gemini timeout'))),
-        ),
-      ]);
+        },
+      ],
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: SCHEMA,
+        abortSignal: abort.signal,
+      },
+    });
+    try {
+      const res = await raceAbort(pending, abort.signal, new Error('gemini timeout'));
       return parseNaming(JSON.parse(res.text ?? ''));
     } catch (err) {
       console.warn('gemini naming failed:', (err as Error).message);
