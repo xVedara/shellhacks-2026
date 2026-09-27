@@ -136,7 +136,7 @@ export default function VerifyPage() {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <PageBar title="Verify queue">
-        <label className="inline-flex cursor-pointer items-center gap-2 text-[13px] font-medium text-ink">
+        <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 text-[13px] font-medium text-ink">
           <input
             type="checkbox"
             checked={shortcutsOn}
@@ -271,7 +271,7 @@ export default function VerifyPage() {
             </dl>
             <Link
               href={`/hazard/${encodeURIComponent(current.id)}`}
-              className={`${linkClass} inline-block text-[13px]`}
+              className={`${linkClass} inline-flex min-h-11 items-center text-[13px]`}
             >
               Full details and vote history
             </Link>
@@ -280,11 +280,11 @@ export default function VerifyPage() {
           {/* Direct child of the article so it can stick to the bottom of a phone screen. */}
           <div className="sticky bottom-0 z-[1100] -mx-4 grid grid-cols-3 gap-2 border-t border-line bg-card p-3 md:static md:mx-0 md:border-0 md:bg-transparent md:p-0">
             <button type="button" disabled={busy || !ready} aria-keyshortcuts={shortcutsOn ? "U" : undefined} onClick={() => vote("up")} className={`${voteButton} border-primary bg-primary text-primary-ink hover:opacity-90`}>
-              <span>▲ Still there</span>
+              <span><span aria-hidden="true">▲ </span>Still there</span>
               <span className="text-[12px] font-normal">Upvote{shortcutsOn && <span className="hidden md:inline"> · U</span>}</span>
             </button>
             <button type="button" disabled={busy || !ready} aria-keyshortcuts={shortcutsOn ? "D" : undefined} onClick={() => vote("down")} className={`${voteButton} border-field bg-card text-ink hover:bg-hover`}>
-              <span>▼ Gone</span>
+              <span><span aria-hidden="true">▼ </span>Gone</span>
               <span className="text-[12px] font-normal text-ink-3">Not a hazard{shortcutsOn && <span className="hidden md:inline"> · D</span>}</span>
             </button>
             <button type="button" disabled={busy} aria-keyshortcuts={shortcutsOn ? "S" : undefined} onClick={skip} className={`${voteButton} border-line bg-card text-ink hover:bg-hover`}>

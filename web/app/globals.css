@@ -105,6 +105,13 @@
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
 }
 
+/* The side-panel layout starts at 1024px. Below that (phones and portrait tablets)
+   the map runs full width under the bottom sheet; a 768px tablet left the map 128px wide.
+   Keep in step with DESKTOP_QUERY in components/ui.tsx. */
+@theme {
+  --breakpoint-md: 64rem;
+}
+
 html {
   background: var(--page);
 }
@@ -117,7 +124,7 @@ html {
   padding-right: env(safe-area-inset-right, 0px);
   padding-left: env(safe-area-inset-left, 0px);
 }
-@media (min-width: 768px) {
+@media (min-width: 1024px) {
   .app-chrome {
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
@@ -126,7 +133,7 @@ html {
   padding-right: max(16px, env(safe-area-inset-right, 0px));
   padding-left: max(16px, env(safe-area-inset-left, 0px));
 }
-@media (min-width: 768px) {
+@media (min-width: 1024px) {
   .top-bar {
     padding-right: max(24px, env(safe-area-inset-right, 0px));
     padding-left: max(24px, env(safe-area-inset-left, 0px));
@@ -224,6 +231,13 @@ body {
   text-decoration: underline;
 }
 
+/* Expanded sheet: the map strip is too short for the zoom and locate buttons, which
+   would slide under the header while still taking focus (WCAG 2.4.11). */
+.map-stage.controls-hidden .leaflet-control-zoom,
+.map-stage.controls-hidden .map-locate {
+  display: none;
+}
+
 .map-locate {
   position: absolute;
   z-index: 1000;
@@ -266,7 +280,7 @@ body {
 .instrument-card {
   --panel-h: min(640px, 68%);
 }
-@media (min-width: 768px) {
+@media (min-width: 1024px) {
   .sheet-panel {
     position: relative;
     top: auto;

@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import HazardDetail, { useHazardDetail } from "@/components/HazardDetail";
 import { ThemeToggle } from "@/components/Header";
 import Map from "@/components/Map";
-import { Legend, LiveDot, Notice, SampleBadge, TypeIcon, linkClass, primaryButton, secondaryButton } from "@/components/ui";
+import { DESKTOP_QUERY, Legend, LiveDot, Notice, SampleBadge, TypeIcon, linkClass, primaryButton, secondaryButton } from "@/components/ui";
 import { API_URL, CATEGORY_META, GRAHAM_CENTER, HEIGHT_META, relativeTime, typeDisplayName, type HazardSummary } from "@/lib/api";
 import { milesFromGraham } from "@/lib/geo";
 import { useLiveHazards, useNow, useTaxonomy, type Connection } from "@/lib/hooks";
@@ -25,11 +25,11 @@ const DETENTS: Detent[] = ["peek", "medium", "expanded"];
 function useDesktop() {
   return useSyncExternalStore(
     (onChange) => {
-      const mq = matchMedia("(min-width: 768px)");
+      const mq = matchMedia(DESKTOP_QUERY);
       mq.addEventListener("change", onChange);
       return () => mq.removeEventListener("change", onChange);
     },
-    () => matchMedia("(min-width: 768px)").matches,
+    () => matchMedia(DESKTOP_QUERY).matches,
     () => false,
   );
 }
@@ -123,13 +123,13 @@ export default function MapPage() {
     const el = panelRef.current;
     if (!el) return;
     const read = () => {
-      const wide = matchMedia("(min-width: 768px)").matches;
+      const wide = matchMedia(DESKTOP_QUERY).matches;
       const next = wide ? 0 : Math.round(el.getBoundingClientRect().height);
       setMeasuredSheet((prev) => (prev === next ? prev : next));
     };
     const ro = new ResizeObserver(read);
     ro.observe(el);
-    const mq = matchMedia("(min-width: 768px)");
+    const mq = matchMedia(DESKTOP_QUERY);
     mq.addEventListener("change", read);
     return () => {
       ro.disconnect();
@@ -207,7 +207,17 @@ export default function MapPage() {
 
   return (
     <div ref={stageRef} className="relative flex min-h-0 flex-1">
-      <div className="map-stage relative min-h-0 min-w-0 flex-1" style={{ ["--sheet" as string]: `${sheet}px` }}>
+      <a
+        href="#hazard-panel"
+        className="sr-only z-[1300] rounded-md bg-card px-3 py-2 font-medium text-heading focus:not-sr-only focus:absolute focus:left-2 focus:top-2"
+      >
+        Skip to hazard list
+      </a>
+      {/* The zoom and locate buttons need about 170px of map above the sheet. */}
+      <div
+        className={`map-stage relative min-h-0 min-w-0 flex-1${!desktop && stageH - sheet < 170 ? " controls-hidden" : ""}`}
+        style={{ ["--sheet" as string]: `${sheet}px` }}
+      >
         <Map
           hazards={list}
           center={GRAHAM_CENTER}
@@ -220,7 +230,8 @@ export default function MapPage() {
           sheet={sheet}
         />
         {connection === "down" && !loaded && (
-          <div className="absolute inset-0 z-[1100] flex items-center justify-center bg-page/85 p-4">
+          // Above the tiles and pins, below the map controls, so the OpenStreetMap credit stays readable.
+          <div className="absolute inset-0 z-[950] flex items-center justify-center bg-page/85 p-4">
             <div className="max-w-md rounded-xl bg-card shadow-[var(--float-shadow)]">
               <Notice tone="warn" title="Can’t reach the StepSafe server">
                 <p>
@@ -235,7 +246,9 @@ export default function MapPage() {
 
       <aside
         ref={panelRef}
-        className={`sheet-panel${dragging ? " is-dragging" : ""}`}
+        id="hazard-panel"
+        tabIndex={-1}
+        className={`sheet-panel focus-visible:outline-none${dragging ? " is-dragging" : ""}`}
         style={{ ["--panel-h" as string]: `${panelPx}px` }}
         aria-label={showPeek ? "Live status" : detailOpen ? "Hazard details" : "Nearby hazards"}
       >
@@ -253,9 +266,17 @@ export default function MapPage() {
           onPointerMove={onGrabMove}
           onPointerUp={onGrabUp}
           onPointerCancel={onGrabUp}
+          // Enter/Space and a screen reader's double-tap arrive as a click with detail 0; a tap is handled on pointer up.
+          onClick={(e) => {
+            if (e.detail === 0) setDetent(DETENTS[(DETENTS.indexOf(detent) + 1) % DETENTS.length]);
+          }}
           onKeyDown={(e) => {
-            if (e.key === "ArrowUp") setDetent(DETENTS[Math.min(2, DETENTS.indexOf(detent) + 1)]);
-            if (e.key === "ArrowDown") setDetent(DETENTS[Math.max(0, DETENTS.indexOf(detent) - 1)]);
+            const i = DETENTS.indexOf(detent);
+            const byKey: Record<string, number> = { ArrowUp: i + 1, ArrowRight: i + 1, ArrowDown: i - 1, ArrowLeft: i - 1, Home: 0, End: 2 };
+            const next = byKey[e.key];
+            if (next === undefined) return;
+            e.preventDefault();
+            setDetent(DETENTS[Math.min(2, Math.max(0, next))]);
           }}
         >
           <span className="block h-[5px] w-9 rounded-full bg-[var(--border-strong)]" />

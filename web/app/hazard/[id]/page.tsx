@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import HazardDetail, { useHazardDetail } from "@/components/HazardDetail";
 import Map from "@/components/Map";
-import { Notice, TypeIcon, primaryButton } from "@/components/ui";
+import { DESKTOP_QUERY, Notice, TypeIcon, primaryButton } from "@/components/ui";
 import { CATEGORY_META, HEIGHT_META, relativeTime, typeDisplayName, type HazardDetail as Detail } from "@/lib/api";
 import { milesFromGraham } from "@/lib/geo";
 import { useHazardRevision, useNow, useTaxonomy } from "@/lib/hooks";
@@ -23,12 +23,12 @@ export default function HazardPage() {
     const el = panelRef.current;
     if (!el) return;
     const read = () => {
-      const desktop = matchMedia("(min-width: 768px)").matches;
+      const desktop = matchMedia(DESKTOP_QUERY).matches;
       setSheet(desktop ? 0 : el.getBoundingClientRect().height);
     };
     const ro = new ResizeObserver(read);
     ro.observe(el);
-    const mq = matchMedia("(min-width: 768px)");
+    const mq = matchMedia(DESKTOP_QUERY);
     mq.addEventListener("change", read);
     return () => {
       ro.disconnect();
@@ -52,7 +52,7 @@ export default function HazardPage() {
             sheet={sheet}
           />
         ) : (
-          <div className="flex h-full items-center justify-center text-ink-3" role="status">
+          <div className="flex h-full items-center justify-center text-ink-3" role="status" style={{ paddingBottom: sheet }}>
             {loading ? "Loading map…" : "Map unavailable"}
           </div>
         )}
@@ -62,6 +62,7 @@ export default function HazardPage() {
           <Link href={`/?selected=${encodeURIComponent(hazardId)}`} className="inline-flex min-h-11 items-center text-[14px] font-medium text-accent">
             Live map
           </Link>
+          {!detail && <h1 className="sr-only">Hazard</h1>}
           {loading && (
             <p role="status" className="text-ink-3">
               Loading hazard details…
@@ -91,7 +92,7 @@ function HazardRecord({
   return (
     <>
       <p className="mt-1 flex items-center gap-2 text-[15px] font-semibold tracking-[-0.02em]">
-        <span className="h-2 w-2 rounded-full bg-ok" aria-hidden="true" />
+        <span className={`h-2 w-2 rounded-full ${detail.status === "cleared" ? "bg-ink-3" : "bg-alert"}`} aria-hidden="true" />
         {detail.status === "cleared" ? "Cleared" : "Hazard"}
       </p>
       <div className="mt-2 flex items-start gap-3">
@@ -126,8 +127,14 @@ function HazardRecord({
       <Link href="/verify" className={`${primaryButton} mt-3 w-full`}>
         Verify
       </Link>
-      <details className="mt-4 border-t border-line pt-2">
-        <summary className="flex min-h-11 cursor-pointer items-center text-[14px] font-medium">History and measurements</summary>
+      <details className="group mt-4 border-t border-line pt-2">
+        {/* display:flex drops the native disclosure triangle, so draw one. */}
+        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 text-[14px] font-medium [&::-webkit-details-marker]:hidden">
+          History and measurements
+          <svg className="shrink-0 text-ink-3 transition-transform duration-200 group-open:rotate-180 motion-reduce:transition-none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </summary>
         <div className="pb-2 pt-2">
           <HazardDetail hazard={detail} taxonomy={taxonomy} hideHeading now={now} />
         </div>
