@@ -68,12 +68,191 @@ struct NearHazard: Codable, Identifiable, Equatable {
     var label: String?
     var sample: Bool?
     var distanceM: Double?
+    /// ISO 8601; nil from older servers.
+    var lastSeen: String?
 
     var fix: Geo.Fix { Geo.Fix(lat: lat, lng: lng) }
     var isActive: Bool { (status ?? "active") == "active" }
     var spokenName: String { Spoken.capitalized(label ?? type) }
     /// False while the pin still has the server's generic label (the renamer has not named it yet).
     var isNamed: Bool { !Spoken.isGeneric(label ?? type) }
+}
+
+/// GET /hazards/:id (server/src/app.ts): the summary plus measurements, photo, votes and pending reclassifications.
+struct HazardDetail: Decodable, Equatable {
+    struct Measurements: Decodable, Equatable { var clearanceM: Double?; var widthM: Double? }
+
+    var id: String
+    var type: String
+    var category: String
+    var lat: Double
+    var lng: Double
+    var heightBand: String
+    var confidence: Double
+    var lastSeen: String
+    var status: String
+    var label: String?
+    var sample: Bool?
+    var measurements: Measurements?
+    /// Base64 JPEG; nil or empty when the pin has no photo (samples).
+    var crop: String?
+    var spokenLabel_es: String?
+    var severity: Double
+    var createdAt: String
+    var expiresAt: String
+    var votes: [HazardVote]
+    var pendingReclassifications: [PendingReclass]
+
+    var fix: Geo.Fix { Geo.Fix(lat: lat, lng: lng) }
+    var ups: Int { votes.filter { $0.vote == "up" }.count }
+    var downs: Int { votes.filter { $0.vote == "down" }.count }
+}
+
+struct HazardVote: Decodable, Equatable {
+    var deviceId: String
+    var vote: String
+    var source: String
+    var weight: Double
+    var at: String
+}
+
+struct PendingReclass: Decodable, Equatable {
+    var type: String?
+    var category: String?
+    var heightBand: String?
+    var count: Int
+}
+
+/// GET /users/:deviceId.
+struct UserInfo: Decodable, Equatable {
+    var displayName: String
+    var karma: Double
+}
+
+/// Community tab rules: 1-mile radius and vote gate, imperial distances, clock/compass bearings, SSE lines.
+enum Community {
+    /// Nearby radius and in-person vote gate: 1 mile (Ara 2026-09-26, demo setting).
+    static let radiusM = 1609.0
+    static let pollSeconds: Double = 15
+    /// A fix counts for voting only when it is this accurate and this fresh.
+    static let voteMaxAccuracyM = 100.0
+    static let voteMaxFixAgeS = 30.0
+    /// Refetch the nearby list after moving this far from where it was last fetched.
+    static let refetchMovedM = 200.0
+    /// An SSE hazard new to the list is announced only if seen this recently (not an old pin coming into range).
+    static let announceMaxAgeS = 120.0
+
+    /// The fix is good enough to vote with: accuracy <= 100 m, at most 30 s old.
+    static func fixUsable(accuracyM: Double, ageS: Double) -> Bool {
+        accuracyM >= 0 && accuracyM <= voteMaxAccuracyM && ageS <= voteMaxFixAgeS
+    }
+
+    /// Votes only in person: a usable GPS fix within 1 mile of the pin.
+    static func canVote(from fix: Geo.Fix?, accuracyM: Double, ageS: Double, to pin: Geo.Fix) -> Bool {
+        guard let fix, fixUsable(accuracyM: accuracyM, ageS: ageS) else { return false }
+        return canVote(distanceM: Geo.distance(fix, pin))
+    }
+    static func canVote(distanceM: Double) -> Bool { distanceM <= radiusM }
+
+    /// Imperial only: feet under 0.1 mile (to the foot under 50 ft, so clearances stay exact; else to 5 ft),
+    /// else "0.3 miles" (one decimal).
+    static func distance(_ m: Double, lang: String = "en") -> String {
+        let miles = m / 1609.344
+        if miles < 0.1 {
+            let ft = m * 3.28084
+            let feet = ft < 50 ? max(1, Int(ft.rounded())) : Int((ft / 5).rounded()) * 5
+            return "\(feet) " + (lang == "es" ? (feet == 1 ? "pie" : "pies") : (feet == 1 ? "foot" : "feet"))
+        }
+        let s = String(format: "%.1f", miles)
+        return "\(s) \(lang == "es" ? (s == "1.0" ? "milla" : "millas") : (s == "1.0" ? "mile" : "miles"))"
+    }
+
+    /// Clock hour 1...12 of `bearing` relative to `heading` (12 = straight ahead, 3 = right).
+    static func clock(bearing: Double, heading: Double) -> Int {
+        let h = Int((Geo.normalize(bearing - heading) / 30).rounded()) % 12
+        return h == 0 ? 12 : h
+    }
+
+    /// "2 o'clock" with a heading, else the compass point ("northeast").
+    static func direction(bearing: Double, heading: Double?, lang: String = "en") -> String {
+        if let heading {
+            let h = clock(bearing: bearing, heading: heading)
+            return lang == "es" ? "a las \(h)" : "\(h) o'clock"
+        }
+        let en = ["north", "northeast", "east", "southeast", "south", "southwest", "west", "northwest"]
+        let es = ["norte", "noreste", "este", "sureste", "sur", "suroeste", "oeste", "noroeste"]
+        let i = Int((Geo.normalize(bearing) / 45).rounded()) % 8
+        return lang == "es" ? es[i] : en[i]
+    }
+
+    /// Server confidence is a vote score (below -2 the pin is removed), not a percentage: "3", "1.5".
+    static func confidence(_ c: Double) -> String {
+        c == c.rounded() ? String(Int(c)) : String(format: "%.1f", c)
+    }
+
+    /// One VoiceOver line per row: "Sample. Low branch, 40 feet, 2 o'clock, confidence 3".
+    static func rowLabel(name: String, sample: Bool, confidence c: Double, walker: Geo.Fix?, pin: Geo.Fix,
+                         distanceM: Double?, heading: Double?, lang: String = "en") -> String {
+        var parts = [name]
+        if let d = walker.map({ Geo.distance($0, pin) }) ?? distanceM { parts.append(distance(d, lang: lang)) }
+        if let walker { parts.append(direction(bearing: Geo.bearing(from: walker, to: pin), heading: heading, lang: lang)) }
+        parts.append((lang == "es" ? "confianza " : "confidence ") + confidence(c))
+        return (sample ? (lang == "es" ? "Muestra. " : "Sample. ") : "") + parts.joined(separator: ", ")
+    }
+
+    /// Announce a hazard that just appeared in the list only when it was seen in the last 2 minutes.
+    static func isFresh(lastSeen: String?, now: Date = Date()) -> Bool {
+        guard let seen = lastSeen.flatMap(date) else { return false }
+        return now.timeIntervalSince(seen) <= announceMaxAgeS
+    }
+
+    static func date(_ iso: String) -> Date? {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f.date(from: iso) ?? ISO8601DateFormatter().date(from: iso)
+    }
+
+    /// A GET /events message, or `.open` once the stream answered 200.
+    enum Event: Equatable { case open, upsert(NearHazard), remove(String) }
+
+    /// Line-by-line SSE reader for `event: hazard` messages. Dispatches on the data line itself, because
+    /// URLSession's AsyncLineSequence drops the blank line that ends an SSE message.
+    /// ponytail: one data line per message (the server never splits them); join lines if that changes.
+    struct SSEParser {
+        private var event = ""
+
+        mutating func feed(_ line: String) -> Event? {
+            if line.isEmpty { event = ""; return nil }
+            if line.hasPrefix(":") { return nil } // comment / ping
+            let (field, value) = Self.split(line)
+            switch field {
+            case "event": event = value; return nil
+            case "data":
+                defer { event = "" }
+                guard event == "hazard" || event.isEmpty, let data = value.data(using: .utf8) else { return nil }
+                return Self.decode(data)
+            default: return nil // id, retry
+            }
+        }
+
+        private static func split(_ line: String) -> (String, String) {
+            guard let i = line.firstIndex(of: ":") else { return (line, "") }
+            var v = line[line.index(after: i)...]
+            if v.first == " " { v = v.dropFirst() }
+            return (String(line[..<i]), String(v))
+        }
+
+        private struct Wire: Decodable { var op: String; var hazard: NearHazard?; var id: String? }
+
+        private static func decode(_ data: Data) -> Event? {
+            guard let w = try? JSONDecoder().decode(Wire.self, from: data) else { return nil }
+            switch (w.op, w.hazard, w.id) {
+            case ("upsert", let h?, _): return .upsert(h)
+            case ("remove", _, let id?): return .remove(id)
+            default: return nil
+            }
+        }
+    }
 }
 
 /// A row of GET /taxonomy: the only hazard types the server accepts (reclassify sends the id).

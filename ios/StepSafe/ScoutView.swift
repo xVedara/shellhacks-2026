@@ -2,12 +2,13 @@ import ARKit
 import SceneKit
 import SwiftUI
 
-/// Walker (audio-first, slice 1 screen) and Scout (sighted, phone in hand; PLAN.md 3.2) tabs.
+/// Walker (audio-first, slice 1 screen), Scout (sighted, phone in hand; PLAN.md 3.2) and Community tabs.
 struct RootView: View {
-    private enum Tab: Hashable { case walker, scout }
+    private enum Tab: String, Hashable { case walker, scout, community }
 
     @ObservedObject var model: AppModel
-    @State private var tab = Tab.walker
+    /// Walker unless launched with `-tab community` (demo and screenshots).
+    @State private var tab = Tab(rawValue: UserDefaults.standard.string(forKey: "tab") ?? "") ?? .walker
 
     var body: some View {
         TabView(selection: $tab) {
@@ -17,6 +18,9 @@ struct RootView: View {
             ScoutView(model: model, cameraLive: tab == .scout)
                 .tabItem { Label("Scout", systemImage: "camera.viewfinder") }
                 .tag(Tab.scout)
+            CommunityView(api: model.link.api, walkerRunning: model.running)
+                .tabItem { Label(TTSChoice.lang() == "es" ? "Comunidad" : "Community", systemImage: "person.3") }
+                .tag(Tab.community)
         }
         .tint(Color.control)
     }
@@ -327,28 +331,68 @@ struct AnyLabelStyle: LabelStyle {
 }
 
 /// Searchable list of taxonomy types (shown in the phone's language); picking one sends its id.
+/// With `propose` set it also offers category and height band, sent as one proposal with the type (the server
+/// keeps one proposal per device, and applies it once 3 devices sent the same one).
 struct TypePicker: View {
     let title: String
     let entries: [HazardTypeEntry]
     let lang: String
     let pick: (HazardTypeEntry) -> Void
     let cancel: () -> Void
+    /// (type, category, heightBand); nil fields stay unchanged.
+    var propose: ((HazardTypeEntry?, String?, String?) -> Void)? = nil
     @State private var query = ""
+    @State private var category = ""
+    @State private var band = ""
+
+    private func t(_ en: String, _ es: String) -> String { lang == "es" ? es : en }
 
     var body: some View {
         NavigationStack {
-            List(Taxonomy.search(entries, query, lang: lang)) { entry in
-                Button { pick(entry) } label: {
-                    Text(Spoken.capitalized(entry.name(lang: lang)))
-                        .font(.title3)
-                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            List {
+                if let propose {
+                    Section {
+                        Picker(t("Category", "Categoría"), selection: $category) {
+                            Text(t("Unchanged", "Sin cambio")).tag("")
+                            Text(t("Moving", "Móvil")).tag("moving")
+                            Text(t("Temporary", "Temporal")).tag("temporary")
+                            Text(t("Permanent", "Permanente")).tag("permanent")
+                        }
+                        Picker(t("Height", "Altura"), selection: $band) {
+                            Text(t("Unchanged", "Sin cambio")).tag("")
+                            Text(t("Ground", "Suelo")).tag("ground")
+                            Text(t("Head height", "Altura de la cabeza")).tag("head")
+                            Text(t("Drop-off", "Desnivel")).tag("dropoff")
+                        }
+                        if !category.isEmpty || !band.isEmpty {
+                            Button(t("Propose without changing the type", "Proponer sin cambiar el tipo")) {
+                                propose(nil, category.nilIfEmpty, band.nilIfEmpty)
+                            }
+                        }
+                    } footer: {
+                        Text(t("Or pick a type below. Changes apply once 3 people agree.",
+                               "O elige un tipo abajo. Se aplica cuando 3 personas coinciden."))
+                    }
                 }
-                .accessibilityHint("Proposes this type")
+                ForEach(Taxonomy.search(entries, query, lang: lang)) { entry in
+                    Button {
+                        if let propose { propose(entry, category.nilIfEmpty, band.nilIfEmpty) } else { pick(entry) }
+                    } label: {
+                        Text(Spoken.capitalized(entry.name(lang: lang)))
+                            .font(.title3)
+                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    }
+                    .accessibilityHint(t("Proposes this type", "Propone este tipo"))
+                }
             }
-            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search types")
-            .navigationTitle("Type of \(title)")
+            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: t("Search types", "Buscar tipos"))
+            .navigationTitle(t("Type of \(title)", "Tipo de \(title)"))
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel", action: cancel) } }
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button(t("Cancel", "Cancelar"), action: cancel) } }
         }
     }
+}
+
+extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }

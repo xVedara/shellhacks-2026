@@ -16,6 +16,7 @@
 		24E9C93544221CE03188C3E5 /* AlertPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 734358435B5F3C063F69C2E0 /* AlertPolicyTests.swift */; };
 		274FB8C9D81D6A3FCB753F45 /* TTSPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EBE1E5BD27CD71C4C7A7B96 /* TTSPlayer.swift */; };
 		29F9B9F7541DB1B2680D3295 /* Phrases in Resources */ = {isa = PBXBuildFile; fileRef = 2D58E38014A147317AF15DE1 /* Phrases */; };
+		335140E005C3501C87BCC6D4 /* CommunityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69550F1C63CC6AADD1540A4C /* CommunityView.swift */; };
 		37E37CD76CABD73310F31515 /* VehicleDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B011AA770DB532CD9557B48 /* VehicleDetector.swift */; };
 		3D61ADA82E6F805587568BA2 /* Geo.swift in Sources */ = {isa = PBXBuildFile; fileRef = A16E3AB89629CEEEBC438971 /* Geo.swift */; };
 		4422252E46C9DDAEA9A44825 /* PhraseBookTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77F4BF4AB0B6BCDE2D023E9D /* PhraseBookTests.swift */; };
@@ -30,6 +31,7 @@
 		92DA3FB84949CEF091051805 /* ClosingDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = D039239BA750A2ED1E8D6171 /* ClosingDetector.swift */; };
 		97F6AC71C1733944276E8AE1 /* ClosingDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = D039239BA750A2ED1E8D6171 /* ClosingDetector.swift */; };
 		9A0576E1B16956601A38E065 /* PathGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE17BC878D94A712EC820C35 /* PathGuard.swift */; };
+		9A15B7685A9E1C41C75D6DDA /* CommunityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D531260C3CAA1ADEE92BC2B5 /* CommunityTests.swift */; };
 		9BB18CDBC93F4BACD14528CD /* CrossingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 143A8472B3B37B4061F1DDAA /* CrossingTests.swift */; };
 		A356C0800AF369B9565C7AFE /* Localizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B49AF198A7E9AC5AEAB9F7D /* Localizer.swift */; };
 		A38B8299299CDCFEE2D40C39 /* ServerLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = 556BB89ED53BFA792964A285 /* ServerLink.swift */; };
@@ -74,6 +76,7 @@
 		5E94EF705BC93542C4D872AC /* MapRules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapRules.swift; sourceTree = "<group>"; };
 		63F2E8796DBDCC7F3DA5B0F2 /* TrackingDebounce.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackingDebounce.swift; sourceTree = "<group>"; };
 		65B95E5208F0A0DD0DA7713B /* PhrasePlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhrasePlayer.swift; sourceTree = "<group>"; };
+		69550F1C63CC6AADD1540A4C /* CommunityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommunityView.swift; sourceTree = "<group>"; };
 		6D1DE9518070C5FC011A66A4 /* ScoutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutView.swift; sourceTree = "<group>"; };
 		734358435B5F3C063F69C2E0 /* AlertPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlertPolicyTests.swift; sourceTree = "<group>"; };
 		736324E99413968B183D28CE /* CrossingCurbTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrossingCurbTests.swift; sourceTree = "<group>"; };
@@ -88,6 +91,7 @@
 		C712FB0F4C6D87FFC94B9508 /* CrossingScenarioBoxPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrossingScenarioBoxPolicyTests.swift; sourceTree = "<group>"; };
 		CBC78AF995D23F0E6734ACF0 /* StepSafeTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = StepSafeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		D039239BA750A2ED1E8D6171 /* ClosingDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClosingDetector.swift; sourceTree = "<group>"; };
+		D531260C3CAA1ADEE92BC2B5 /* CommunityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommunityTests.swift; sourceTree = "<group>"; };
 		DF9D950E58C20F8EC3D8C589 /* HazardNamer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HazardNamer.swift; sourceTree = "<group>"; };
 		E074A56398607FDE4729FD90 /* StepSafeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StepSafeApp.swift; sourceTree = "<group>"; };
 		E6EFDD0ECE64133E5D035ACF /* AlertPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlertPolicy.swift; sourceTree = "<group>"; };
@@ -111,6 +115,7 @@
 			isa = PBXGroup;
 			children = (
 				734358435B5F3C063F69C2E0 /* AlertPolicyTests.swift */,
+				D531260C3CAA1ADEE92BC2B5 /* CommunityTests.swift */,
 				736324E99413968B183D28CE /* CrossingCurbTests.swift */,
 				9179013510196CB698160697 /* CrossingMonteCarloTests.swift */,
 				C712FB0F4C6D87FFC94B9508 /* CrossingScenarioBoxPolicyTests.swift */,
@@ -138,6 +143,7 @@
 				53CC7755FA3E2DEAAF29A7C1 /* AlertManager.swift */,
 				238C04EE91440584C0E04D99 /* APIClient.swift */,
 				4A7EF0F08F24BA8163B05FEC /* Assets.xcassets */,
+				69550F1C63CC6AADD1540A4C /* CommunityView.swift */,
 				27F88CC2238BBF138080B767 /* ContentView.swift */,
 				DF9D950E58C20F8EC3D8C589 /* HazardNamer.swift */,
 				931296A1A1F89F0D9B96705B /* Info.plist */,
@@ -283,6 +289,7 @@
 				73350F2C12ECBBF19AAF45BB /* AlertPolicy.swift in Sources */,
 				CD3C1F7DB30AFBF766889C0C /* BoxTracker.swift in Sources */,
 				92DA3FB84949CEF091051805 /* ClosingDetector.swift in Sources */,
+				335140E005C3501C87BCC6D4 /* CommunityView.swift in Sources */,
 				8FE50E5F163C9DF6EC6AF37C /* ContentView.swift in Sources */,
 				0A3E2B6AF638C53A3F6966C9 /* Geo.swift in Sources */,
 				DC120DF47228415808187129 /* HazardNamer.swift in Sources */,
@@ -312,6 +319,7 @@
 				24E9C93544221CE03188C3E5 /* AlertPolicyTests.swift in Sources */,
 				58C7A0ED3A5D17A05087D674 /* BoxTracker.swift in Sources */,
 				97F6AC71C1733944276E8AE1 /* ClosingDetector.swift in Sources */,
+				9A15B7685A9E1C41C75D6DDA /* CommunityTests.swift in Sources */,
 				5A4F6C5E4F68BC153EB635D4 /* CrossingCurbTests.swift in Sources */,
 				BC3EDAE98CB363405C8F76FC /* CrossingMonteCarloTests.swift in Sources */,
 				221B4E0CFE4D2B215E8D24FC /* CrossingScenarioBoxPolicyTests.swift in Sources */,

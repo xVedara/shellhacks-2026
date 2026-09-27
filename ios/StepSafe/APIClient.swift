@@ -16,6 +16,8 @@ final class APIClient {
     struct ServerError: Error, LocalizedError {
         var status: Int
         var code: String
+        /// The server's `message` on a 400 (e.g. "hazard cleared").
+        var message: String? = nil
         var errorDescription: String? { "HTTP \(status) \(code)" }
     }
 
@@ -74,9 +76,55 @@ final class APIClient {
         try await send("POST", "/hazards/\(id)/votes", body: ["vote": up ? "up" : "down", "source": source, "deviceId": deviceId])
     }
 
-    /// `type` must be a taxonomy id (GET /taxonomy), else the server answers 400.
-    func reclassify(_ id: String, type: String) async throws -> ReclassifyResult {
-        try await send("POST", "/hazards/\(id)/reclassify", body: ["type": type, "deviceId": deviceId])
+    /// `type` must be a taxonomy id (GET /taxonomy), else the server answers 400. At least one field is required;
+    /// the server applies the proposal once 3 devices sent the same one.
+    func reclassify(_ id: String, type: String? = nil, category: String? = nil, heightBand: String? = nil) async throws -> ReclassifyResult {
+        var body: [String: Any] = ["deviceId": deviceId]
+        if let type { body["type"] = type }
+        if let category { body["category"] = category }
+        if let heightBand { body["heightBand"] = heightBand }
+        return try await send("POST", "/hazards/\(id)/reclassify", body: body)
+    }
+
+    func hazard(_ id: String) async throws -> HazardDetail {
+        try await send("GET", "/hazards/\(id)", timeout: 10)
+    }
+
+    /// Flag a pin: reason is "spam", "abuse" or "other". One open report per device (a second one replaces it).
+    func report(_ id: String, reason: String) async throws {
+        struct OK: Decodable { var ok: Bool }
+        let _: OK = try await send("POST", "/hazards/\(id)/report", body: ["reason": reason, "deviceId": deviceId])
+    }
+
+    func user() async throws -> UserInfo {
+        try await send("GET", "/users/\(deviceId)")
+    }
+
+    /// GET /events (SSE): `.open` once connected, then hazard upserts/removals. Finishes or throws when the
+    /// connection drops; the caller reconnects. Cancelling the consumer closes the connection.
+    func events() -> AsyncThrowingStream<Community.Event, Error> {
+        let session = session, url = baseURL.appendingPathComponent("/events")
+        return AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    var req = URLRequest(url: url, timeoutInterval: 40) // idle timeout; the server pings every 15 s
+                    req.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+                    let (bytes, resp) = try await session.bytes(for: req)
+                    guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else {
+                        throw ServerError(status: (resp as? HTTPURLResponse)?.statusCode ?? 0, code: "events")
+                    }
+                    continuation.yield(.open)
+                    var parser = Community.SSEParser()
+                    for try await line in bytes.lines {
+                        if let e = parser.feed(line) { continuation.yield(e) }
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
     }
 
     /// Raw GET /tts response: status, content type, body. Throws only on transport errors.
@@ -93,8 +141,9 @@ final class APIClient {
                                     body: [String: Any]? = nil, timeout: Double = 5) async throws -> T {
         let (data, http) = try await raw(method, path, query: query, body: body, timeout: timeout)
         guard (200..<300).contains(http.statusCode) else {
-            let code = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["error"] as? String
-            throw ServerError(status: http.statusCode, code: code ?? "error")
+            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            throw ServerError(status: http.statusCode, code: json?["error"] as? String ?? "error",
+                              message: json?["message"] as? String)
         }
         return try JSONDecoder().decode(T.self, from: data)
     }
