@@ -1,59 +1,83 @@
 @import "tailwindcss";
 
-/* StepSafe web: flat, neutral, light by default with a real dark theme.
-   Every color is a role below; components never name a hex. The boot script in app/layout.tsx
-   sets data-theme on <html> before first paint (stored choice, else the OS setting).
-   Contrast is WCAG AA in both themes (numbers in web/README.md).
-   Orange #FF7900 marks hazards and warnings only. */
-:root {
-  color-scheme: light;
-  --page: #f7f8fa; /* app background */
-  --card: #ffffff; /* panels, tables, list */
-  --raised: #ffffff; /* things floating over the map */
-  --sunken: #f1f3f6; /* sidebar, table head, recessed tiles */
-  --hover: #eef1f4;
-  --line: #e3e6eb; /* hairlines */
-  --field: #7f8996; /* form control edges: 3.5:1 on card, 3.2:1 on sunken (WCAG 1.4.11) */
-  --heading: #081624; /* StepSafe navy */
-  --ink: #1b2330;
-  --ink-2: #4a5463; /* labels */
-  --ink-3: #5e6875; /* meta: 5.7:1 on card, 5.1:1 on sunken */
-  --accent: #0a66c8; /* StepSafe blue, darkened for text: links, active nav, focus. 5.6:1 */
-  --accent-tint: #e8f1fc; /* active nav row; accent on it 4.9:1 */
-  --primary: #0f2235; /* primary button fill */
-  --primary-ink: #ffffff; /* 16:1 */
-  --warn-ink: #8a4200; /* warning text on --warn-tint, 6.8:1 */
-  --warn-tint: #fff4ea;
-  --ok: #15803d;
-  --float-shadow: 0 2px 4px rgb(8 22 36 / 0.06), 0 10px 28px -6px rgb(8 22 36 / 0.16);
-  --tiles: none;
-}
+/* StepSafe palette tokens.
+   Dark is the default. Light is the same system inverted.
+   Orange #FF7900 is warning chrome. Temporary hazards use that same orange as a category color.
+   The selected ring is signal blue (--signal), so a selected Temporary pin stays distinguishable. */
+:root,
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --page: #0b0d10;
-  --card: #15181d;
-  --raised: #1b1f25;
-  --sunken: #101216;
-  --hover: #1f242b;
-  --line: #262b33;
-  --field: #6b7480; /* 3.8:1 on card */
-  --heading: #f3f5f8;
-  --ink: #e7eaee;
-  --ink-2: #b3bac4;
-  --ink-3: #969fab; /* 6.7:1 on card, 7:1 on sunken */
-  --accent: #5ea8ff; /* 7.2:1 on card */
-  --accent-tint: #16263b;
-  --primary: #e7edf5;
-  --primary-ink: #081624; /* 15.5:1 */
+  --page: #081624;
+  --card: #0f1c2a;
+  --raised: #152536;
+  --sunken: #0c1824;
+  --hover: #1a2c40;
+  --line: rgb(255 255 255 / 0.08);
+  --border-strong: rgb(255 255 255 / 0.22);
+  --field: rgb(255 255 255 / 0.22);
+  --heading: #f5f5f5;
+  --ink: #f5f5f5;
+  --ink-2: #c5c8cc;
+  --ink-3: #a1a5ab;
+  --accent: #13b9f2;
+  --accent-tint: rgb(19 185 242 / 0.16);
+  --blue: #087ff5;
+  --signal: #13b9f2;
+  --signal-soft: rgb(19 185 242 / 0.28);
+  --primary: #f5f5f5;
+  --primary-ink: #081624;
   --warn-ink: #ffb473;
   --warn-tint: #2a1a0c;
-  --ok: #4ade80;
-  --float-shadow: 0 2px 4px rgb(0 0 0 / 0.3), 0 12px 32px -6px rgb(0 0 0 / 0.6);
-  --tiles: brightness(0.82) contrast(1.08) saturate(0.8);
+  --ok: #13b9f2;
+  --hazard: #ff7900;
+  --float-shadow: 0 8px 24px rgb(0 0 0 / 0.28);
+  --elev-hairline: inset 0 1px 0 rgb(255 255 255 / 0.08), 0 0 0 1px var(--line);
+  --elev-sheet: inset 0 1px 0 rgb(255 255 255 / 0.1), 0 0 0 1px var(--line), 0 -18px 36px rgb(0 0 0 / 0.28);
+  --sheet-fill: linear-gradient(180deg, #16283b 0%, var(--card) 96px);
+  --focus-glow: 0 0 0 6px rgb(19 185 242 / 0.32);
+  --tiles: brightness(0.78) contrast(1.05) saturate(0.82);
+  --header: #081624;
 }
-/* Header logo: blue in light mode, navy in dark (brandguide/README.md). */
-:root[data-theme="dark"] .logo-light,
-:root:not([data-theme="dark"]) .logo-dark {
+:root[data-theme="light"] {
+  color-scheme: light;
+  --page: #f4f4f5;
+  --card: #ffffff;
+  --raised: #f3f5f8;
+  --sunken: #eef0f3;
+  --hover: #e7eaee;
+  --line: rgb(8 22 36 / 0.1);
+  --border-strong: rgb(8 22 36 / 0.22);
+  --field: rgb(8 22 36 / 0.28);
+  --heading: #0a0a0a;
+  --ink: #0a0a0a;
+  --ink-2: #3e4651;
+  --ink-3: #3e4651;
+  --accent: #0757b0;
+  --accent-tint: rgb(8 127 245 / 0.12);
+  --blue: #087ff5;
+  --signal: #087ff5;
+  --signal-soft: rgb(8 127 245 / 0.22);
+  --primary: #081624;
+  --primary-ink: #f5f5f5;
+  --warn-ink: #8a4200;
+  --warn-tint: #fff4ea;
+  --ok: #087ff5;
+  --hazard: #ff7900;
+  --float-shadow: 0 8px 24px rgb(8 22 36 / 0.1);
+  --elev-hairline: inset 0 1px 0 #fff, 0 0 0 1px var(--line);
+  --elev-sheet: inset 0 1px 0 #fff, 0 0 0 1px var(--line), 0 -14px 32px rgb(8 22 36 / 0.08);
+  --sheet-fill: linear-gradient(180deg, #ffffff 0%, #f7f8fa 96px);
+  --focus-glow: 0 0 0 6px rgb(8 127 245 / 0.22);
+  --tiles: none;
+  --header: #ffffff;
+}
+.logo-light {
+  display: none;
+}
+:root[data-theme="light"] .logo-light {
+  display: block;
+}
+:root[data-theme="light"] .logo-dark {
   display: none;
 }
 
@@ -76,7 +100,7 @@
   --color-warn-ink: var(--warn-ink);
   --color-warn-tint: var(--warn-tint);
   --color-ok: var(--ok);
-  --color-alert: #ff7900; /* hazards and warnings only */
+  --color-alert: #ff7900;
   --color-navy: #081624;
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
 }
@@ -88,42 +112,39 @@ body {
   color: var(--ink);
   background: var(--page);
   font-feature-settings: "cv11", "ss01";
+  letter-spacing: -0.011em;
+  line-height: 1.45;
 }
 
-/* A panel: white, hairline, no shadow. */
 .panel {
   background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 12px;
+  box-shadow: var(--elev-hairline);
 }
-/* Floating over the map: the only place with a shadow. */
 .float {
-  background: var(--raised);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  box-shadow: var(--float-shadow);
+  background: var(--card);
+  border-radius: 12px;
+  box-shadow: var(--elev-hairline), var(--float-shadow);
 }
-/* Small field label above a value (sentence case, not shouted). */
 .label {
   font-size: 12px;
   font-weight: 500;
   color: var(--ink-3);
 }
 
-/* Visible focus everywhere (WCAG 2.4.7 / 2.4.11). In the base layer so a utility such as an
-   inset offset on a clipped list row can override it. */
 @layer base {
   :focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--blue);
     outline-offset: 2px;
+    box-shadow: var(--focus-glow);
   }
 }
 .leaflet-container :focus-visible,
 .leaflet-marker-icon:focus-visible {
-  outline: 3px solid #081624;
+  outline: 2px solid var(--blue);
   outline-offset: 3px;
-  box-shadow: 0 0 0 6px #fff;
-  border-radius: 6px;
+  box-shadow: var(--focus-glow);
+  border-radius: 8px;
 }
 
 .leaflet-container {
@@ -133,50 +154,161 @@ body {
 .leaflet-tile-pane {
   filter: var(--tiles);
 }
-.leaflet-bar {
+.map-stage .leaflet-bottom {
+  bottom: calc(var(--sheet, 0px) + 12px) !important;
+}
+.map-stage .leaflet-control-zoom {
+  margin: 0 16px 0 0 !important;
   border: 1px solid var(--line) !important;
-  border-radius: 6px !important;
+  border-radius: 22px !important;
+  overflow: hidden;
   box-shadow: var(--float-shadow) !important;
 }
-.leaflet-bar a,
-.leaflet-bar a:hover {
-  width: 32px !important;
-  height: 32px !important;
-  line-height: 32px !important;
+.map-stage .leaflet-bar a,
+.map-stage .leaflet-bar a:hover {
+  width: 44px !important;
+  height: 44px !important;
+  line-height: 44px !important;
+  font-size: 18px !important;
   color: var(--ink) !important;
-  background: var(--raised) !important;
+  background: var(--card) !important;
   border-bottom-color: var(--line) !important;
 }
-.leaflet-bar a:hover {
+.map-stage .leaflet-bar a:hover {
   background: var(--hover) !important;
 }
-/* Round the end buttons instead of clipping the bar (a clip would cut the focus ring). */
-.leaflet-bar a:first-child {
-  border-top-left-radius: 5px !important;
-  border-top-right-radius: 5px !important;
-}
-.leaflet-bar a:last-child {
-  border-bottom-left-radius: 5px !important;
-  border-bottom-right-radius: 5px !important;
-}
-.leaflet-bar a:focus-visible {
+.map-stage .leaflet-bar a:focus-visible {
   position: relative;
   z-index: 1;
 }
-.leaflet-bar a.leaflet-disabled {
+.map-stage .leaflet-bar a.leaflet-disabled {
   color: var(--ink-3) !important;
 }
-
-/* Attribution stays legible in both themes (OSM tile policy + contrast). */
-.leaflet-control-attribution {
-  font-size: 12px;
-  color: #1b2330 !important;
-  background: rgb(255 255 255 / 0.94) !important;
-  border-top-left-radius: 6px;
+.map-stage .leaflet-control-attribution {
+  margin-bottom: 0 !important;
+  margin-left: 8px !important;
+  max-width: min(240px, 58vw);
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--ink-2) !important;
+  background: color-mix(in srgb, var(--card) 92%, transparent) !important;
+  border: 1px solid var(--line);
+  border-radius: 999px;
 }
-.leaflet-control-attribution a {
-  color: #0a66c8 !important;
+.map-stage .leaflet-control-attribution a {
+  color: var(--accent) !important;
   text-decoration: underline;
+}
+
+.map-locate {
+  position: absolute;
+  z-index: 1000;
+  right: 16px;
+  bottom: calc(var(--sheet, 0px) + 12px + 96px);
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 22px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+  box-shadow: var(--float-shadow);
+}
+
+.sheet-panel {
+  position: absolute;
+  z-index: 1100;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  height: var(--panel-h, 196px);
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0 20px max(16px, env(safe-area-inset-bottom));
+  border-radius: 20px 20px 0 0;
+  background: var(--sheet-fill);
+  color: var(--ink);
+  box-shadow: var(--elev-sheet);
+  transition: height 280ms ease-out;
+}
+.sheet-panel.is-dragging {
+  transition: none;
+}
+.instrument-card {
+  --panel-h: min(640px, 68%);
+}
+@media (min-width: 768px) {
+  .sheet-panel {
+    position: relative;
+    top: auto;
+    right: auto;
+    bottom: auto;
+    left: auto;
+    width: 392px;
+    height: 100% !important;
+    min-height: 0;
+    flex: none;
+    overflow: hidden;
+    border-style: solid;
+    border-color: var(--line);
+    border-width: 0 0 0 1px;
+    border-radius: 0;
+    background: var(--card);
+    box-shadow: none;
+    padding-top: 12px;
+  }
+  .map-stage {
+    --sheet: 0px !important;
+  }
+}
+.sheet-face {
+  animation: face-in 280ms ease-out both;
+}
+.filter-chip {
+  transition:
+    background-color 200ms ease-out,
+    border-color 200ms ease-out,
+    color 200ms ease-out,
+    box-shadow 200ms ease-out;
+}
+.hazard-row {
+  animation: row-in 220ms ease-out both;
+}
+.legend-fold {
+  animation: face-in 220ms ease-out both;
+}
+@keyframes face-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sheet-panel,
+  .filter-chip {
+    transition: none;
+  }
+  .sheet-face,
+  .hazard-row,
+  .legend-fold {
+    animation: none;
+  }
 }
 
 .kbd {
@@ -191,18 +323,72 @@ body {
   background: var(--card);
 }
 
-/* Hazard pins (Leaflet divIcon). */
 .ss-pin-wrap {
   background: none;
   border: none;
 }
+.ss-pin-hit {
+  position: relative;
+  display: block;
+  line-height: 0;
+}
 .ss-pin {
   position: relative;
+  display: block;
   line-height: 0;
-  transition: transform 120ms ease-out;
+  border-radius: 22%;
+  box-shadow: 0 0 0 2px var(--pin-cat, #ff7900);
+  transition: transform 220ms ease-out, box-shadow 220ms ease-out;
 }
-.leaflet-marker-icon:hover .ss-pin {
+.ss-pin__glyph {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 18%;
+  object-fit: cover;
+}
+.ss-pin__mark {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 2px;
+  border: 1px solid #081624;
+  border-radius: 999px;
+  background: var(--pin-cat, #ff7900);
+  color: var(--pin-ink, #081624);
+  font: 700 9px/12px var(--font-sans);
+  text-align: center;
+}
+.ss-pin--selected {
   transform: scale(1.08);
+  box-shadow:
+    0 0 0 2px var(--pin-cat, #ff7900),
+    0 0 0 4px var(--card),
+    0 0 0 7px var(--signal);
+  animation: pin-select 220ms ease-out both;
+}
+@keyframes pin-select {
+  from {
+    transform: scale(0.94);
+  }
+  to {
+    transform: scale(1.08);
+  }
+}
+.leaflet-marker-icon:hover .ss-pin:not(.ss-pin--selected) {
+  transform: scale(1.06);
+}
+.ss-cluster {
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 2px solid var(--signal);
+  background: var(--card);
+  color: var(--ink);
+  font: 600 14px/1 var(--font-sans);
+  box-shadow: var(--float-shadow);
 }
 .ss-pin__sample {
   position: absolute;
@@ -219,15 +405,13 @@ body {
   white-space: nowrap;
   pointer-events: none;
 }
-/* Newest live report: a steady ring plus a few pulses. */
 .ss-pin--new::before,
 .ss-pin--new::after {
   content: "";
   position: absolute;
   inset: -8px;
   border-radius: 9999px;
-  border: 2px solid #0a66c8;
-  box-shadow: 0 0 0 2px #fff;
+  border: 2px solid var(--signal);
   pointer-events: none;
 }
 .ss-pin--new::after {
@@ -245,11 +429,18 @@ body {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .ss-pin--new::after {
+  .ss-pin--new::after,
+  .ss-pin,
+  .ss-pin--selected,
+  .motion-safe\:animate-ping {
     animation: none;
   }
-  .ss-pin {
+  .ss-pin,
+  .ss-pin--selected,
+  .leaflet-marker-icon:hover .ss-pin,
+  .leaflet-marker-icon:hover .ss-pin:not(.ss-pin--selected) {
     transition: none;
+    transform: none;
   }
 }
 

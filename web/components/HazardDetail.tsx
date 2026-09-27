@@ -14,7 +14,7 @@ import {
   type HazardType,
 } from "@/lib/api";
 import { useNow } from "@/lib/hooks";
-import { Notice, PinTile, SampleBadge } from "./ui";
+import { Notice, SampleBadge, TypeIcon } from "./ui";
 
 const dateTime = (iso: string) => {
   const d = new Date(iso);
@@ -65,7 +65,7 @@ export function HazardHeading({
 }) {
   return (
     <div className="flex items-start gap-3">
-      <PinTile hazard={hazard} size={44} />
+      <TypeIcon type={hazard.type} category={hazard.category} size={44} />
       <div className="min-w-0">
         <Tag className="text-[18px] font-semibold leading-snug text-heading">
           {hazard.label || typeDisplayName(hazard.type, taxonomy)} {hazard.sample && <SampleBadge />}
@@ -107,12 +107,20 @@ export function Crop({
   );
 }
 
-export default function HazardDetail({ hazard, taxonomy }: { hazard: Detail; taxonomy?: readonly HazardType[] | null }) {
+export default function HazardDetail({
+  hazard,
+  taxonomy,
+  hideHeading = false,
+}: {
+  hazard: Detail;
+  taxonomy?: readonly HazardType[] | null;
+  hideHeading?: boolean;
+}) {
   const now = useNow(15_000);
   const m = hazard.measurements;
   return (
     <div className="space-y-4 text-ink">
-      <HazardHeading hazard={hazard} taxonomy={taxonomy} />
+      {!hideHeading && <HazardHeading hazard={hazard} taxonomy={taxonomy} />}
       {hazard.sample && (
         <Notice tone="info" title="Sample hazard">
           Seeded for the demo. It was not reported by a real walker.

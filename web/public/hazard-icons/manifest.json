@@ -1,0 +1,649 @@
+{
+  "source": "locked hazard icon sheet",
+  "sourceSha256": "56b966cf16c6e4264b09bdd0cc7de0d19ac4c77aab87a6d32e6476f724e615fb",
+  "image": {
+    "width": 1536,
+    "height": 1024
+  },
+  "rows": [
+    12,
+    9,
+    15,
+    18,
+    16
+  ],
+  "count": 70,
+  "note": "Crops of the locked sheet. Pixels inside each tile are unchanged. Corners outside the blue hairline may be transparent.",
+  "tiles": [
+    {
+      "id": "height-ground",
+      "file": "height-ground.png",
+      "left": 33,
+      "top": 75,
+      "width": 130,
+      "height": 134,
+      "transparentCorners": true
+    },
+    {
+      "id": "height-head",
+      "file": "height-head.png",
+      "left": 176,
+      "top": 75,
+      "width": 129,
+      "height": 134,
+      "transparentCorners": true
+    },
+    {
+      "id": "height-dropoff",
+      "file": "height-dropoff.png",
+      "left": 318,
+      "top": 75,
+      "width": 130,
+      "height": 134,
+      "transparentCorners": true
+    },
+    {
+      "id": "trash-bin",
+      "file": "trash-bin.png",
+      "left": 496,
+      "top": 67,
+      "width": 91,
+      "height": 97,
+      "transparentCorners": true
+    },
+    {
+      "id": "trash-bags",
+      "file": "trash-bags.png",
+      "left": 600,
+      "top": 67,
+      "width": 96,
+      "height": 97,
+      "transparentCorners": true
+    },
+    {
+      "id": "e-scooter",
+      "file": "e-scooter.png",
+      "left": 709,
+      "top": 67,
+      "width": 95,
+      "height": 97,
+      "transparentCorners": true
+    },
+    {
+      "id": "bicycle",
+      "file": "bicycle.png",
+      "left": 818,
+      "top": 67,
+      "width": 97,
+      "height": 97,
+      "transparentCorners": true
+    },
+    {
+      "id": "motorcycle",
+      "file": "motorcycle.png",
+      "left": 929,
+      "top": 67,
+      "width": 97,
+      "height": 97,
+      "transparentCorners": true
+    },
+    {
+      "id": "parked-car",
+      "file": "parked-car.png",
+      "left": 1039,
+      "top": 67,
+      "width": 100,
+      "height": 97,
+      "transparentCorners": true
+    },
+    {
+      "id": "open-car-door",
+      "file": "open-car-door.png",
+      "left": 1153,
+      "top": 67,
+      "width": 111,
+      "height": 97,
+      "transparentCorners": true
+    },
+    {
+      "id": "delivery-robot",
+      "file": "delivery-robot.png",
+      "left": 1277,
+      "top": 67,
+      "width": 110,
+      "height": 97,
+      "transparentCorners": true
+    },
+    {
+      "id": "shopping-cart",
+      "file": "shopping-cart.png",
+      "left": 1401,
+      "top": 67,
+      "width": 106,
+      "height": 97,
+      "transparentCorners": true
+    },
+    {
+      "id": "stroller",
+      "file": "stroller.png",
+      "left": 495,
+      "top": 214,
+      "width": 92,
+      "height": 103,
+      "transparentCorners": true
+    },
+    {
+      "id": "person",
+      "file": "person.png",
+      "left": 600,
+      "top": 214,
+      "width": 96,
+      "height": 103,
+      "transparentCorners": true
+    },
+    {
+      "id": "dog",
+      "file": "dog.png",
+      "left": 709,
+      "top": 214,
+      "width": 95,
+      "height": 103,
+      "transparentCorners": true
+    },
+    {
+      "id": "sandwich-board",
+      "file": "sandwich-board.png",
+      "left": 818,
+      "top": 214,
+      "width": 97,
+      "height": 103,
+      "transparentCorners": true
+    },
+    {
+      "id": "chair",
+      "file": "chair.png",
+      "left": 929,
+      "top": 214,
+      "width": 97,
+      "height": 103,
+      "transparentCorners": true
+    },
+    {
+      "id": "table",
+      "file": "table.png",
+      "left": 1039,
+      "top": 214,
+      "width": 100,
+      "height": 103,
+      "transparentCorners": true
+    },
+    {
+      "id": "umbrella",
+      "file": "umbrella.png",
+      "left": 1153,
+      "top": 214,
+      "width": 111,
+      "height": 103,
+      "transparentCorners": true
+    },
+    {
+      "id": "box",
+      "file": "box.png",
+      "left": 1277,
+      "top": 214,
+      "width": 110,
+      "height": 103,
+      "transparentCorners": true
+    },
+    {
+      "id": "open-hatch",
+      "file": "open-hatch.png",
+      "left": 1401,
+      "top": 214,
+      "width": 107,
+      "height": 103,
+      "transparentCorners": false
+    },
+    {
+      "id": "construction-barrier",
+      "file": "construction-barrier.png",
+      "left": 31,
+      "top": 444,
+      "width": 82,
+      "height": 105,
+      "transparentCorners": true
+    },
+    {
+      "id": "construction-fence",
+      "file": "construction-fence.png",
+      "left": 126,
+      "top": 444,
+      "width": 85,
+      "height": 105,
+      "transparentCorners": true
+    },
+    {
+      "id": "cone",
+      "file": "cone.png",
+      "left": 223,
+      "top": 445,
+      "width": 84,
+      "height": 104,
+      "transparentCorners": true
+    },
+    {
+      "id": "scaffolding",
+      "file": "scaffolding.png",
+      "left": 320,
+      "top": 445,
+      "width": 83,
+      "height": 104,
+      "transparentCorners": true
+    },
+    {
+      "id": "ladder",
+      "file": "ladder.png",
+      "left": 415,
+      "top": 444,
+      "width": 82,
+      "height": 105,
+      "transparentCorners": true
+    },
+    {
+      "id": "open-trench",
+      "file": "open-trench.png",
+      "left": 510,
+      "top": 444,
+      "width": 91,
+      "height": 105,
+      "transparentCorners": true
+    },
+    {
+      "id": "open-manhole",
+      "file": "open-manhole.png",
+      "left": 614,
+      "top": 444,
+      "width": 95,
+      "height": 105,
+      "transparentCorners": false
+    },
+    {
+      "id": "fallen-branch",
+      "file": "fallen-branch.png",
+      "left": 722,
+      "top": 444,
+      "width": 88,
+      "height": 105,
+      "transparentCorners": false
+    },
+    {
+      "id": "fallen-tree",
+      "file": "fallen-tree.png",
+      "left": 823,
+      "top": 445,
+      "width": 86,
+      "height": 104,
+      "transparentCorners": true
+    },
+    {
+      "id": "debris",
+      "file": "debris.png",
+      "left": 922,
+      "top": 444,
+      "width": 90,
+      "height": 105,
+      "transparentCorners": true
+    },
+    {
+      "id": "puddle",
+      "file": "puddle.png",
+      "left": 1025,
+      "top": 445,
+      "width": 88,
+      "height": 104,
+      "transparentCorners": true
+    },
+    {
+      "id": "flooding",
+      "file": "flooding.png",
+      "left": 1126,
+      "top": 444,
+      "width": 86,
+      "height": 105,
+      "transparentCorners": true
+    },
+    {
+      "id": "hose-or-cable",
+      "file": "hose-or-cable.png",
+      "left": 1225,
+      "top": 444,
+      "width": 87,
+      "height": 105,
+      "transparentCorners": true
+    },
+    {
+      "id": "wet-floor-sign",
+      "file": "wet-floor-sign.png",
+      "left": 1325,
+      "top": 444,
+      "width": 86,
+      "height": 105,
+      "transparentCorners": false
+    },
+    {
+      "id": "obstacle",
+      "file": "obstacle.png",
+      "left": 1423,
+      "top": 444,
+      "width": 84,
+      "height": 105,
+      "transparentCorners": true
+    },
+    {
+      "id": "pole",
+      "file": "pole.png",
+      "left": 31,
+      "top": 679,
+      "width": 71,
+      "height": 95,
+      "transparentCorners": true
+    },
+    {
+      "id": "sign",
+      "file": "sign.png",
+      "left": 112,
+      "top": 679,
+      "width": 72,
+      "height": 95,
+      "transparentCorners": true
+    },
+    {
+      "id": "low-sign",
+      "file": "low-sign.png",
+      "left": 194,
+      "top": 679,
+      "width": 71,
+      "height": 95,
+      "transparentCorners": false
+    },
+    {
+      "id": "low-branch",
+      "file": "low-branch.png",
+      "left": 274,
+      "top": 680,
+      "width": 71,
+      "height": 94,
+      "transparentCorners": true
+    },
+    {
+      "id": "overhang",
+      "file": "overhang.png",
+      "left": 354,
+      "top": 679,
+      "width": 71,
+      "height": 95,
+      "transparentCorners": false
+    },
+    {
+      "id": "awning",
+      "file": "awning.png",
+      "left": 435,
+      "top": 679,
+      "width": 71,
+      "height": 95,
+      "transparentCorners": false
+    },
+    {
+      "id": "bench",
+      "file": "bench.png",
+      "left": 516,
+      "top": 680,
+      "width": 71,
+      "height": 94,
+      "transparentCorners": true
+    },
+    {
+      "id": "planter",
+      "file": "planter.png",
+      "left": 598,
+      "top": 680,
+      "width": 71,
+      "height": 94,
+      "transparentCorners": true
+    },
+    {
+      "id": "tree",
+      "file": "tree.png",
+      "left": 680,
+      "top": 680,
+      "width": 73,
+      "height": 94,
+      "transparentCorners": false
+    },
+    {
+      "id": "tree-root",
+      "file": "tree-root.png",
+      "left": 31,
+      "top": 826,
+      "width": 71,
+      "height": 98,
+      "transparentCorners": true
+    },
+    {
+      "id": "fire-hydrant",
+      "file": "fire-hydrant.png",
+      "left": 112,
+      "top": 826,
+      "width": 72,
+      "height": 98,
+      "transparentCorners": true
+    },
+    {
+      "id": "bollard",
+      "file": "bollard.png",
+      "left": 194,
+      "top": 826,
+      "width": 71,
+      "height": 98,
+      "transparentCorners": false
+    },
+    {
+      "id": "bike-rack",
+      "file": "bike-rack.png",
+      "left": 275,
+      "top": 826,
+      "width": 71,
+      "height": 98,
+      "transparentCorners": true
+    },
+    {
+      "id": "mailbox",
+      "file": "mailbox.png",
+      "left": 355,
+      "top": 826,
+      "width": 71,
+      "height": 98,
+      "transparentCorners": true
+    },
+    {
+      "id": "parking-meter",
+      "file": "parking-meter.png",
+      "left": 435,
+      "top": 826,
+      "width": 71,
+      "height": 98,
+      "transparentCorners": true
+    },
+    {
+      "id": "utility-box",
+      "file": "utility-box.png",
+      "left": 516,
+      "top": 826,
+      "width": 71,
+      "height": 98,
+      "transparentCorners": true
+    },
+    {
+      "id": "bus-shelter",
+      "file": "bus-shelter.png",
+      "left": 598,
+      "top": 826,
+      "width": 71,
+      "height": 98,
+      "transparentCorners": true
+    },
+    {
+      "id": "kiosk",
+      "file": "kiosk.png",
+      "left": 680,
+      "top": 826,
+      "width": 73,
+      "height": 98,
+      "transparentCorners": true
+    },
+    {
+      "id": "gate",
+      "file": "gate.png",
+      "left": 796,
+      "top": 680,
+      "width": 69,
+      "height": 94,
+      "transparentCorners": true
+    },
+    {
+      "id": "fence",
+      "file": "fence.png",
+      "left": 875,
+      "top": 680,
+      "width": 70,
+      "height": 94,
+      "transparentCorners": false
+    },
+    {
+      "id": "wall",
+      "file": "wall.png",
+      "left": 954,
+      "top": 680,
+      "width": 70,
+      "height": 94,
+      "transparentCorners": true
+    },
+    {
+      "id": "railing",
+      "file": "railing.png",
+      "left": 1033,
+      "top": 680,
+      "width": 69,
+      "height": 94,
+      "transparentCorners": false
+    },
+    {
+      "id": "glass-door",
+      "file": "glass-door.png",
+      "left": 1112,
+      "top": 680,
+      "width": 69,
+      "height": 94,
+      "transparentCorners": false
+    },
+    {
+      "id": "grate",
+      "file": "grate.png",
+      "left": 1190,
+      "top": 680,
+      "width": 71,
+      "height": 94,
+      "transparentCorners": false
+    },
+    {
+      "id": "pothole",
+      "file": "pothole.png",
+      "left": 1271,
+      "top": 680,
+      "width": 70,
+      "height": 94,
+      "transparentCorners": true
+    },
+    {
+      "id": "broken-sidewalk",
+      "file": "broken-sidewalk.png",
+      "left": 1350,
+      "top": 680,
+      "width": 72,
+      "height": 94,
+      "transparentCorners": true
+    },
+    {
+      "id": "uneven-pavement",
+      "file": "uneven-pavement.png",
+      "left": 1434,
+      "top": 680,
+      "width": 72,
+      "height": 94,
+      "transparentCorners": false
+    },
+    {
+      "id": "curb",
+      "file": "curb.png",
+      "left": 795,
+      "top": 829,
+      "width": 74,
+      "height": 97,
+      "transparentCorners": true
+    },
+    {
+      "id": "ramp-missing",
+      "file": "ramp-missing.png",
+      "left": 882,
+      "top": 829,
+      "width": 96,
+      "height": 97,
+      "transparentCorners": true
+    },
+    {
+      "id": "ramp",
+      "file": "ramp.png",
+      "left": 991,
+      "top": 829,
+      "width": 80,
+      "height": 97,
+      "transparentCorners": true
+    },
+    {
+      "id": "step-up",
+      "file": "step-up.png",
+      "left": 1084,
+      "top": 829,
+      "width": 92,
+      "height": 97,
+      "transparentCorners": true
+    },
+    {
+      "id": "step-down",
+      "file": "step-down.png",
+      "left": 1188,
+      "top": 829,
+      "width": 90,
+      "height": 97,
+      "transparentCorners": true
+    },
+    {
+      "id": "stairs-up",
+      "file": "stairs-up.png",
+      "left": 1291,
+      "top": 829,
+      "width": 97,
+      "height": 97,
+      "transparentCorners": false
+    },
+    {
+      "id": "stairs-down",
+      "file": "stairs-down.png",
+      "left": 1401,
+      "top": 829,
+      "width": 105,
+      "height": 97,
+      "transparentCorners": true
+    }
+  ]
+}

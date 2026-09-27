@@ -22,14 +22,13 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f7f8fa" },
-    { media: "(prefers-color-scheme: dark)", color: "#0b0d10" },
+    { media: "(prefers-color-scheme: light)", color: "#f4f4f5" },
+    { media: "(prefers-color-scheme: dark)", color: "#081624" },
   ],
 };
 
-// Runs before first paint so the page never flashes the wrong theme. Stored choice wins,
-// otherwise the OS setting. Storage can throw (private mode, blocked site data).
-const THEME_BOOT = `(function(){var t;try{t=localStorage.getItem("stepsafe.theme")}catch(e){}if(t!=="light"&&t!=="dark"){t=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}document.documentElement.dataset.theme=t})()`;
+// Dark-first. A stored choice wins; otherwise the canvas stays navy. Storage can throw.
+const THEME_BOOT = `(function(){var t;try{t=localStorage.getItem("stepsafe.theme")}catch(e){}if(t!=="light"&&t!=="dark")t="dark";document.documentElement.dataset.theme=t})()`;
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
@@ -37,7 +36,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
       </head>
-      <body className="flex min-h-dvh flex-col font-sans text-[14px] text-ink antialiased lg:h-dvh lg:flex-row">
+      <body className="flex h-dvh flex-col overflow-hidden font-sans text-[14px] text-ink antialiased md:flex-row">
         <a
           href="#main"
           className="sr-only z-[2000] rounded-md bg-card px-3 py-2 font-medium text-heading focus:not-sr-only focus:absolute focus:left-2 focus:top-2"
@@ -45,7 +44,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           Skip to content
         </a>
         <Header />
-        <main id="main" className="flex min-w-0 flex-1 flex-col lg:min-h-0 lg:overflow-y-auto">
+        <main id="main" className="flex min-h-0 min-w-0 flex-1 flex-col">
           {children}
         </main>
       </body>
