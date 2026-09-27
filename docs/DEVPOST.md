@@ -8,11 +8,11 @@ Code: https://github.com/xVedara/shellhacks-2026
 
 ## Inspiration
 
-A block walked without sight can hide a sign at head height, a curb two steps ahead, or a car in the crosswalk. We built a lookout on a phone people already carry, plus a shared map of neighborhood hazards. This is our first hackathon.
+A block walked without sight can hide a sign at head height, a curb two steps ahead, or a car in the crosswalk. We built that lookout on a phone, plus a shared map. This is our first hackathon.
 
 ## What it does
 
-StepSafe is a head-mounted iPhone with LiDAR and AirPods for blind and low-vision walkers, and a community map at https://stepsafe.miami. The phone calls only https://api.stepsafe.miami. That address is fixed in the app.
+StepSafe is a head-mounted iPhone with LiDAR and AirPods for blind and low-vision walkers, and a community map at https://stepsafe.miami. https://api.stepsafe.miami is fixed in the app.
 
 Path guard speaks ground, head-height, and drop-off hazards. Crossing assist warns when a car, bike, or pushed cart is closing in. Two AirPods presses cover "what's ahead" and mute. There is no turn-by-turn route.
 
@@ -44,7 +44,7 @@ Swift, SwiftUI, ARKit, Core ML, YOLO11s, Node.js, TypeScript, Fastify, MongoDB A
 
 **Best First-Time Hacker.** Dev and Ara are both first-time hackers.
 
-**Microsoft — What’s Missing?** No chat interface: two fixed AirPods commands, not a conversation. AI runs inside perception, never as a dialogue layer.
+**Microsoft — What’s Missing?** On. The team qualifies: no chatbot and no chat window. Two fixed AirPods commands, not a conversation. AI runs inside perception, never as a dialogue layer.
 
 **Waymo — Mobility Challenge.** OpenStreetMap crossings, curbs, and tactile paving, plus community hazard reports, with no turn-by-turn route.
 
@@ -54,15 +54,21 @@ Swift, SwiftUI, ARKit, Core ML, YOLO11s, Node.js, TypeScript, Fastify, MongoDB A
 
 **MLH / MongoDB — Best Use of MongoDB Atlas.** Hazards and votes live in Atlas: a 2dsphere index, TTL expiry by category, and change streams.
 
-**MLH / GoDaddy Registry — Best Domain Name.** The community map is live at https://stepsafe.miami.
+**MLH / GoDaddy Registry — Best Domain Name.** On. MLH GoDaddy flow; stepsafe.miami was issued via Porkbun. The map is live at https://stepsafe.miami.
+
+Do not enter: Assurant, Blackstone, Sperry, State Farm, INIT, Solana, Tiger Data, DigitalOcean, Snowflake.
+
+## Gallery
+
+Cover: StepSafe logo. Stills: live map, path guard, crossing assist.
 
 ## Credits and licenses
 
-OpenStreetMap tiles and the Graham Center extract are ODbL, © OpenStreetMap contributors. Leaflet draws the map. YOLO11s by Ultralytics detects vehicles on the phone. The weights are AGPL-3.0-only, so this repo is AGPL-3.0-only. They are a WiSE-FT blend of stock YOLO11s and a fine-tune on the WOTR and blind-crossing datasets (CC BY 4.0). Google Gemini names a hazard crop. ElevenLabs speaks alerts. The clips were generated on Ara's ElevenLabs account (Creator plan, redeemed through MLH).
+OpenStreetMap tiles and the Graham Center extract are ODbL, © OpenStreetMap contributors. YOLO11s by Ultralytics detects vehicles on the phone. The weights are AGPL-3.0-only, so this repo is AGPL-3.0-only. They are a WiSE-FT blend of stock YOLO11s and a fine-tune on the WOTR and blind-crossing datasets (CC BY 4.0). Clips were generated on Ara's ElevenLabs account (Creator plan, redeemed through MLH).
 
 ## AI tools used
 
-StepSafe was built at ShellHacks 2026 with AI coding tools. Ara Babigian used Claude Code. Cursor cloud agents authored commits and opened pull requests. Commit messages name two review gates: Claude Opus and Codex. Logos were made with GPT Image 2.
+Ara Babigian used Claude Code. Cursor cloud agents wrote commits and pull requests. Claude Opus and Codex were the review gates. Logos were made with GPT Image 2.
 
 ## Team
 
