@@ -102,4 +102,4 @@ StepSafe is licensed under the [GNU AGPL-3.0](LICENSE). The iOS app bundles the 
 
 ## AI tools used
 
-Ara Babigian and Dev Goswami can explain how this code works. The build used Claude Code (Anthropic), Claude Opus (Anthropic) and Codex (OpenAI) for review, and Cursor cloud agents. Logos were made with GPT Image 2 (OpenAI). The short account is in [CREDITS.md](CREDITS.md).
+Dev Goswami used Cursor (IDE and cloud agents) and Grok (including Grok Bot). Ara Babigian used Claude Code (Anthropic). Models used: Grok 4.7, Claude Code, Claude Opus, Codex, GPT Image 2.5. The short account is in [CREDITS.md](CREDITS.md).
