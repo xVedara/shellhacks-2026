@@ -1,9 +1,10 @@
 # StepSafe: 3-minute live demo
 
 Source: `PLAN.md` section 14. Crossing assist, the server link (hazard reports,
-heads-up, `/tts`), and the Scout tab have landed in `ios/` (commit `1cd146e`). As of
-that commit the app has not yet run on a physical iPhone — see the phone-test
-checklist and first-time device test below before the actual demo.
+heads-up, `/tts`), and the Scout tab are in `ios/`. Run the phone-test checklist
+below before the live demo. This file does not record a completed pass of that
+checklist. `MapRules.swift` notes a device check on 2026-09-26 for the 12 m
+heads-up radius only.
 
 ## What's built
 
@@ -19,16 +20,17 @@ checklist and first-time device test below before the actual demo.
   objects are not map pins (`ServerLink.handle` drops `.closing`).
 - **Server link:** `APIClient`/`ServerLink` post hazard reports, `MapSync` gives a
   heads-up for pins ahead within 12 m (39 ft) (once per 5 min), `TTSPlayer` calls `/tts` with
-  a speech fallback. Server URL is a text field in the Walker tab's debug panel
-  (`ServerStatusView` in `ServerLink.swift`; the panel header is "Debug"), default
-  `http://192.168.81.233:8787`.
+  a speech fallback. The only server is `https://api.stepsafe.miami`
+  (`APIClient.baseURL`). It is not configurable. `ServerStatusView` in
+  `ServerLink.swift` prints that URL as text. Launch deletes any old `serverURL`
+  UserDefaults value. `Info.plist` sets no App Transport Security exception.
 - **Scout tab:** tap to report, nearby list, votes, a taxonomy type picker
   (`GET /taxonomy`).
 - **Server + web, working on their own:** hazard reports, merging, naming (local
   Qwen via Ollama or Gemini), ElevenLabs voice, the live map, and the verify queue
   with a type picker (`server/README.md`, `web/README.md`).
-- **Bundled voice:** 71 phrases x EN/ES in the ElevenLabs voice "Sarah", played
-  on-device with no network for every fixed alert.
+- **Bundled voice:** 86 phrases x EN/ES in the ElevenLabs voice "Sarah", played
+  on-device with no network for every fixed alert (`Phrases/phrases.json`).
 
 ## Phone-test checklist (before the demo)
 
@@ -37,14 +39,13 @@ checklist and first-time device test below before the actual demo.
       30x slower and will miss detections).
 - [ ] Install on the iPhone from Xcode (select the device, ⌘R) — no App Store or
       TestFlight.
-- [ ] Start the server with `HOST=0.0.0.0` so phones on the LAN can reach it —
-      `scripts/dev-up.sh` does this by default (don't override to `127.0.0.1`).
-- [ ] In the app's Walker tab, set the **Server URL** field to
-      `http://<Mac LAN IP>:8787` (the IP `dev-up.sh` prints, e.g.
-      `http://192.168.81.233:8787`).
-- [ ] On first launch, allow **Local Network**, **Camera**, and **Location** (When
-      In Use) when iOS prompts — all three are required (Info.plist also requests
-      Motion, for head-direction tracking).
+- [ ] The shipping app calls only `https://api.stepsafe.miami`. There is no Server
+      URL field. A local `dev-up.sh` stack is reachable from the phone only after
+      `APIClient.baseURL` is changed in a dev build. `scripts/dev-up.sh` binds
+      `HOST` to `0.0.0.0` unless you set `HOST`.
+- [ ] On first launch, allow **Camera**, **Location** (When In Use), and **Motion**
+      when iOS prompts. Those are the usage strings in `Info.plist`. There is no
+      local-network usage string.
 - [ ] AirPods paired with **default** press controls: one press = "What's ahead",
       a second press within 2 s = mute toggle (arrives as `MPRemoteCommandCenter`
       play/pause, or next-track on some AirPods).
@@ -138,15 +139,17 @@ waiting on a real fix.
   field of view).
 - Combined drop-off + closing phrases are marked done at start, not on completion.
 - Spanish phrase wording wants a native speaker's pass.
-- Repo LICENSE for AGPL (YOLO11s is AGPL-3.0, see `ios/CREDITS.md`) is Ara's
-  decision, pending.
-- As of commit `1cd146e`, none of this had run on a physical device — that's what
-  the first-time device test above is for.
+- The repo license is AGPL-3.0-only (`LICENSE`). YOLO11s is AGPL-3.0-only
+  (`ios/CREDITS.md`).
+- This file does not record a completed physical-device pass of the checklist
+  above. `MapRules.swift` notes a device check on 2026-09-26 for the 12 m
+  heads-up radius only.
 
 ## General fallback
 
 If the API or Mongo dies mid-demo, do not `pkill`/`killall` and do not touch
 anything on the shared ports (3000, 8787, 27018, 11434) unless you started it this
 session: run `scripts/dev-up.sh stop` then `scripts/dev-up.sh` again on the same
-ports, or bring it up on spare ports (`MONGO_PORT`/`API_PORT`/`WEB_PORT`) and repoint
-the phones' Server URL field.
+ports, or bring it up on spare ports (`MONGO_PORT`/`API_PORT`/`WEB_PORT`). The
+phone still calls `https://api.stepsafe.miami` until `APIClient.baseURL` is
+changed in a dev build.

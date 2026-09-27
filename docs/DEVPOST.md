@@ -8,21 +8,19 @@ Code: https://github.com/xVedara/shellhacks-2026
 
 ## Inspiration
 
-A block walked without sight hides a sign at head height, a curb two steps ahead, or a car turning through the crosswalk, and nothing remembers what the last walker already met. We built a passive lookout on a phone people already carry, plus a shared memory of neighborhood hazards. This is our first hackathon.
+A block walked without sight can hide a sign at head height, a curb two steps ahead, or a car in the crosswalk, and nothing remembers what the last walker already met. We built a lookout on a phone people already carry, plus a shared map of neighborhood hazards. This is our first hackathon.
 
 ## What it does
 
-StepSafe is a head-mounted iPhone with LiDAR and AirPods for blind and low-vision walkers, and a community map at https://stepsafe.miami. The phone calls https://api.stepsafe.miami.
+StepSafe is a head-mounted iPhone with LiDAR and AirPods for blind and low-vision walkers, and a community map at https://stepsafe.miami. The phone calls only https://api.stepsafe.miami. That address is fixed in the app.
 
-Path guard speaks ground, head-height, and drop-off hazards in a narrow lane, on the phone, with a spatial tone from the hazard's direction. Crossing assist warns when a car, bike, or pushed cart is closing in. Those alerts stay audible while other speech is muted.
+Path guard speaks ground, head-height, and drop-off hazards on the phone, with a spatial tone from the hazard's direction. Crossing assist warns when a car, bike, or pushed cart is closing in. Those alerts stay audible while other speech is muted. Two AirPods presses cover "what's ahead" and mute. There is no turn-by-turn route.
 
-Still obstacles are cropped and pinned at once. The stillness gate re-anchors when a point moves, so moving people and vehicles stay off the map. Every 5 seconds Gemini (`gemini-flash-lite-latest`) picks one id from a taxonomy of 67 hazards for each new pin's crop. `POST /hazards` stores the pin and returns before that call. A person or a dog is deleted. A drop-off stays a generic obstacle.
-
-A walker who passes a pin and sees nothing there casts one downvote of weight 0.6. The same device cannot stack a second miss. A weight-1 pin clears after two different walkers miss it, once confidence is below 0. Heads-up speaks other reports by direction and distance. Anyone can report, vote, or reclassify. Two AirPods presses cover "what's ahead" and mute. StepSafe gives no turn-by-turn route.
+Still obstacles are cropped and pinned at once. Moving people and vehicles stay off the map. Every 5 seconds Gemini (`gemini-flash-lite-latest`) picks one id from a taxonomy of 67 hazards. A walker who passes a pin and sees nothing casts one downvote of weight 0.6 and cannot stack a second miss. Heads-up speaks other reports by direction and distance.
 
 ## How we built it
 
-ARKit scene depth feeds path guard. Crossing assist pairs a depth closing detector with YOLO11s in Core ML. Alerts are spatial audio plus Core Haptics. English and Spanish phrases are pre-generated with ElevenLabs and bundled offline. Each spoken phrase is a template for a taxonomy id and a height band. The API is Node and TypeScript on Fastify with MongoDB Atlas. A report merges into an active pin within 10 meters on the same height band, or becomes a new pin at once. Atlas holds a 2dsphere index, TTL expiry by category, and change streams. The site is Next.js and Leaflet on OpenStreetMap.
+ARKit scene depth feeds path guard. Crossing assist pairs a depth closing detector with YOLO11s in Core ML. Alerts are spatial audio plus Core Haptics. English and Spanish phrases are pre-generated with ElevenLabs and play offline. The API is Node and TypeScript on Fastify with MongoDB Atlas. A report merges into an active pin within 10 meters on the same height band, or becomes a new pin at once.
 
 ## Challenges
 
@@ -30,7 +28,7 @@ A head turn used to look like an approaching car, because a YOLO box grows when 
 
 ## Accomplishments
 
-Dev (xVedara) and Ara (iceclatterWT), both first-time hackers, shipped on-device sensing, retroactive Gemini naming, walk-past clearing, and a live map. The app has 140 iOS tests, 79 server tests, and 36 web tests.
+Dev (xVedara) and Ara (iceclatterWT), both first-time hackers, shipped on-device sensing, retroactive Gemini naming, and walk-past clearing. Tests on this branch: 140 iOS, 79 server, and 37 web.
 
 ## What's next
 

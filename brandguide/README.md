@@ -12,7 +12,7 @@ Regenerate the derived files with `python3 make_icons.py` (needs Pillow).
 
 ## Name and voice
 
-- Name: **StepSafe** (one word, capital S twice). Tagline: **Detect. Alert. Move Freely.**
+- Name: **StepSafe** (one word, capital S twice). Tagline: **Travel safe. Together.**
 - Voice: calm, immediate, clear, concise. Alerts read like "Curb ahead. 6 feet.", never "WARNING!".
 - Full brand and product handoff: `/Users/ara/Downloads/shellhacks2026/Brand Guide/` (workspace, not in the repo).
 
