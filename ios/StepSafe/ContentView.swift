@@ -76,28 +76,20 @@ final class AppModel: ObservableObject {
     }
 }
 
-extension Color {
-    static let navy = Color(red: 8 / 255, green: 22 / 255, blue: 36 / 255)
-    static let hazard = Color(red: 1, green: 121 / 255, blue: 0)           // #FF7900, hazards only
-    static let control = Color(red: 8 / 255, green: 127 / 255, blue: 245 / 255) // #087FF5
-    /// Slate #9AA5B1, secondary text (brandguide/README.md): 7.29:1 on navy, 6.29:1 on a card. The old #66717E was
-    /// only 3.67:1 on navy, below the 4.5:1 text minimum.
-    static let slate = Color(red: 154 / 255, green: 165 / 255, blue: 177 / 255)
-}
-
 struct ContentView: View {
     @ObservedObject var model: AppModel
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 12) {
                 header
                 if model.pathGuardFailed { problem("Path guard failed, restart") }
                 if model.audioFailed { problem("Audio failed") }
                 if !SensorSession.isSupported {
                     Text("This device has no LiDAR. StepSafe needs an iPhone Pro.")
-                        .foregroundStyle(.white)
-                        .multilineTextAlignment(.center)
+                        .font(.body)
+                        .foregroundStyle(Color.ink2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 BigButton(title: model.running ? "Stop" : "Start",
                           systemImage: model.running ? "stop.fill" : "play.fill",
@@ -114,7 +106,7 @@ struct ContentView: View {
             }
             .padding(16)
         }
-        .background(Color.navy.ignoresSafeArea())
+        .background(Color.page.ignoresSafeArea())
     }
 
     private var floorText: String {
@@ -126,36 +118,65 @@ struct ContentView: View {
     }
 
     private var header: some View {
-        VStack(spacing: 4) {
-            Text("StepSafe").font(.largeTitle.bold()).foregroundStyle(.white)
-            Text(model.running ? (model.muted ? "Scanning, muted" : "Scanning") : "Stopped")
-                .foregroundStyle(Color.slate)
+        VStack(alignment: .leading, spacing: 6) {
+            Text("StepSafe")
+                .font(.largeTitle.weight(.bold))
+                .tracking(-0.8)
+                .foregroundStyle(Color.ink)
+            HStack(spacing: 8) {
+                Circle().fill(headerMarkColor).frame(width: 8, height: 8)
+                    .accessibilityHidden(true)
+                Text(model.running ? (model.muted ? "Scanning, muted" : "Scanning") : "Stopped")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(headerStatusColor)
+            }
         }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isHeader)
     }
 
+    /// Live scanning words use the link ink. Muted is `--ink-2`. Stopped is `--ink-3`.
+    private var headerStatusColor: Color {
+        if !model.running { return .ink3 }
+        return model.muted ? .ink2 : .signalText
+    }
+
+    /// The status dot is a fill, so it keeps `--signal` (`#087FF5` in light).
+    private var headerMarkColor: Color {
+        if !model.running { return .ink3 }
+        return model.muted ? .ink2 : .signal
+    }
+
+    /// Web warning notice: `--warn-tint` fill, `--warn-ink` words, `--hazard` edge.
     private func problem(_ text: String) -> some View {
-        Label(text, systemImage: "exclamationmark.octagon.fill")
-            .font(.title3.bold())
-            .foregroundStyle(Color.hazard)
-            .frame(maxWidth: .infinity)
-            .padding(12)
-            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.hazard, lineWidth: 2))
-            .accessibilityLabel("Problem: \(text)")
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "exclamationmark.octagon.fill")
+                .font(.body)
+                .foregroundStyle(Color.hazard)
+            Text(text)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(Color.warnInk)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(Color.warnTint, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.hazard.opacity(0.7), lineWidth: 2))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Problem: \(text)")
     }
 
     private var debug: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Debug").font(.headline).foregroundStyle(.white)
+                Text("Debug").font(.headline).tracking(-0.3).foregroundStyle(Color.ink)
                     .accessibilityAddTraits(.isHeader)
                 Spacer()
-                Text(String(format: "%.1f fps", model.fps)).monospacedDigit().foregroundStyle(Color.slate)
+                Text(String(format: "%.1f fps", model.fps)).font(.footnote.monospacedDigit()).foregroundStyle(Color.ink3)
                     .accessibilityLabel(String(format: "Analysis %.0f frames per second", model.fps))
             }
             Text(floorText)
-                .font(.footnote).foregroundStyle(Color.slate)
+                .font(.footnote).foregroundStyle(Color.ink3)
             if let image = model.thumbnail {
                 // Depth arrives in the sensor's landscape orientation; rotate for the portrait mount.
                 Image(decorative: image, scale: 1, orientation: .right)
@@ -167,17 +188,40 @@ struct ContentView: View {
             }
             let hazards = model.confirmed.values.sorted { AlertPolicy.priority($0) < AlertPolicy.priority($1) }
             if hazards.isEmpty {
-                Label(Notices.nothingAhead, systemImage: "checkmark.circle").foregroundStyle(.white)
+                Label(Notices.nothingAhead, systemImage: "checkmark.circle")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(Color.signalText)
             }
             ForEach(hazards, id: \.kind) { d in
-                Label(AlertPolicy.phrase(d), systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(Color.hazard)
-                    .accessibilityLabel("Hazard: \(AlertPolicy.phrase(d))")
+                hazardRow(d)
             }
             ServerStatusView(link: model.link)
         }
-        .padding(12)
-        .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
+        .padding(16)
+        .cardSurface()
+    }
+
+    /// Height bands use the locked sheet. A live closing vehicle has no tile on that sheet.
+    private func hazardRow(_ d: Detection) -> some View {
+        HStack(spacing: 12) {
+            switch d.kind {
+            case .ground:
+                LockedHazardIcon(name: "height-ground", side: 28)
+            case .headHeight:
+                LockedHazardIcon(name: "height-head", side: 28)
+            case .dropOff:
+                LockedHazardIcon(name: "height-dropoff", side: 28)
+            case .closing:
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(Color.warnInk)
+            }
+            Text(AlertPolicy.phrase(d))
+                .font(.body.weight(.semibold))
+                .tracking(-0.2)
+                .foregroundStyle(Color.warnInk)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Hazard: \(AlertPolicy.phrase(d))")
     }
 }
 
@@ -190,14 +234,19 @@ struct BigButton: View {
 
     var body: some View {
         Button(action: action) {
-            Label(title, systemImage: systemImage)
-                .font(.title2.bold())
+            Label {
+                Text(title).tracking(-0.3)
+            } icon: {
+                Image(systemName: systemImage)
+            }
+                .font(.title3.weight(.semibold))
                 .frame(maxWidth: .infinity, minHeight: 72)
-                .foregroundStyle(filled ? Color.white : Color.control)
-                .background(filled ? Color.control : Color.clear, in: RoundedRectangle(cornerRadius: 16))
-                .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.control, lineWidth: 2))
-                .opacity(isEnabled ? 1 : 0.4) // explicit colors above override the system's dimmed look
+                .foregroundStyle(filled ? Color.primaryInk : Color.ink)
+                .background(filled ? Color.primaryFill : Color.clear, in: Capsule())
+                .overlay(Capsule().stroke(filled ? Color.clear : Color.borderStrong, lineWidth: 1))
+                .opacity(isEnabled ? 1 : 0.4) // explicit fills ignore the system disabled fade
         }
+        .frame(maxWidth: .infinity)
         .accessibilityLabel(title)
     }
 }

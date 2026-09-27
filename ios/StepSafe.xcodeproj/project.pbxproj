@@ -47,6 +47,8 @@
 		BC0C58275FAF04E9C059BF6C /* Tuning.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4271F6477FE33E5191E83C48 /* Tuning.swift */; };
 		BC3EDAE98CB363405C8F76FC /* CrossingMonteCarloTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9179013510196CB698160697 /* CrossingMonteCarloTests.swift */; };
 		BE120D23FEC5CCD503D3AFFC /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4A7EF0F08F24BA8163B05FEC /* Assets.xcassets */; };
+		6A3C8E1D5B2F49A7C4D0E815 /* HazardIcons in Resources */ = {isa = PBXBuildFile; fileRef = 1E7B4A9C3D8F46E2B0A5C634 /* HazardIcons */; };
+		8F2D6C1A9E4B47D3A0C5F178 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A91E7B2F6D48A0B15C3E92 /* Theme.swift */; };
 		BF748C8A273ACD6C4DC758FF /* PathGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F082091A4DDB2F07392C30FF /* PathGuardTests.swift */; };
 		C37F981092A12FADE4B185F5 /* yolo11s_wise01.mlpackage in Sources */ = {isa = PBXBuildFile; fileRef = 7CE9878D8C10ADB66A36350E /* yolo11s_wise01.mlpackage */; };
 		C6F4A94F6EE71C8D21E45339 /* MapRulesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B340FE981BC9DFF3ABC653 /* MapRulesTests.swift */; };
@@ -72,6 +74,8 @@
 		27F88CC2238BBF138080B767 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		2B1D082AB0C2B99A8CC568D3 /* MapSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapSync.swift; sourceTree = "<group>"; };
 		2D58E38014A147317AF15DE1 /* Phrases */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Phrases; path = StepSafe/Phrases; sourceTree = SOURCE_ROOT; };
+		1E7B4A9C3D8F46E2B0A5C634 /* HazardIcons */ = {isa = PBXFileReference; lastKnownFileType = folder; name = HazardIcons; path = StepSafe/HazardIcons; sourceTree = SOURCE_ROOT; };
+		C4A91E7B2F6D48A0B15C3E92 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		31A9310022EF8AABA88BD42F /* BoxTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoxTracker.swift; sourceTree = "<group>"; };
 		4271F6477FE33E5191E83C48 /* Tuning.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tuning.swift; sourceTree = "<group>"; };
 		4A7EF0F08F24BA8163B05FEC /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -164,6 +168,7 @@
 				20F9BE3BE4FC4C1489A5352F /* SensorSession.swift */,
 				556BB89ED53BFA792964A285 /* ServerLink.swift */,
 				E074A56398607FDE4729FD90 /* StepSafeApp.swift */,
+				C4A91E7B2F6D48A0B15C3E92 /* Theme.swift */,
 				9EBE1E5BD27CD71C4C7A7B96 /* TTSPlayer.swift */,
 				1B011AA770DB532CD9557B48 /* VehicleDetector.swift */,
 				C22A47F5888988D540A9DF5F /* VoteStore.swift */,
@@ -193,6 +198,7 @@
 			isa = PBXGroup;
 			children = (
 				2D58E38014A147317AF15DE1 /* Phrases */,
+				1E7B4A9C3D8F46E2B0A5C634 /* HazardIcons */,
 				DD73B7C3A4D469BEE3C06CC9 /* StepSafe */,
 				6338FAC4E1A0435F257EB3A3 /* StepSafeTests */,
 				1AACC9C597732C6926733F9E /* Products */,
@@ -284,6 +290,7 @@
 				BE120D23FEC5CCD503D3AFFC /* Assets.xcassets in Resources */,
 				0D7B3358F8577CA26047623C /* LICENSE in Resources */,
 				29F9B9F7541DB1B2680D3295 /* Phrases in Resources */,
+				6A3C8E1D5B2F49A7C4D0E815 /* HazardIcons in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -314,6 +321,7 @@
 				B84D6502AD809081542B6B52 /* SensorSession.swift in Sources */,
 				A38B8299299CDCFEE2D40C39 /* ServerLink.swift in Sources */,
 				B0F31929D183C64F79BB52E3 /* StepSafeApp.swift in Sources */,
+				8F2D6C1A9E4B47D3A0C5F178 /* Theme.swift in Sources */,
 				274FB8C9D81D6A3FCB753F45 /* TTSPlayer.swift in Sources */,
 				AF9466510B90D100A2D85EEB /* TrackingDebounce.swift in Sources */,
 				DD84C724667B7DB6472F1ACF /* Tuning.swift in Sources */,

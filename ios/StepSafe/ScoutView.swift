@@ -324,33 +324,43 @@ struct ScoutView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 14) {
-                Text("Scout").font(.largeTitle.bold()).foregroundStyle(.white)
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Scout")
+                    .font(.largeTitle.weight(.bold))
+                    .tracking(-0.8)
+                    .foregroundStyle(Color.ink)
                     .accessibilityAddTraits(.isHeader)
                 ARPreview(session: model.sensors.session, cameraLive: cameraLive) { capture in
                     if !scout.busy { scout.submit(capture) }
                 }
                 .frame(height: 380)
+                .frame(maxWidth: .infinity)
                 .clipShape(RoundedRectangle(cornerRadius: 16))
+                .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.line, lineWidth: 1).allowsHitTesting(false))
                 Picker("Height", selection: $scout.band) {
                     Text("Ground").tag("ground")
                     Text("Head height").tag("head")
                     Text("Drop-off").tag("dropoff")
                 }
                 .pickerStyle(.segmented)
+                .tint(Color.control)
+                .frame(maxWidth: .infinity)
                 .accessibilityLabel("Height of the hazard")
                 Text(scout.status.text)
-                    .font(.title3).foregroundStyle(.white).multilineTextAlignment(.center)
+                    .font(.title3.weight(.medium))
+                    .tracking(-0.3)
+                    .foregroundStyle(Color.ink)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .accessibilityAddTraits(.updatesFrequently)
                 if let report = scout.report { correctButton(PickTarget(id: report.id, name: report.label), wide: true) }
                 if scout.taxonomyFailed {
-                    Text("Types unavailable").foregroundStyle(Color.slate)
+                    Text("Types unavailable").foregroundStyle(Color.ink3)
                 }
                 nearbyList
             }
             .padding(16)
         }
-        .background(Color.navy.ignoresSafeArea())
+        .background(Color.page.ignoresSafeArea())
         .onAppear {
             model.link.setScout(true)
             if !model.running && SensorSession.isSupported { model.sensors.start(); startedSession = true }
@@ -388,13 +398,14 @@ struct ScoutView: View {
             Button { picking = target } label: {
                 Label(wide ? "Correct type" : "", systemImage: "pencil")
                     .labelStyle(wide ? AnyLabelStyle(.titleAndIcon) : AnyLabelStyle(.iconOnly))
-                    .font(wide ? .title3.bold() : .title2)
+                    .font(wide ? .title3.weight(.semibold) : .title2)
                     .padding(wide ? 0 : 10)
                     .frame(maxWidth: wide ? .infinity : nil)
                     .frame(minWidth: 56, minHeight: 56)
                     .frame(maxHeight: wide ? nil : .infinity) // same height as the thumbs wells beside it
-                    .background(wide ? Color.control : Color.navy, in: RoundedRectangle(cornerRadius: 12))
-                    .foregroundStyle(.white)
+                    .background(wide ? Color.primaryFill : Color.raised, in: Capsule())
+                    .overlay(Capsule().stroke(wide ? Color.clear : Color.borderStrong, lineWidth: 1))
+                    .foregroundStyle(wide ? Color.primaryInk : Color.ink)
             }
             .accessibilityLabel("Correct type: \(target.name)")
         }
@@ -403,7 +414,7 @@ struct ScoutView: View {
     private var nearbyList: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Nearby, 650 feet").font(.headline).foregroundStyle(.white)
+                Text("Nearby, 650 feet").font(.headline).tracking(-0.3).foregroundStyle(Color.ink)
                     .accessibilityAddTraits(.isHeader)
                 Spacer()
                 Button { scout.refresh() } label: { Image(systemName: "arrow.clockwise").frame(width: 44, height: 44) }
@@ -412,19 +423,19 @@ struct ScoutView: View {
             }
             if scout.nearbyPhase == .loading {
                 ProgressView("Loading hazards")
-                    .tint(Color.slate)
-                    .foregroundStyle(Color.slate)
+                    .tint(Color.ink3)
+                    .foregroundStyle(Color.ink3)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else if scout.nearbyPhase == .failed {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Could not load nearby hazards").foregroundStyle(Color.slate)
+                    Text("Could not load nearby hazards").foregroundStyle(Color.ink3)
                     Button("Try again") { scout.refresh() }
                         .font(.headline)
                         .frame(minHeight: 44)
-                        .foregroundStyle(Color.control)
+                        .foregroundStyle(Color.controlInk)
                 }
             } else if scout.nearbyPhase == .loaded, scout.nearby.isEmpty {
-                Text("No hazards nearby").foregroundStyle(Color.slate)
+                Text("No hazards nearby").foregroundStyle(Color.ink3)
             }
             ForEach(scout.nearby) { pin in
                 // Buttons drop below the text at accessibility sizes instead of squeezing it.
@@ -432,20 +443,27 @@ struct ScoutView: View {
                                                           : AnyLayout(HStackLayout(spacing: 8))
                 layout {
                     // Same formatting as the Community list: Sample badge, "220 feet · ground · confidence 3".
-                    VStack(alignment: .leading, spacing: 4) {
-                        let titleRow = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
-                                                                    : AnyLayout(HStackLayout())
-                        titleRow {
-                            Text(scout.name(pin)).foregroundStyle(.white)
-                            if pin.sample == true {
-                                Text("Sample").font(.caption.bold()).padding(.horizontal, 6).padding(.vertical, 2)
-                                    .background(Color.slate, in: Capsule()).foregroundStyle(Color.navy)
+                    HStack(spacing: 8) {
+                        HazardPin(type: pin.type, category: pin.category, side: 32)
+                        VStack(alignment: .leading, spacing: 4) {
+                            let titleRow = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+                                                                        : AnyLayout(HStackLayout())
+                            titleRow {
+                                Text(scout.name(pin))
+                                    .font(.body.weight(.semibold))
+                                    .tracking(-0.2)
+                                    .foregroundStyle(Color.ink)
+                                if pin.sample == true {
+                                    Text("Sample").font(.caption2.weight(.medium)).foregroundStyle(Color.ink2)
+                                        .padding(.horizontal, 6).padding(.vertical, 2)
+                                        .overlay(Capsule().stroke(Color.ink2, style: StrokeStyle(lineWidth: 1, dash: [3, 2])))
+                                }
                             }
+                            Text([pin.distanceM.map { Community.distance($0) }, Community.band(pin.heightBand).lowercased(),
+                                  "confidence " + Community.confidence(pin.confidence)]
+                                .compactMap { $0 }.joined(separator: " · "))
+                                .font(.footnote).foregroundStyle(Color.ink3)
                         }
-                        Text([pin.distanceM.map { Community.distance($0) }, Community.band(pin.heightBand).lowercased(),
-                              "confidence " + Community.confidence(pin.confidence)]
-                            .compactMap { $0 }.joined(separator: " · "))
-                            .font(.footnote).foregroundStyle(Color.slate)
                     }
                     .accessibilityElement(children: .combine)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -456,8 +474,8 @@ struct ScoutView: View {
                     }
                     .fixedSize(horizontal: false, vertical: true) // three wells, one height
                 }
-                .padding(8)
-                .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
+                .padding(12)
+                .cardSurface()
             }
         }
     }
@@ -471,9 +489,9 @@ struct ScoutView: View {
                 .padding(10) // the glyph stays inside its well at accessibility sizes
                 .frame(minWidth: 56, minHeight: 56) // grows with the symbol at large text sizes
                 .frame(maxHeight: .infinity)
-                // Navy well inside the card: #087FF5 is 4.66:1 on it (2.96:1 on the old white-10% surface).
-                .background(Color.navy, in: RoundedRectangle(cornerRadius: 12))
-                .foregroundStyle(up ? Color.control : Color.white) // orange is for hazards, not controls
+                .background(up ? Color.primaryFill : Color.raised, in: Capsule())
+                .overlay(Capsule().stroke(up ? Color.clear : Color.borderStrong, lineWidth: 1))
+                .foregroundStyle(up ? Color.primaryInk : Color.ink) // orange is for hazards, not controls
         }
         .disabled(sending || mine != nil)
         .opacity(sending || (mine != nil && mine != (up ? "up" : "down")) ? 0.4 : 1) // your vote stays bright
@@ -556,9 +574,12 @@ struct TypePicker: View {
                     Button {
                         if let propose { propose(entry, category.nilIfEmpty, band.nilIfEmpty) } else { pick(entry) }
                     } label: {
-                        Text(Spoken.capitalized(entry.name(lang: lang)))
-                            .font(.title3)
-                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        HStack(spacing: 10) {
+                            LockedHazardIcon(name: entry.id, side: 28)
+                            Text(Spoken.capitalized(entry.name(lang: lang)))
+                                .font(.title3)
+                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        }
                     }
                     .accessibilityHint(t("Proposes this type", "Propone este tipo"))
                 }
@@ -567,10 +588,12 @@ struct TypePicker: View {
             .navigationTitle(t("Type of \(title)", "Tipo de \(title)"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button(t("Cancel", "Cancelar"), action: cancel) } }
+            .toolbarBackground(Color.page, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
         }
-        // White text for Cancel, the picker values and the type rows: the app's blue tint was 2.7-3.5:1 on the
-        // sheet's glass and gray.
-        .tint(.white)
+        // Ink on the opaque page bar. Blue on the sheet's glass was 2.7-3.5:1.
+        .tint(Color.ink)
+        .presentationBackground(Color.page)
     }
 }
 

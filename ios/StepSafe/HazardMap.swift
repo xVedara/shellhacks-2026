@@ -252,7 +252,7 @@ struct HazardMap: UIViewRepresentable {
             v.lang = parent.lang
             v.activate = { [weak map] in map?.selectAnnotation(annotation, animated: false) }
             v.markerTintColor = UIColor(Color.hazard)
-            v.glyphTintColor = UIColor(Color.navy) // navy on orange 6.94:1 (white would be 2.63:1)
+            v.glyphTintColor = UIColor(Color.markRing) // navy on orange, in both appearances
             v.canShowCallout = false
         }
 
@@ -305,7 +305,7 @@ struct HazardMapLegend: View {
         .font(.caption)
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .background(Color.navy.opacity(0.85), in: RoundedRectangle(cornerRadius: stacked ? 12 : 20))
+        .background(Color.page.opacity(0.92), in: RoundedRectangle(cornerRadius: stacked ? 12 : 20))
         .dynamicTypeSize(...DynamicTypeSize.accessibility1)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(lang == "es" ? "Letras: P permanente, T temporal, M móvil"
@@ -314,12 +314,12 @@ struct HazardMapLegend: View {
 
     private func item(_ letter: String, _ name: String) -> some View {
         HStack(spacing: 4) {
-            Text(letter).font(.caption.bold()).foregroundStyle(Color.navy)
+            Text(letter).font(.caption.bold()).foregroundStyle(Color.markRing)
                 .fixedSize()
                 .padding(4)
                 .frame(minWidth: 18, minHeight: 18)
                 .background(Color.hazard, in: Circle())
-            Text(name).foregroundStyle(.white).fixedSize() // never hyphenated
+            Text(name).foregroundStyle(Color.ink).fixedSize() // never hyphenated
         }
     }
 }
