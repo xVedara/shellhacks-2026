@@ -137,7 +137,7 @@ export function Notice({ tone, title, children }: { tone: "warn" | "info"; title
   return (
     <div
       role={tone === "warn" ? "alert" : "status"}
-      className={`flex gap-2.5 rounded-xl border px-3.5 py-3 text-[13px] ${tone === "warn" ? "border-[var(--border-strong)] bg-warn-tint" : "border-line bg-raised"}`}
+      className={`flex gap-2.5 rounded-xl border px-3.5 py-3 text-[13px] ${tone === "warn" ? "border-[var(--field)] bg-warn-tint" : "border-line bg-raised"}`}
     >
       <svg
         className={`mt-px shrink-0 ${tone === "warn" ? "text-ink" : "text-ink-3"}`}

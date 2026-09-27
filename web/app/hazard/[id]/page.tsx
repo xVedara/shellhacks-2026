@@ -2,14 +2,15 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useRef } from "react";
 import HazardDetail, { useHazardDetail } from "@/components/HazardDetail";
 import Map from "@/components/Map";
-import { DESKTOP_QUERY, Notice, TypeIcon, linkClass, primaryButton, secondaryButton } from "@/components/ui";
+import { Notice, TypeIcon, linkClass, primaryButton, secondaryButton } from "@/components/ui";
 import { CATEGORY_META, HEIGHT_META, relativeTime, typeDisplayName, type HazardDetail as Detail } from "@/lib/api";
 import { milesFromGraham } from "@/lib/geo";
 import { mapControlsHidden } from "@/lib/map-controls";
 import { useHazardRevision, useNow, useTaxonomy } from "@/lib/hooks";
+import { useSheetMetrics } from "@/lib/use-sheet";
 
 export default function HazardPage() {
   const { id } = useParams<{ id: string }>();
@@ -19,30 +20,8 @@ export default function HazardPage() {
   const { taxonomy } = useTaxonomy();
   const stageRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLElement>(null);
-  const [sheet, setSheet] = useState(0);
-  const [stageH, setStageH] = useState(700);
-  const [desktop, setDesktop] = useState(false);
-
-  useEffect(() => {
-    const panel = panelRef.current;
-    const stage = stageRef.current;
-    if (!panel || !stage) return;
-    const read = () => {
-      const wide = matchMedia(DESKTOP_QUERY).matches;
-      setDesktop(wide);
-      setSheet(wide ? 0 : panel.getBoundingClientRect().height);
-      setStageH(stage.getBoundingClientRect().height || 700);
-    };
-    const ro = new ResizeObserver(read);
-    ro.observe(panel);
-    ro.observe(stage);
-    const mq = matchMedia(DESKTOP_QUERY);
-    mq.addEventListener("change", read);
-    return () => {
-      ro.disconnect();
-      mq.removeEventListener("change", read);
-    };
-  }, [detail]);
+  const { desktop, stageH, sheet: measured } = useSheetMetrics(stageRef, panelRef);
+  const sheet = desktop ? 0 : (measured ?? 0);
 
   const name = detail ? detail.label || typeDisplayName(detail.type, taxonomy) : "Hazard";
   const miles = detail ? milesFromGraham(detail.lat, detail.lng) : "";

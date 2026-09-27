@@ -4,7 +4,7 @@
 // next/dynamic with ssr:false (see components/Map.tsx).
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { AttributionControl, CircleMarker, MapContainer, Marker, Polyline, TileLayer, Tooltip, ZoomControl, useMap } from "react-leaflet";
 import type { HazardSummary } from "@/lib/api";
 import { clusterByPixel, pushClear } from "@/lib/cluster";
@@ -270,11 +270,14 @@ function ClusteredHazards({
   selectedId,
   highlightId,
   onSelect,
+  sheet,
 }: {
   hazards: HazardSummary[];
   selectedId?: string | null;
   highlightId?: string | null;
   onSelect?: (id: string) => void;
+  /** Phone sheet height: the bubble must stay in the strip above it, not just on the map. */
+  sheet: number;
 }) {
   const map = useMap();
   const [view, setView] = useState(0);
@@ -302,7 +305,7 @@ function ClusteredHazards({
         split.push({ hazards: [selected], x: p.x, y: p.y });
         // Slide the leftover cluster out from under the selected pin so it stays a whole 44px target.
         const size = map.getSize();
-        split.push({ hazards: rest, ...pushClear(group, p, SELECTED_CLEARANCE, { w: size.x, h: size.y }, CLUSTER_SIZE / 2) });
+        split.push({ hazards: rest, ...pushClear(group, p, SELECTED_CLEARANCE, { w: size.x, h: Math.max(0, size.y - sheet) }, CLUSTER_SIZE / 2) });
       } else {
         split.push({ hazards: group.items, x: group.x, y: group.y });
       }
@@ -310,7 +313,7 @@ function ClusteredHazards({
     return split;
     // view is the camera generation; map methods read the latest projection.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hazards, map, selectedId, view]);
+  }, [hazards, map, selectedId, sheet, view]);
 
   return (
     <>
@@ -389,7 +392,13 @@ function MapLocateNote({ map, onNote }: { map: L.Map | null; onNote: (note: stri
   return null;
 }
 
-const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const REDUCE = "(prefers-reduced-motion: reduce)";
+const subscribeMotion = (onChange: () => void) => {
+  const mq = window.matchMedia(REDUCE);
+  mq.addEventListener("change", onChange);
+  return () => mq.removeEventListener("change", onChange);
+};
+const reducedMotion = () => window.matchMedia(REDUCE).matches;
 
 export default function LeafletMap({
   hazards,
@@ -404,11 +413,14 @@ export default function LeafletMap({
   sheet = 0,
 }: MapProps) {
   const [map, setMap] = useState<L.Map | null>(null);
-  // Read once: Leaflet takes these options only when the map is created.
-  const [calm] = useState(reducedMotion);
+  // Leaflet reads its animation options only when the map is created, so a change to the reduced-motion
+  // setting remounts the map (key). The view restarts at the page's center; a selected pin is panned back
+  // into view. ponytail: keep the reader's pan/zoom across the remount if people toggle this mid-session.
+  const calm = useSyncExternalStore(subscribeMotion, reducedMotion, () => false);
   return (
     <div role="region" aria-label={label} className="relative h-full w-full">
       <MapContainer
+        key={calm ? "calm" : "moving"}
         center={center}
         zoom={zoom}
         preferCanvas
@@ -439,7 +451,7 @@ export default function LeafletMap({
               <HazardMarker key={h.id} hazard={h} selected={h.id === selectedId} highlighted={h.id === highlightId} compact onSelect={onSelect} />
             ))
           : (
-              <ClusteredHazards hazards={hazards} selectedId={selectedId} highlightId={highlightId} onSelect={onSelect} />
+              <ClusteredHazards hazards={hazards} selectedId={selectedId} highlightId={highlightId} onSelect={onSelect} sheet={sheet} />
             )}
       </MapContainer>
       {!compact && <LocateButton map={map} />}

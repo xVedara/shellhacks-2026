@@ -4,11 +4,12 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import HazardDetail, { useHazardDetail } from "@/components/HazardDetail";
 import Map from "@/components/Map";
-import { DESKTOP_QUERY, Legend, LiveDot, Notice, SampleBadge, TypeIcon, linkClass, primaryButton, secondaryButton } from "@/components/ui";
+import { Legend, LiveDot, Notice, SampleBadge, TypeIcon, linkClass, primaryButton, secondaryButton } from "@/components/ui";
 import { API_URL, CATEGORY_META, GRAHAM_CENTER, HEIGHT_META, relativeTime, typeDisplayName, type HazardSummary } from "@/lib/api";
 import { milesFromGraham } from "@/lib/geo";
 import { mapControlsHidden } from "@/lib/map-controls";
 import { useLiveHazards, useNow, useTaxonomy, type Connection } from "@/lib/hooks";
+import { useSheetMetrics } from "@/lib/use-sheet";
 import { useVotedIds } from "@/lib/use-voted";
 
 type Detent = "peek" | "medium" | "expanded";
@@ -28,18 +29,6 @@ const detentsFor = (stage: number): Detent[] => (stage < SHORT_STAGE ? ["peek", 
 function mapPinsClass(desktop: boolean, strip: number) {
   if (desktop || strip >= 120) return "";
   return strip < 84 ? " map-covered" : " pins-thin";
-}
-
-function useDesktop() {
-  return useSyncExternalStore(
-    (onChange) => {
-      const mq = matchMedia(DESKTOP_QUERY);
-      mq.addEventListener("change", onChange);
-      return () => mq.removeEventListener("change", onChange);
-    },
-    () => matchMedia(DESKTOP_QUERY).matches,
-    () => false,
-  );
 }
 
 function selectedFromLocation() {
@@ -89,8 +78,6 @@ export default function MapPage() {
   const [showOsm, setShowOsm] = useState(false);
   const [dragH, setDragH] = useState<number | null>(null);
   const [dragging, setDragging] = useState(false);
-  const [measuredSheet, setMeasuredSheet] = useState<number | null>(null);
-  const desktop = useDesktop();
   const linkedId = useSyncExternalStore((onChange) => {
     window.addEventListener("popstate", onChange);
     return () => window.removeEventListener("popstate", onChange);
@@ -101,7 +88,7 @@ export default function MapPage() {
   const panelHeading = useRef<HTMLHeadingElement>(null);
   const returnFocusTo = useRef<string | null>(null);
   const drag = useRef<{ y: number; h: number; moved: boolean } | null>(null);
-  const [stageH, setStageH] = useState(700);
+  const { desktop, stageH, sheet: measuredSheet } = useSheetMetrics(stageRef, panelRef);
 
   const list = useMemo(() => [...hazards.values()].sort((a, b) => b.lastSeen.localeCompare(a.lastSeen)), [hazards]);
   const selected = selectedId ? hazards.get(selectedId) : undefined;
@@ -120,32 +107,6 @@ export default function MapPage() {
     setSelectedId(linkedId);
     setDetent("medium");
   }
-
-  useEffect(() => {
-    const el = stageRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver(() => setStageH(el.getBoundingClientRect().height || 700));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  useEffect(() => {
-    const el = panelRef.current;
-    if (!el) return;
-    const read = () => {
-      const wide = matchMedia(DESKTOP_QUERY).matches;
-      const next = wide ? 0 : Math.round(el.getBoundingClientRect().height);
-      setMeasuredSheet((prev) => (prev === next ? prev : next));
-    };
-    const ro = new ResizeObserver(read);
-    ro.observe(el);
-    const mq = matchMedia(DESKTOP_QUERY);
-    mq.addEventListener("change", read);
-    return () => {
-      ro.disconnect();
-      mq.removeEventListener("change", read);
-    };
-  }, []);
 
   const detents = detentsFor(stageH);
   // "medium" on a short stage shows as expanded; every step below works on the detents this stage offers.
@@ -550,10 +511,12 @@ function HazardRow({
           <TypeIcon type={h.type} category={h.category} selected={selected} />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[15px] font-medium tracking-[-0.02em] text-ink">
-            {name} {h.sample && <SampleBadge />}
+          {/* Only the name truncates, so a long name cannot push the Sample and New tags out of sight. */}
+          <span className="flex min-w-0 items-center gap-1.5 text-[15px] font-medium tracking-[-0.02em] text-ink">
+            <span className="truncate">{name}</span>
+            {h.sample && <span className="shrink-0"><SampleBadge /></span>}
             {/* Accent blue on this tint over a selected row is 4.33:1; ink clears 4.5 (WCAG 1.4.3). */}
-            {isNew && <span className="ml-1.5 rounded-full bg-accent-tint px-1.5 text-[11px] font-semibold text-ink">New</span>}
+            {isNew && <span className="shrink-0 rounded-full bg-accent-tint px-1.5 text-[11px] font-semibold text-ink">New</span>}
           </span>
           <span className="mt-0.5 block truncate text-[12px] text-ink-3">
             <span className="sr-only">{CATEGORY_META[h.category].label} · </span>

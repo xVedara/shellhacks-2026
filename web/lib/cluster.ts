@@ -38,8 +38,9 @@ type Pt = { x: number; y: number };
 
 /**
  * `point` moved directly away from `from` until it is at least `min` px away (straight up if they coincide).
- * With `bounds` (the map size) and `edge` (the bubble radius), a spot that would leave the map tries the
- * opposite side, then the two sides at right angles, and is clamped inside as a last resort.
+ * With `bounds` (the visible map) and `edge` (the bubble radius), a spot that would leave the map turns
+ * around `from` in 22.5° steps, nearest angles first, and takes the first spot inside that still keeps `min`.
+ * Only when no angle fits (a map smaller than the gap) is it clamped inside.
  */
 export function pushClear(point: Pt, from: Pt, min: number, bounds?: { w: number; h: number }, edge = 0): Pt {
   const inside = (p: Pt) => !bounds || (p.x >= edge && p.x <= bounds.w - edge && p.y >= edge && p.y <= bounds.h - edge);
@@ -47,13 +48,13 @@ export function pushClear(point: Pt, from: Pt, min: number, bounds?: { w: number
   const dy = point.y - from.y;
   const d = Math.hypot(dx, dy);
   if (d >= min && inside(point)) return { x: point.x, y: point.y };
-  const [ux, uy] = d ? [dx / d, dy / d] : [0, -1];
-  const tries = [
-    [ux, uy],
-    [-ux, -uy],
-    [uy, -ux],
-    [-uy, ux],
-  ].map(([x, y]) => ({ x: from.x + x * min, y: from.y + y * min }));
+  const base = d ? Math.atan2(dy, dx) : -Math.PI / 2;
+  const steps = [0, 1, -1, 2, -2, 3, -3, 4, -4, 5, -5, 6, -6, 7, -7, 8];
+  const tries = steps.map((k) => {
+    const a = base + (k * Math.PI) / 8;
+    // Rounded to 0.01px so trigonometry noise (6e-17) does not leak into positions.
+    return { x: Math.round((from.x + Math.cos(a) * min) * 100) / 100, y: Math.round((from.y + Math.sin(a) * min) * 100) / 100 };
+  });
   const fit = tries.find(inside);
   if (fit || !bounds) return fit ?? tries[0];
   return {
