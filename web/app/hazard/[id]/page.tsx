@@ -60,6 +60,7 @@ export default function HazardPage() {
             zoom={18}
             selectedId={detail.id}
             label={`Location of ${name}`}
+            sheet={sheet}
           />
         ) : (
           <div className="flex h-full items-center justify-center text-ink-3" role="status">
@@ -67,7 +68,7 @@ export default function HazardPage() {
           </div>
         )}
       </div>
-      <aside ref={panelRef} className="qs-panel qs-instrument" aria-label="Hazard status">
+      <aside ref={panelRef} className="sheet-panel instrument-card" aria-label="Hazard status">
         <div className="scroll-quiet min-h-0 flex-1 overflow-y-auto pb-2">
           <Link href={`/?selected=${encodeURIComponent(hazardId)}`} className="inline-flex min-h-11 items-center text-[14px] font-medium text-accent">
             Live map

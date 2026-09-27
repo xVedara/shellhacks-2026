@@ -61,7 +61,7 @@ function LiveKicker({ connection, count }: { connection: Connection; count: numb
     <div>
       <p className="flex min-h-6 items-center gap-2 text-[15px] font-semibold tracking-[-0.02em]">
         <LiveDot connection={connection} />
-        <span>{word}</span>
+        <span role="status">{word}</span>
         {connection !== "down" && <span className="font-normal text-ink-3">· {count} nearby</span>}
       </p>
       <p className="mt-0.5 text-[13px] text-ink-3">Within 3 mi of FIU Graham Center</p>
@@ -200,6 +200,7 @@ export default function MapPage() {
           onSelect={select}
           showOsm={showOsm}
           label="Map of reported hazards around FIU Graham Center"
+          sheet={sheet}
         />
         {connection === "down" && !loaded && (
           <div className="absolute inset-0 z-[1100] flex items-center justify-center bg-page/85 p-4">
@@ -217,7 +218,7 @@ export default function MapPage() {
 
       <aside
         ref={panelRef}
-        className="qs-panel"
+        className="sheet-panel"
         style={{ ["--panel-h" as string]: `${panelPx}px` }}
         aria-label={showPeek ? "Live status" : detailOpen ? "Hazard details" : "Nearby hazards"}
       >
@@ -343,7 +344,7 @@ export default function MapPage() {
                   )}
                 </div>
               )}
-              <h2 id="list-heading" className="sr-only">
+              <h2 id="list-heading" tabIndex={-1} className="sr-only">
                 Active hazards
               </h2>
               <div className="scroll-quiet mt-1 min-h-0 flex-1 overflow-y-auto">

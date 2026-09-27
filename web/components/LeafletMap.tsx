@@ -22,6 +22,8 @@ export type MapProps = {
   /** Small, non-interactive map (verify queue). */
   compact?: boolean;
   label: string;
+  /** Phone sheet height in px. The selected pin is shifted up by about half of this. */
+  sheet?: number;
 };
 
 type OsmFeature = {
@@ -63,16 +65,50 @@ function Recenter({ center, zoom }: { center: [number, number]; zoom?: number })
   return null;
 }
 
-function PanToSelected({ hazards, selectedId }: { hazards: HazardSummary[]; selectedId?: string | null }) {
+function centerAboveSheet(map: L.Map, lat: number, lng: number, sheet: number) {
+  const zoom = map.getZoom();
+  const point = map.project([lat, lng], zoom).add([0, sheet / 2]);
+  return map.unproject(point, zoom);
+}
+
+function pinClearsSheet(map: L.Map, lat: number, lng: number, sheet: number) {
+  const size = map.getSize();
+  if (!size.x || !size.y) return false;
+  const pt = map.latLngToContainerPoint([lat, lng]);
+  const margin = 24;
+  return pt.x >= margin && pt.x <= size.x - margin && pt.y >= margin && pt.y <= size.y - sheet - margin;
+}
+
+function PanToSelected({
+  hazards,
+  selectedId,
+  sheet = 0,
+}: {
+  hazards: HazardSummary[];
+  selectedId?: string | null;
+  sheet?: number;
+}) {
   const map = useMap();
   const target = hazards.find((h) => h.id === selectedId);
   const lat = target?.lat;
   const lng = target?.lng;
   useEffect(() => {
-    if (lat !== undefined && lng !== undefined && !map.getBounds().pad(-0.2).contains([lat, lng])) {
-      map.panTo([lat, lng]);
-    }
-  }, [map, lat, lng]);
+    if (lat === undefined || lng === undefined) return;
+    const place = () => {
+      if (!map.getSize().y) return;
+      if (sheet > 0) {
+        if (pinClearsSheet(map, lat, lng, sheet)) return;
+        map.panTo(centerAboveSheet(map, lat, lng, sheet), { animate: false });
+        return;
+      }
+      if (!map.getBounds().pad(-0.2).contains([lat, lng])) map.panTo([lat, lng]);
+    };
+    place();
+    map.on("resize", place);
+    return () => {
+      map.off("resize", place);
+    };
+  }, [map, lat, lng, sheet]);
   return null;
 }
 
@@ -307,6 +343,7 @@ export default function LeafletMap({
   showOsm,
   compact,
   label,
+  sheet = 0,
 }: MapProps) {
   const [map, setMap] = useState<L.Map | null>(null);
   return (
@@ -331,7 +368,7 @@ export default function LeafletMap({
         />
         <AttributionControl position="bottomleft" />
         {!compact && <ZoomControl position="bottomright" />}
-        {compact ? <Recenter center={center} zoom={zoom} /> : <PanToSelected hazards={hazards} selectedId={selectedId} />}
+        {compact ? <Recenter center={center} zoom={zoom} /> : <PanToSelected hazards={hazards} selectedId={selectedId} sheet={sheet} />}
         {showOsm && <OsmLayer />}
         {compact
           ? hazards.map((h) => (

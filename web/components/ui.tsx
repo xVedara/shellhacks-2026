@@ -108,8 +108,8 @@ export function Legend({
         {CATEGORIES.map((c) => (
           <li key={c} className="flex min-h-9 items-center gap-2.5">
             <span
-              className="inline-flex h-7 w-7 items-center justify-center rounded-full border-2 text-[12px] font-bold"
-              style={{ borderColor: CATEGORY_META[c].color, color: CATEGORY_META[c].color }}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[#081624] text-[12px] font-bold"
+              style={{ background: CATEGORY_META[c].color, color: CATEGORY_META[c].ink }}
             >
               {CATEGORY_META[c].letter}
             </span>
@@ -117,7 +117,7 @@ export function Legend({
           </li>
         ))}
       </ul>
-      <p className="mt-2 text-[12px] leading-4 text-ink-3">Larger mark means higher confidence. Orange ring is the one you selected.</p>
+      <p className="mt-2 text-[12px] leading-4 text-ink-3">Larger mark means higher confidence. A blue ring marks the one you selected.</p>
       {onOsm && (
         <label className="mt-3 flex min-h-11 cursor-pointer items-center gap-2 text-[13px] font-medium">
           <input type="checkbox" checked={!!osm} onChange={(e) => onOsm(e.target.checked)} className="h-4 w-4 accent-[var(--blue)]" />

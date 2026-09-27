@@ -2,8 +2,8 @@
 
 /* StepSafe palette tokens.
    Dark is the default. Light is the same system inverted.
-   Orange #FF7900 is the selected ring and hazard warnings only.
-   Category colors (moving / temporary / permanent) are separate from that orange. */
+   Orange #FF7900 is warning chrome. Temporary hazards use that same orange as a category color.
+   The selected ring is signal blue #13B9F2, so a selected Temporary pin stays distinguishable. */
 :root,
 :root[data-theme="dark"] {
   color-scheme: dark;
@@ -211,7 +211,7 @@ body {
   box-shadow: var(--float-shadow);
 }
 
-.qs-panel {
+.sheet-panel {
   position: absolute;
   z-index: 1100;
   right: 0;
@@ -230,11 +230,11 @@ body {
   box-shadow: var(--sheet-shadow);
   transition: height 280ms ease-out;
 }
-.qs-instrument {
+.instrument-card {
   --panel-h: min(640px, 68%);
 }
 @media (min-width: 768px) {
-  .qs-panel {
+  .sheet-panel {
     position: relative;
     top: auto;
     right: auto;
@@ -255,7 +255,7 @@ body {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .qs-panel {
+  .sheet-panel {
     transition: none;
   }
 }
@@ -314,7 +314,7 @@ body {
   box-shadow:
     0 0 0 2px var(--pin-cat, #ff7900),
     0 0 0 4px var(--card),
-    0 0 0 7px #ff7900;
+    0 0 0 7px #13b9f2;
 }
 .leaflet-marker-icon:hover .ss-pin {
   transform: scale(1.06);
