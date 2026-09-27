@@ -8,19 +8,19 @@ Code: https://github.com/xVedara/shellhacks-2026
 
 ## Inspiration
 
-A block walked without sight can hide a sign at head height, a curb two steps ahead, or a car in the crosswalk, and nothing remembers what the last walker already met. We built a lookout on a phone people already carry, plus a shared map of neighborhood hazards. This is our first hackathon.
+A block walked without sight can hide a sign at head height, a curb two steps ahead, or a car in the crosswalk. We built a lookout on a phone people already carry, plus a shared map of neighborhood hazards. This is our first hackathon.
 
 ## What it does
 
 StepSafe is a head-mounted iPhone with LiDAR and AirPods for blind and low-vision walkers, and a community map at https://stepsafe.miami. The phone calls only https://api.stepsafe.miami. That address is fixed in the app.
 
-Path guard speaks ground, head-height, and drop-off hazards on the phone, with a spatial tone from the hazard's direction. Crossing assist warns when a car, bike, or pushed cart is closing in. Those alerts stay audible while other speech is muted. Two AirPods presses cover "what's ahead" and mute. There is no turn-by-turn route.
+Path guard speaks ground, head-height, and drop-off hazards. Crossing assist warns when a car, bike, or pushed cart is closing in. Two AirPods presses cover "what's ahead" and mute. There is no turn-by-turn route.
 
 Still obstacles are cropped and pinned at once. Moving people and vehicles stay off the map. Every 5 seconds Gemini (`gemini-flash-lite-latest`) picks one id from a taxonomy of 67 hazards. A walker who passes a pin and sees nothing casts one downvote of weight 0.6 and cannot stack a second miss. Heads-up speaks other reports by direction and distance.
 
 ## How we built it
 
-ARKit scene depth feeds path guard. Crossing assist pairs a depth closing detector with YOLO11s in Core ML. Alerts are spatial audio plus Core Haptics. English and Spanish phrases are pre-generated with ElevenLabs and play offline. The API is Node and TypeScript on Fastify with MongoDB Atlas. A report merges into an active pin within 10 meters on the same height band, or becomes a new pin at once.
+ARKit scene depth feeds path guard. Crossing assist pairs a depth closing detector with YOLO11s in Core ML. Alerts are spatial audio plus Core Haptics. English and Spanish phrases are pre-generated with ElevenLabs and play offline. The API is Node and TypeScript on Fastify with MongoDB Atlas. A report within 10 meters on the same height band merges, or becomes a new pin.
 
 ## Challenges
 
@@ -40,21 +40,21 @@ Swift, SwiftUI, ARKit, Core ML, YOLO11s, Node.js, TypeScript, Fastify, MongoDB A
 
 ## Sponsor tracks
 
-**Best Overall.** On-device sensing, spoken alerts, and a shared map.
+**Best Overall (auto).** On-device sensing, spoken alerts, and a shared map.
 
 **Best First-Time Hacker.** Dev and Ara are both first-time hackers.
 
-**Microsoft.** No chat interface: two fixed AirPods commands, not a conversation. AI runs inside perception, never as a dialogue layer.
+**Microsoft — What’s Missing?** No chat interface: two fixed AirPods commands, not a conversation. AI runs inside perception, never as a dialogue layer.
 
-**Waymo.** OpenStreetMap crossings, curbs, and tactile paving, plus community hazard reports, with no turn-by-turn route.
+**Waymo — Mobility Challenge.** OpenStreetMap crossings, curbs, and tactile paving, plus community hazard reports, with no turn-by-turn route.
 
-**ElevenLabs.** English and Spanish alert phrases play offline.
+**MLH / ElevenLabs — Best Use of ElevenLabs.** English and Spanish alert phrases play offline.
 
-**MLH Gemini API.** `gemini-flash-lite-latest` names each new pin in the background, inside the 67-type taxonomy. The report is stored first.
+**MLH / Google Cloud — Best Use of Gemini API.** `gemini-flash-lite-latest` names each new pin in the background, inside the 67-type taxonomy. The report is stored first.
 
-**MLH MongoDB Atlas.** Hazards and votes live in Atlas: a 2dsphere index, TTL expiry by category, and change streams.
+**MLH / MongoDB — Best Use of MongoDB Atlas.** Hazards and votes live in Atlas: a 2dsphere index, TTL expiry by category, and change streams.
 
-**MLH GoDaddy Registry.** The community map is live at https://stepsafe.miami.
+**MLH / GoDaddy Registry — Best Domain Name.** The community map is live at https://stepsafe.miami.
 
 ## Credits and licenses
 
