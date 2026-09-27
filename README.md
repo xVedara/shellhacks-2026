@@ -1,5 +1,7 @@
 # StepSafe
 
+Travel safe. Together.
+
 StepSafe warns blind and low-vision pedestrians about hazards ahead. A head-mounted iPhone uses LiDAR to detect ground obstacles, head-height hazards, and drop-offs. ClosingDetector warns about anything closing fast, including a pushed cart. YOLO11s warns about cars and bikes beyond LiDAR range. Sighted people report and verify hazards in the Scout tab. The web map shows those reports.
 
 StepSafe does not replace a guide dog or your own judgment. It does not give walking directions.
@@ -65,7 +67,7 @@ brandguide/  Logos, colors, and voice. See brandguide/README.md.
 
 - [`server/README.md`](server/README.md) covers the API, env vars, the naming provider, and how to run and test.
 - [`web/README.md`](web/README.md) covers pages, map encoding, accessibility, and how to run and build.
-- [`ios/README.md`](ios/README.md) covers app modules, the Release build note, tests, the server URL field, and credits.
+- [`ios/README.md`](ios/README.md) covers app modules, the Release build note, tests, the fixed API address, and credits.
 
 ## Quick start
 
@@ -87,7 +89,7 @@ scripts/dev-up.sh stop
 
 `scripts/dev-up.sh` starts MongoDB, seeds demo hazards, and starts the API and the web map. `scripts/dev-up.sh stop` stops the processes that script started.
 
-The phone talks to the live API at `https://api.stepsafe.miami` by default. To test against a local `dev-up.sh` stack, enter the printed server URL in the Server URL field in the Walker tab debug panel. The phone and the Mac then need the same network. [`docs/DEMO.md`](docs/DEMO.md) has the pre-demo checklist and the live demo script. [`server/README.md`](server/README.md) lists `MONGODB_URI`, `GEMINI_API_KEY`, and `ELEVENLABS_API_KEY`.
+The phone talks only to `https://api.stepsafe.miami` (`APIClient.baseURL`). That address is not a setting. The Walker debug panel prints it as text. To test against a local `dev-up.sh` stack, change that constant in a dev build. [`docs/DEMO.md`](docs/DEMO.md) has the pre-demo checklist and the live demo script. [`server/README.md`](server/README.md) lists `MONGODB_URI`, `GEMINI_API_KEY`, and `ELEVENLABS_API_KEY`.
 
 ## License
 

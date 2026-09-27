@@ -8,7 +8,7 @@ Google Gemini names a hazard crop when `GEMINI_API_KEY` is set. The model id is 
 
 Qwen names a crop when no Gemini key is set and Ollama is running. The tag is `qwen3.8:27b-mlx` (Qwen3.8-27B). The weights are Apache-2.0, Copyright 2026 Alibaba Cloud: https://huggingface.co/Qwen/Qwen3.8-27B. The Ollama tag is https://ollama.com/library/qwen3.8:27b-mlx. The weights are not in git. Ollama itself is MIT, Copyright (c) Ollama, and the binary is not in git: https://github.com/ollama/ollama/blob/main/LICENSE.
 
-ElevenLabs speaks alerts and live hazard names with model `eleven_multilingual_v2` and the premade voice Sarah, id `EXAVITQu4vr4xnSDxMaL`. The phone bundles 71 phrases in English and Spanish. The clips were generated on Ara's ElevenLabs account (Creator plan, redeemed through MLH). Terms: https://elevenlabs.io/terms-of-use.
+ElevenLabs speaks alerts and live hazard names with model `eleven_multilingual_v2` and the premade voice Sarah, id `EXAVITQu4vr4xnSDxMaL`. The phone bundles 86 phrases in English and Spanish (`ios/StepSafe/Phrases/phrases.json`, 172 mp3 files). The clips were generated on Ara's ElevenLabs account (Creator plan, redeemed through MLH). Terms: https://elevenlabs.io/terms-of-use.
 
 Ultralytics YOLO11s (a WiSE-FT blend with a fine-tune on the CC BY 4.0 WOTR and blind-crossing datasets) detects vehicles on the phone. The weights are AGPL-3.0-only. The bundled model and the AGPL text in the app are described in [ios/CREDITS.md](ios/CREDITS.md). The model metadata says it was trained on COCO. COCO annotations are CC-BY-4.0. COCO images stay under Flickr's terms. Neither file is in this repo.
 

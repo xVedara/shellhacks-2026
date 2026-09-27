@@ -45,9 +45,10 @@ Alerts and voice:
 
 Server link:
 - `APIClient.swift` — HTTP client for the StepSafe server: hazard reports,
-  taxonomy, `/tts`; holds the Server URL setting.
+  taxonomy, `/tts`. `baseURL` is the fixed `https://api.stepsafe.miami`.
 - `ServerLink.swift` — glue between `AlertManager`/`APIClient`: posts reports,
-  drives `MapSync`, hosts the Server URL text field (`ServerStatusView`).
+  drives `MapSync`. `ServerStatusView` prints that URL as text. It is not a
+  field. Init deletes the old `serverURL` UserDefaults key.
 - `HazardNamer.swift` — crops a hazard out of the AR frame and encodes it for
   naming, off the AR queue.
 - `Localizer.swift` — AR world point -> lat/lng using the phone's GPS fix.
