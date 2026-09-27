@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'node:url';
-import { Binary, MongoClient, ObjectId, type Db } from 'mongodb';
+import { Binary, MongoClient, ObjectId, type Collection, type Db } from 'mongodb';
 
 export { Binary, MongoClient, ObjectId };
 
@@ -60,22 +60,62 @@ export function openDb() {
   return { client, db: client.db(process.env.MONGODB_DB || 'stepsafe') };
 }
 
+/** IndexNotFound: the redundant index was already gone (a fresh database never had it). */
+const isMissingIndex = (err: unknown) => {
+  const e = err as { code?: number; codeName?: string };
+  return e.code === 27 || e.codeName === 'IndexNotFound';
+};
+
+async function dropIfExists(coll: Collection, name: string) {
+  await coll.dropIndex(name).catch((err: unknown) => {
+    if (!isMissingIndex(err)) throw err;
+  });
+}
+
+/**
+ * One report per device per hazard. If older rows already duplicated that pair, keep the newest
+ * and retry — a unique build would otherwise throw and the process would exit at startup.
+ */
+async function ensureUniqueReports(reports: Collection) {
+  const key = { hazardId: 1, deviceId: 1 } as const;
+  try {
+    await reports.createIndex(key, { unique: true });
+  } catch (err) {
+    if ((err as { code?: number }).code !== 11000) throw err;
+    const dupes = await reports.aggregate<{ ids: ObjectId[] }>([
+      { $sort: { at: -1 } },
+      { $group: { _id: { hazardId: '$hazardId', deviceId: '$deviceId' }, ids: { $push: '$_id' }, n: { $sum: 1 } } },
+      { $match: { n: { $gt: 1 } } },
+    ]).toArray();
+    const extra = dupes.flatMap((d) => d.ids.slice(1));
+    if (extra.length) await reports.deleteMany({ _id: { $in: extra } });
+    await reports.createIndex(key, { unique: true });
+  }
+}
+
 export async function ensureIndexes(db: Db) {
+  const hazards = db.collection('hazards');
+  const votes = db.collection('votes');
+  const reclass = db.collection('reclassifications');
+  const reports = db.collection('reports');
   await Promise.all([
-    db.collection('hazards').createIndexes([
+    hazards.createIndexes([
       { key: { location: '2dsphere' } },
       { key: { expiresAt: 1 }, expireAfterSeconds: 0 },
       { key: { sample: 1 } },
+      // rename pass: needsNaming, oldest attempt first. Partial so named pins are not in the index.
+      { key: { renameAttemptAt: 1 }, partialFilterExpression: { needsNaming: true } },
     ]),
-    db.collection('votes').createIndexes([
-      { key: { hazardId: 1 } },
-      { key: { hazardId: 1, deviceId: 1 }, unique: true },
-    ]),
-    db.collection('reclassifications').createIndexes([
-      { key: { hazardId: 1 } },
-      { key: { hazardId: 1, deviceId: 1 }, unique: true },
-    ]),
+    // (hazardId, deviceId) unique already serves hazardId-only lookups; a second hazardId index
+    // is written on every vote and reclassify.
+    votes.createIndex({ hazardId: 1, deviceId: 1 }, { unique: true }),
+    reclass.createIndex({ hazardId: 1, deviceId: 1 }, { unique: true }),
     db.collection('users').createIndex({ deviceId: 1 }, { unique: true }),
-    db.collection('reports').createIndex({ status: 1 }),
+    reports.createIndex({ status: 1 }),
+    ensureUniqueReports(reports),
+  ]);
+  await Promise.all([
+    dropIfExists(votes, 'hazardId_1'),
+    dropIfExists(reclass, 'hazardId_1'),
   ]);
 }
