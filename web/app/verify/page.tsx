@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Crop, HazardHeading, useHazardDetail } from "@/components/HazardDetail";
 import Map from "@/components/Map";
 import { ConnectionBadge, Notice, PageBar, linkClass, primaryButton, secondaryButton } from "@/components/ui";
@@ -78,6 +78,13 @@ export default function VerifyPage() {
   const current = currentId ? hazards.get(currentId) : undefined;
   // Bumped by "Try again" so a failed detail request can be re-sent; voting waits for the details.
   const [retryKey, setRetryKey] = useState(0);
+  // The empty queue's scroller is focusable (a region to scroll); when a hazard arrives it stops being a tab stop,
+  // so focus that was on it moves to the new card instead of resting on a non-focusable node.
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const hasCard = !!current;
+  useLayoutEffect(() => {
+    if (hasCard && document.activeElement === scrollerRef.current) document.getElementById("verify-card")?.focus({ preventScroll: true });
+  }, [hasCard]);
   const { detail, error: detailError, loading: detailLoading } = useHazardDetail(currentId, `${detailVersion(currentId)}:${retryKey}`);
   // Nothing can be voted on until its photo and details are on screen.
   const ready = !!detail && detail.id === currentId;
@@ -153,7 +160,16 @@ export default function VerifyPage() {
   const checked = all.filter((h) => voted.has(h.id)).length;
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto">
+    // scroll-pb: keyboard focus scrolls clear of the sticky vote bar (WCAG 2.4.11); the bar is static on a
+    // landscape phone and from md up. With no hazard card there may be nothing focusable to scroll with, so the
+    // region itself takes focus then (axe scrollable-region-focusable).
+    <div
+      className="min-h-0 flex-1 overflow-y-auto scroll-pb-[88px] short:scroll-pb-0 md:scroll-pb-0"
+      ref={scrollerRef}
+      tabIndex={current ? undefined : 0}
+      role={current ? undefined : "region"}
+      aria-label={current ? undefined : "Verify queue"}
+    >
       <PageBar title="Verify queue">
         {/* U/D/S still fire when a keyboard is paired with a coarse pointer, so the off switch stays on screen (WCAG 2.1.4). */}
         {current && (
@@ -250,6 +266,7 @@ export default function VerifyPage() {
         {current && (
           <article
             id="verify-card"
+            tabIndex={-1}
             aria-labelledby="verify-heading"
             className="panel grid gap-4 p-4 md:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] md:grid-rows-[auto_auto_1fr] md:gap-x-6 md:p-5"
           >

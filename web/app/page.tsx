@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import HazardDetail, { useHazardDetail } from "@/components/HazardDetail";
 import Map from "@/components/Map";
 import SkipLink from "@/components/SkipLink";
@@ -92,6 +92,7 @@ export default function MapPage() {
   }, selectedFromLocation, () => null);
   const voted = useVotedIds();
   const stageRef = useRef<HTMLDivElement>(null);
+  const mapStageRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLElement>(null);
   const panelHeading = useRef<HTMLHeadingElement>(null);
   const returnFocusTo = useRef<string | null>(null);
@@ -134,6 +135,15 @@ export default function MapPage() {
   /* Tiny expanded sheet covers the whole stage: the map and its credit would stay tab stops under the header. */
   const mapFullyCovered = !desktop && stageH - sheet < 24;
   const tiny = !desktop && stageH < TINY_STAGE;
+  const stageClass = `map-stage relative min-h-0 min-w-0 flex-1${mapControlsHidden(desktop, stageH, sheet) ? " controls-hidden" : ""}${mapPinsClass(desktop, stageH - sheet)}${mapFullyCovered ? " map-fully-covered" : ""}`;
+  // One handoff for every map-stage class that hides things (controls-hidden, pins-thin, map-covered,
+  // map-fully-covered): right after the class lands and before the browser drops focus to <body>, anything in
+  // the map that has focus and is now hidden or covered hands focus to the panel (WCAG 2.4.3, 2.4.11).
+  useLayoutEffect(() => {
+    const el = document.activeElement as HTMLElement | null;
+    if (!el || !mapStageRef.current?.contains(el)) return;
+    if (mapFullyCovered || !el.checkVisibility({ visibilityProperty: true })) document.getElementById("hazard-panel")?.focus({ preventScroll: true });
+  }, [stageClass, mapFullyCovered]);
   const showOnMap = () => {
     setDetent("peek");
     // The details close; keep keyboard focus on the button that brings them back.
@@ -208,7 +218,8 @@ export default function MapPage() {
       </SkipLink>
       {/* The zoom and locate buttons need a clear strip of map above the sheet. */}
       <div
-        className={`map-stage relative min-h-0 min-w-0 flex-1${mapControlsHidden(desktop, stageH, sheet) ? " controls-hidden" : ""}${mapPinsClass(desktop, stageH - sheet)}${mapFullyCovered ? " map-fully-covered" : ""}`}
+        ref={mapStageRef}
+        className={stageClass}
         style={{ ["--sheet" as string]: `${sheet}px` }}
       >
         <Map
@@ -284,14 +295,17 @@ export default function MapPage() {
 
         <div key={showPeek ? "peek" : detailOpen ? "detail" : "list"} className="sheet-face flex min-h-0 flex-1 flex-col">
           {showPeek ? (
-            <div>
-              <LiveKicker connection={connection} count={loaded ? list.length : null} />
-              {/* A tiny peek has room only for the status; the handle above opens the sheet. */}
-              {!tiny && (
-                <button id="peek-action" type="button" className={`${primaryButton} mt-3.5 w-full`} onClick={() => setDetent("medium")}>
-                  {panel === "detail" && selectedId ? "Back to details" : "Open list"}
-                </button>
-              )}
+            // A tiny peek puts the status and the button on one row.
+            <div className={tiny ? "flex items-center justify-between gap-3" : ""}>
+              <LiveKicker connection={connection} count={loaded ? list.length : null} compact={tiny} />
+              <button
+                id="peek-action"
+                type="button"
+                className={tiny ? `${secondaryButton} shrink-0 px-4` : `${primaryButton} mt-3.5 w-full`}
+                onClick={() => setDetent("medium")}
+              >
+                {panel === "detail" && selectedId ? "Back to details" : "Open list"}
+              </button>
             </div>
           ) : detailOpen ? (
             <div className="flex min-h-0 flex-1 flex-col">
@@ -424,7 +438,7 @@ function LiveHazardList({
   const clearedToday = clearedSince(cleared.values(), new Date(now).setHours(0, 0, 0, 0));
   const option = SHOW_OPTIONS.find((o) => o.id === show) ?? SHOW_OPTIONS[0];
   return (
-    <div className={`flex min-h-0 flex-1 flex-col ${tiny ? "scroll-quiet overflow-y-auto" : ""}`}>
+    <div className={`flex min-h-0 flex-1 flex-col ${tiny ? "scroll-quiet overflow-y-auto overflow-x-hidden" : ""}`}>
       {/* On a landscape phone the status and the filters share one row to leave room for hazards. */}
       <div className="flex shrink-0 flex-col short:flex-row short:flex-wrap short:items-center short:justify-between short:gap-x-4">
         <div className="shrink-0">
@@ -435,7 +449,7 @@ function LiveHazardList({
         </div>
         {/* One choice at a time, so native radios: arrow keys move between them. The API only returns active
             hazards, so cleared ones are a count beside the choice, not a filter. */}
-        <fieldset className="mt-3 flex shrink-0 flex-wrap items-center gap-2 short:mt-0">
+        <fieldset className="mt-3 flex min-w-0 shrink-0 flex-wrap items-center gap-2 short:mt-0">
           <legend className="sr-only">Show</legend>
           {SHOW_OPTIONS.map((o) => {
             const on = show === o.id;

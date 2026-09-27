@@ -112,7 +112,9 @@ export default function Header() {
           <Image src="/logo-light.png" width={28} height={28} alt="" priority className="logo-light rounded-md" />
           <Image src="/logo-dark.png" width={28} height={28} alt="" priority className="logo-dark rounded-md" />
           <span className="min-w-0 leading-tight">
-            <span className="block text-[16px] font-semibold tracking-[-0.03em] text-heading">StepSafe</span>
+            {/* Under 480px on a landscape phone (and at 320x256, WCAG 1.4.10) the one-row header drops the wordmark
+                visually; the link keeps its name. */}
+            <span className="block text-[16px] font-semibold tracking-[-0.03em] text-heading short:max-[479px]:sr-only">StepSafe</span>
             <span className="hidden text-[12px] text-ink-3 md:block">Community hazard map</span>
           </span>
         </Link>
@@ -124,24 +126,27 @@ export default function Header() {
         </div>
       </div>
 
-      {/* Grow from the label width. The profile name shrinks first; tabs ellipsize only once the theme button would leave the screen. */}
-      <nav aria-label="Main" className="px-2 short:min-w-0 short:grow short:shrink short:basis-auto md:mt-2 md:flex-1">
+      {/* Tab labels stay whole and on one line: narrow landscape phones drop the wordmark and the tab icons instead,
+          and the profile name shrinks first (below). */}
+      <nav aria-label="Main" className="px-2 short:flex-1 md:mt-2 md:flex-1">
         <ul className="flex gap-1 md:flex-col md:gap-1">
           {NAV.map((item) => {
             const current = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
             return (
-              <li key={item.href} className="min-w-11 flex-1 short:flex-initial md:flex-none">
+              <li key={item.href} className="flex-1 md:flex-none">
                 <Link
                   href={item.href}
                   aria-current={current ? "page" : undefined}
-                  className={`flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-none border-b-2 px-2.5 text-[14px] font-medium md:justify-start md:rounded-md md:border-b-0 md:px-3 ${
+                  className={`flex min-h-11 items-center justify-center gap-2 whitespace-nowrap rounded-none border-b-2 px-2.5 text-[14px] font-medium short:max-[479px]:px-1.5 md:justify-start md:rounded-md md:border-b-0 md:px-3 ${
                     current
                       ? "border-[var(--blue)] text-accent md:border-transparent md:bg-raised md:font-semibold md:shadow-[inset_2px_0_0_var(--blue)]"
                       : "border-transparent text-ink-2 hover:bg-hover hover:text-ink"
                   }`}
                 >
-                  <Icon name={item.icon} />
-                  <span className="min-w-0 truncate">{item.label}</span>
+                  <span className="short:max-[479px]:hidden">
+                    <Icon name={item.icon} />
+                  </span>
+                  {item.label}
                 </Link>
               </li>
             );

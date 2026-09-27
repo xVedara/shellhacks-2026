@@ -378,6 +378,13 @@ main:focus-visible::after {
     --panel-h: calc(100% - 176px);
   }
 }
+@media (max-height: 285px) and (width < theme(--breakpoint-md)) {
+  /* Landscape phone at 200% zoom: a stage under about 240px has no room for both, so the card takes the whole
+     stage and scrolls (.sheet-face); the map, its controls and pin are covered. */
+  .instrument-card {
+    --panel-h: 100%;
+  }
+}
 @media (min-width: theme(--breakpoint-md)) {
   .sheet-panel {
     position: relative;
