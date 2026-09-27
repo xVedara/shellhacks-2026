@@ -1,6 +1,7 @@
 import ARKit
 import SceneKit
 import SwiftUI
+import UIKit
 
 /// Walker (audio-first, slice 1 screen), Scout (sighted, phone in hand; PLAN.md 3.2) and Community tabs.
 struct RootView: View {
@@ -76,19 +77,34 @@ final class ScoutModel: ObservableObject, @unchecked Sendable { // main-confined
     @Published var taxonomyFailed = false
     let lang = TTSChoice.lang()
     @Published var nearby: [NearHazard] = []
+    /// /near: idle until a fix exists, then loading, loaded, or failed. Empty is only `loaded`.
+    enum NearbyPhase { case idle, loading, loaded, failed }
+    @Published private(set) var nearbyPhase: NearbyPhase = .idle
     @Published var busy = false
 
     private let link: ServerLink
+    /// True until the first fix is observed. The GPS retry and the prompt restore read this, not `status`.
+    private var awaitingFirstFix = true
+    private var nearToken = 0
+    /// Last text passed to VoiceOver, so one transition is not spoken twice.
+    private var spoken: String?
     init(link: ServerLink) { self.link = link }
+
+    var hasFix: Bool { link.localizer.fix != nil }
+    /// True while /near is in flight. A later GPS wake must not start a second request.
+    var nearPending: Bool { nearbyPhase == .loading }
 
     func submit(_ capture: ScoutCapture) {
         guard let fix = capture.world.flatMap(link.localizer.locate) ?? link.localizer.fix else {
             status = "No GPS fix yet, try again outdoors"
             return
         }
+        awaitingFirstFix = false
         busy = true
         report = nil
+        spoken = nil // a new report speaks even when the words match the last one
         status = "Reporting, naming can take 15 seconds"
+        speak(status)
         let band = band, heading = link.localizer.heading, api = link.api, map = link.map
         Task {
             do {
@@ -99,10 +115,15 @@ final class ScoutModel: ObservableObject, @unchecked Sendable { // main-confined
                     self.report = r.id.isEmpty ? nil : Report(id: r.id, label: r.label, merged: r.merged) // no pin to correct
                     self.status = r.id.isEmpty ? "Not pinned: \(r.label)" : r.merged ? "Added to existing pin: \(r.label)" : "Reported: \(r.label)"
                     self.busy = false
+                    self.speak(self.status)
                     self.refresh()
                 }
             } catch {
-                DispatchQueue.main.async { self.status = "Report failed: \(error.localizedDescription)"; self.busy = false }
+                DispatchQueue.main.async {
+                    self.status = "Report failed: \(error.localizedDescription)"
+                    self.busy = false
+                    self.speak(self.status)
+                }
             }
         }
     }
@@ -137,13 +158,41 @@ final class ScoutModel: ObservableObject, @unchecked Sendable { // main-confined
     }
 
     func refresh() {
-        guard let fix = link.localizer.fix else { status = Self.waitingForGPS; return }
-        if status == Self.waitingForGPS { status = Self.prompt } // the fix arrived: back to the instruction
+        guard let fix = link.localizer.fix else {
+            // No fix yet. Callers keep retrying off `hasFix`, so a rewritten status must not matter here.
+            if awaitingFirstFix && !busy && report == nil { status = Self.waitingForGPS }
+            return
+        }
+        if awaitingFirstFix {
+            awaitingFirstFix = false
+            if !busy && report == nil { status = Self.prompt } // first fix: back to the instruction
+        }
+        nearToken += 1
+        let token = nearToken
+        nearbyPhase = .loading
         let api = link.api, heading = link.localizer.heading
         Task {
-            let rows = try? await api.near(lat: fix.lat, lng: fix.lng, radiusM: MapTuning.scoutRadiusM, heading: heading)
-            DispatchQueue.main.async { if let rows { self.nearby = rows } }
+            do {
+                let rows = try await api.near(lat: fix.lat, lng: fix.lng, radiusM: MapTuning.scoutRadiusM, heading: heading)
+                DispatchQueue.main.async {
+                    guard token == self.nearToken else { return }
+                    self.nearby = rows
+                    self.nearbyPhase = .loaded
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    guard token == self.nearToken else { return }
+                    self.nearbyPhase = .failed
+                }
+            }
         }
+    }
+
+    /// Posted at a terminal report change, not from `body`, so a re-render does not repeat it.
+    private func speak(_ text: String) {
+        guard text != spoken else { return }
+        spoken = text
+        UIAccessibility.post(notification: .announcement, argument: text)
     }
 
     func vote(_ pin: NearHazard, up: Bool) {
@@ -256,12 +305,14 @@ struct ScoutView: View {
             scout.refresh()
             scout.loadTaxonomy()
         }
-        // The first fix can take a few seconds: retry while waiting, so "Waiting for GPS" never sticks.
+        // Poll the localizer, not `status`. A tap before the first fix rewrites the status string
+        // and must not stop this. When a fix is in and /near is not already pending, refresh once.
         .task {
-            repeat {
-                try? await Task.sleep(for: .seconds(2))
-                if scout.status == ScoutModel.waitingForGPS { scout.refresh() }
-            } while !Task.isCancelled && scout.status == ScoutModel.waitingForGPS
+            while !Task.isCancelled && !scout.hasFix {
+                do { try await Task.sleep(for: .seconds(2)) } catch { return }
+            }
+            guard !Task.isCancelled, scout.hasFix, !scout.nearPending else { return }
+            scout.refresh()
         }
         .sheet(item: $picking) { target in
             TypePicker(title: target.name, entries: scout.taxonomy ?? [], lang: scout.lang) { entry in
@@ -302,7 +353,20 @@ struct ScoutView: View {
                 Button { scout.refresh() } label: { Image(systemName: "arrow.clockwise").frame(width: 44, height: 44) }
                     .accessibilityLabel("Refresh nearby hazards")
             }
-            if scout.nearby.isEmpty && scout.status != ScoutModel.waitingForGPS {
+            if scout.nearbyPhase == .loading {
+                ProgressView("Loading hazards")
+                    .tint(Color.slate)
+                    .foregroundStyle(Color.slate)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else if scout.nearbyPhase == .failed {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Could not load nearby hazards").foregroundStyle(Color.slate)
+                    Button("Try again") { scout.refresh() }
+                        .font(.headline)
+                        .frame(minHeight: 44)
+                        .foregroundStyle(Color.control)
+                }
+            } else if scout.nearbyPhase == .loaded, scout.nearby.isEmpty {
                 Text("No hazards nearby").foregroundStyle(Color.slate)
             }
             ForEach(scout.nearby) { pin in

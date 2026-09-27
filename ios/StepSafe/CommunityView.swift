@@ -363,7 +363,7 @@ struct CommunityView: View {
                             .overlay(Circle().stroke(.white, lineWidth: 2))
                             .foregroundStyle(Color.navy)
                             .frame(width: 44, height: 44) // 28 pt pin, 44 pt hit area
-                            .contentShape(Circle())
+                            .contentShape(Rectangle())
                     }
                     .accessibilityLabel(model.rowLabel(pin))
                 }
@@ -507,6 +507,7 @@ struct HazardDetailView: View {
                 }
             }
             .disabled(model.voting.contains(d.id))
+            .opacity(model.voting.contains(d.id) ? 0.4 : 1) // explicit fills ignore the system disabled fade
         } else if d.status == "active", !model.fixUsable {
             Text(t("Waiting for GPS", "Esperando GPS")).foregroundStyle(Color.slate)
         } else if d.status == "active" {
