@@ -353,6 +353,11 @@ main:focus-visible::after {
 .leaflet-container .leaflet-marker-icon.ss-pin-offstage {
   pointer-events: none;
 }
+/* The open sheet on a tiny stage covers the map and lifts the credit under the header. Hide it so it
+   is not a tab stop (WCAG 2.4.11). Peek still leaves a strip, and the credit stays. */
+.map-stage.map-fully-covered .leaflet-control-attribution {
+  visibility: hidden;
+}
 .sheet-panel.is-dragging {
   transition: none;
 }
