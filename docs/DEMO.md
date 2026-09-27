@@ -1,10 +1,13 @@
 # StepSafe: 3-minute live demo
 
 Source: `PLAN.md` section 14. Crossing assist, the server link (hazard reports,
-heads-up, `/tts`), and the Scout tab are in `ios/`. Run the phone-test checklist
-below before the live demo. This file does not record a completed pass of that
-checklist. `MapRules.swift` notes a device check on 2026-09-26 for the 12 m
-heads-up radius only.
+heads-up, `/tts`), and the Scout tab are in `ios/`. On 2026-09-26 Ara ran StepSafe
+on a physical iPhone and it passed: walker warnings, AirPods "what's ahead" and
+mute presses, a closing object still sounding while muted, reports named, spoken,
+and shown on the web map, heads-up heard, and Scout with the taxonomy picker.
+Later device checks also covered feet units, the head-on fix, and the Community
+tab installed on both phones. Run the phone-test checklist below again before
+the live demo.
 
 ## What's built
 
@@ -141,9 +144,12 @@ waiting on a real fix.
 - Spanish phrase wording wants a native speaker's pass.
 - The repo license is AGPL-3.0-only (`LICENSE`). YOLO11s is AGPL-3.0-only
   (`ios/CREDITS.md`).
-- This file does not record a completed physical-device pass of the checklist
-  above. `MapRules.swift` notes a device check on 2026-09-26 for the 12 m
-  heads-up radius only.
+- On 2026-09-26 Ara ran StepSafe on a physical iPhone and it passed: walker
+  warnings, AirPods "what's ahead" and mute presses, a closing object still
+  sounding while muted, reports named, spoken, and shown on the web map,
+  heads-up heard, and Scout with the taxonomy picker. Later device checks also
+  covered feet units, the head-on fix, and the Community tab installed on both
+  phones. Re-run the phone-test checklist above before the live demo.
 
 ## General fallback
 
