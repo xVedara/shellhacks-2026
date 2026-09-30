@@ -178,6 +178,7 @@ enum PathGuard {
         // Estimated floor: raise the ground band's lower edge so a wearer shorter than cameraHeightM
         // does not see the floor itself as an obstacle.
         let groundMin = f.floorIsEstimate ? Tuning.estimatedFloorGroundMinM : Tuning.groundBandMinM
+        let dropDepth = Tuning.dropoffDepthM // a UserDefaults switch: read once, not per pixel
 
         for v in 0..<f.height {
             for u in 0..<f.width {
@@ -222,7 +223,7 @@ enum PathGuard {
                 guard abs(eLateral) <= Tuning.laneHalfWidthM,
                       eAhead >= Tuning.dropoffNearM, eAhead <= Tuning.dropoffFarM else { continue }
                 expected += 1
-                let isMissing = !valid, isDrop = valid && h < -Tuning.dropoffDepthM
+                let isMissing = !valid, isDrop = valid && h < -dropDepth
                 if isMissing { missing += 1 }
                 if isDrop { drops += 1; dropPoints.append((strip(lateral), bin(ahead), h)) }
                 if isMissing || isDrop {

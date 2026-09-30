@@ -396,6 +396,11 @@ final class PathGuardTests: XCTestCase {
         ]
 
     func testSlopeLabelLeavesDetectionAsToday() throws {
+        // The golden is at the 0.12 m threshold: switched off (Tuning.dropoff010On), detection is exactly today's.
+        try withSwitches(d010: false) { try checkTodayDropOff() }
+    }
+
+    func checkTodayDropOff() throws {
         let scenes = labelScenes()
         XCTAssertEqual(scenes.count, Self.todayDropOff.count)
         for (name, f) in scenes {
