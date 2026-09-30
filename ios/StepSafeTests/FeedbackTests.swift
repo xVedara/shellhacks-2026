@@ -145,6 +145,34 @@ final class FeedbackTests: XCTestCase {
         XCTAssertTrue(l.allow(drop, now: 2.5))
     }
 
+    func testAudioDownRoutineDropOffNeverDelaysTheWithinTwoMetresHaptic() {
+        var l = HapticLimiter(interval: 2)
+        XCTAssertTrue(l.allow(det(.dropOff, ahead: 2.6), now: 0), "routine (priority 2) drop-off")
+        XCTAssertTrue(l.allow(det(.dropOff, ahead: 1.9), now: 0.5), "now within 2 m (priority 1): its own haptic at once")
+        XCTAssertFalse(l.allow(det(.dropOff, ahead: 1.8), now: 1.0), "the same P1 drop-off every frame: limited")
+    }
+
+    func testAudioDownHapticsKeyDropOffsByEpisode() {
+        // Two different P1 drop-offs (two episodes) within 2 s, audio down: both buzz. The same one: limited.
+        var p = AlertPolicy()
+        var l = HapticLimiter(interval: 2)
+        let left = Detection(kind: .dropOff, point: SIMD3(-0.34, 0, -1.8), ahead: 1.8, lateral: -0.34, pointCount: 100)
+        let right = Detection(kind: .dropOff, point: SIMD3(0.34, 0, -1.7), ahead: 1.7, lateral: 0.34, pointCount: 100)
+        p.observe([.dropOff: left], now: 0)
+        XCTAssertTrue(l.allow(left, episode: p.episodeKey(left), now: 0))
+        p.observe([.dropOff: right], now: 0.2) // the left edge's track lives on (gap 0.3 s); the right is new
+        XCTAssertNotEqual(p.episodeKey(right), nil)
+        XCTAssertTrue(l.allow(right, episode: p.episodeKey(right), now: 0.2), "a second drop-off: its own haptic")
+        // The right edge followed while walking: its point slides 0.9 m, still one episode, still limited.
+        let slid = Detection(kind: .dropOff, point: SIMD3(0.34, 0, -2.6), ahead: 1.7, lateral: 0.34, pointCount: 100)
+        p.observe([.dropOff: slid], now: 0.4)
+        XCTAssertFalse(l.allow(slid, episode: p.episodeKey(slid), now: 0.4))
+        // No episode (ground): kind, priority and point on a 0.5 m grid.
+        XCTAssertTrue(l.allow(det(.ground, ahead: 1), now: 1))
+        XCTAssertTrue(l.allow(det(.ground, ahead: 2), now: 1.1), "another obstacle 1 m away")
+        XCTAssertFalse(l.allow(det(.ground, ahead: 1.1), now: 1.2), "the same one")
+    }
+
     func testFaultCueLatchesAnOutageThatEndsBeforeItsCue() {
         var f = FaultCue(grace: 2, repeatSeconds: 30)
         XCTAssertNil(f.update(down: true, scanning: true, now: 0))
@@ -153,11 +181,17 @@ final class FeedbackTests: XCTestCase {
     }
 
     func testShortcutWhatsAheadNeverClaimsACheckItDidNotMake() {
-        XCTAssertEqual(WhatsAheadAvailability.of(scanning: false, trackingDown: false, frameAge: 0.1), .stopped)
-        XCTAssertEqual(WhatsAheadAvailability.of(scanning: true, trackingDown: true, frameAge: 0.1), .paused)
-        XCTAssertEqual(WhatsAheadAvailability.of(scanning: true, trackingDown: false, frameAge: 1.5), .paused, "stale")
-        XCTAssertEqual(WhatsAheadAvailability.of(scanning: true, trackingDown: false, frameAge: nil), .paused, "no frame yet")
-        XCTAssertEqual(WhatsAheadAvailability.of(scanning: true, trackingDown: false, frameAge: 0.5), .ready)
+        XCTAssertEqual(WhatsAheadAvailability.of(scanning: false, trackingDown: false, frameAge: 0.1, foreground: true), .stopped)
+        XCTAssertEqual(WhatsAheadAvailability.of(scanning: true, trackingDown: true, frameAge: 0.1, foreground: true), .paused)
+        XCTAssertEqual(WhatsAheadAvailability.of(scanning: true, trackingDown: false, frameAge: 1.5, foreground: true), .paused, "stale")
+        XCTAssertEqual(WhatsAheadAvailability.of(scanning: true, trackingDown: false, frameAge: nil, foreground: true), .paused, "no frame yet")
+        XCTAssertEqual(WhatsAheadAvailability.of(scanning: true, trackingDown: false, frameAge: 0.5, foreground: true), .ready)
+        XCTAssertEqual(WhatsAheadAvailability.of(scanning: true, trackingDown: false, frameAge: 0.1, foreground: false), .paused,
+                       "backgrounded: the sensor session is not running, whatever the last frame says")
+        // Live: Siri says nothing (the answer plays only through our own audio); otherwise Siri says why, we play nothing.
+        XCTAssertNil(WhatsAheadAvailability.ready.dialog(lang: "en"))
+        XCTAssertNotNil(WhatsAheadAvailability.paused.dialog(lang: "en"))
+        XCTAssertNotNil(WhatsAheadAvailability.stopped.dialog(lang: "es"))
         XCTAssertNil(WhatsAheadAvailability.ready.dialog(lang: "en"))
         for a in [WhatsAheadAvailability.stopped, .paused] {
             for lang in ["en", "es"] {

@@ -150,6 +150,8 @@ struct AlertPolicy {
     // The first alert of an episode is never held back. Ground obstacles and closing objects keep the world rules.
 
     private struct EpisodeTrack {
+        /// Unique per episode (a jump or a new track gets a new one).
+        let id: Int
         let kind: HazardKind
         var side: Side
         var lateral: Float
@@ -164,8 +166,13 @@ struct AlertPolicy {
     private var tracks: [EpisodeTrack] = []
     /// This tick's track (index into tracks) per kind, set by observe().
     private var current: [HazardKind: Int] = [:]
-    /// V3: the priority-1 drop-off held behind a priority-2 phrase about the same edge (its haptic already fired).
-    private var queuedP1: Detection?
+    private var nextEpisodeId = 0
+    /// V3: the episode whose priority-1 drop-off is held behind a priority-2 phrase about the same edge (its haptic
+    /// already fired). -1 = a drop-off without a track. Cleared when that episode is no longer tracked.
+    private var queuedP1: Int?
+    /// The last hazard phrase started (noteSpoken) and its episode, plus a same-words P1 counted as said with it
+    /// (V3). A cut-off un-speaks exactly these episodes, even if this tick's tracks have moved on.
+    private var heard: (hazard: Detection, episode: Int?, rider: (d: Detection, episode: Int?)?)?
 
     static func side(_ d: Detection) -> Side {
         d.lateral < -Tuning.sideDeadband ? .left : d.lateral > Tuning.sideDeadband ? .right : .ahead
@@ -186,18 +193,31 @@ struct AlertPolicy {
             var i = tracks.indices.filter { tracks[$0].kind == kind && tracks[$0].side == side
                 && abs(tracks[$0].lateral - d.lateral) <= Tuning.episodeLateralTolM }
                 .min { abs(tracks[$0].lateral - d.lateral) < abs(tracks[$1].lateral - d.lateral) }
-            let fresh = EpisodeTrack(kind: kind, side: side, lateral: d.lateral, ahead: d.ahead, lastSeen: now)
-            if let j = i, abs(d.ahead - tracks[j].ahead) > Tuning.episodeJumpM {
-                tracks[j] = fresh // the nearest point jumped: another object, a new episode (replaced in place)
-            } else if i == nil {
-                tracks.append(fresh)
-                i = tracks.count - 1
+            let jumped = i.map { abs(d.ahead - tracks[$0].ahead) > Tuning.episodeJumpM } ?? false
+            if i == nil || jumped {
+                nextEpisodeId += 1
+                let fresh = EpisodeTrack(id: nextEpisodeId, kind: kind, side: side, lateral: d.lateral, ahead: d.ahead,
+                                         lastSeen: now)
+                if let j = i { tracks[j] = fresh } // the nearest point jumped: another object, a new episode (in place)
+                else { tracks.append(fresh); i = tracks.count - 1 }
             }
             let j = i!
             tracks[j].side = side; tracks[j].lateral = d.lateral; tracks[j].ahead = d.ahead; tracks[j].lastSeen = now
             current[kind] = j
         }
+        if let q = queuedP1, !current.values.contains(where: { tracks[$0].id == q }) { queuedP1 = nil }
     }
+
+    private func episode(for d: Detection) -> Int? { track(for: d).map { tracks[$0].id } }
+
+    /// This tick's episode id for `d` (drop-off, head height), nil otherwise: HapticLimiter's identity.
+    func episodeKey(_ d: Detection) -> Int? { Tuning.alertEpisodes ? episode(for: d) : nil }
+
+    private mutating func unspeak(_ episode: Int?) {
+        if let i = tracks.firstIndex(where: { $0.id == episode }) { tracks[i].spoken = nil }
+    }
+
+    private static func sameHazard(_ a: Detection, _ b: Detection) -> Bool { a.kind == b.kind && a.point == b.point }
 
     /// This tick's track for `d`, only if `d` still fits it.
     private func track(for d: Detection) -> Int? {
@@ -215,7 +235,13 @@ struct AlertPolicy {
 
     /// Call once a phrase for `d` has started (after markAnnounced): the episode has been spoken.
     mutating func noteSpoken(_ d: Detection, now: Double) {
-        guard Tuning.alertEpisodes, let i = track(for: d) else { return }
+        guard Tuning.alertEpisodes else { return }
+        heard = (d, episode(for: d), nil)
+        markEpisodeSpoken(d, now: now)
+    }
+
+    private mutating func markEpisodeSpoken(_ d: Detection, now: Double) {
+        guard let i = track(for: d) else { return }
         tracks[i].spoken = (d.ahead, Self.side(d), d.slope)
         if Self.priority(d) == 1 { tracks[i].lastP1Cue = now }
     }
@@ -241,13 +267,15 @@ struct AlertPolicy {
         }
         if Self.phrase(d) == Self.phrase(cur) {
             markAnnounced(d, now: now)
-            noteSpoken(d, now: now) // priority 1: also the episode's P1 cue
+            markEpisodeSpoken(d, now: now) // priority 1: also the episode's P1 cue
+            // Said by the carrier phrase: if the carrier is cut off, this was not heard either (unmark).
+            if let h = heard, Self.sameHazard(h.hazard, cur) { let e = episode(for: d); heard?.rider = (d, e) }
             queuedP1 = nil
             return .sameWords
         }
-        let first = queuedP1 == nil
-        queuedP1 = d
-        guard first else { return .waiting }
+        let id = episode(for: d) ?? -1
+        guard queuedP1 != id else { return .waiting } // this episode's haptic already fired
+        queuedP1 = id // a different episode on the same edge gets its own haptic
         if let i = track(for: d) { tracks[i].lastP1Cue = now }
         return .queued
     }
@@ -461,7 +489,7 @@ struct AlertPolicy {
 
     mutating func clearHistory() {
         history = []; spokenClosing = []; pending = nil; blocked = []; cuedPhraseStart = nil
-        tracks = []; current = [:]; queuedP1 = nil
+        tracks = []; current = [:]; queuedP1 = nil; heard = nil
     }
 
     /// The hazard to announce now, or nil.
@@ -556,7 +584,15 @@ struct AlertPolicy {
 
     /// The alert was cut off before it finished: forget it so it can replay.
     mutating func unmark(_ d: Detection) {
-        if Tuning.alertEpisodes, let i = track(for: d) { tracks[i].spoken = nil } // not heard: its episode speaks next
+        if Tuning.alertEpisodes { // not heard: its episode speaks next
+            if let h = heard, Self.sameHazard(h.hazard, d) {
+                heard = nil
+                unspeak(h.episode)
+                if let r = h.rider { unspeak(r.episode); unmark(r.d) } // the same-words P1 it carried
+            } else if let i = track(for: d) {
+                tracks[i].spoken = nil
+            }
+        }
         if let i = history.lastIndex(where: { same($0, d) }) {
             history.remove(at: i)
         }

@@ -21,11 +21,18 @@ struct WhatsAheadIntent: AppIntent {
     static let title: LocalizedStringResource = "What's ahead"
     static let description = IntentDescription("Speaks the nearest hazard StepSafe detects, like one AirPods press.")
 
-    /// Siri shows and speaks the answer as a dialog too, so it is heard even if StepSafe's own audio is interrupted.
-    /// Stopped, tracking lost or stale: the dialog says StepSafe is not checking the path (AlertManager).
+    /// Live: the answer plays only through StepSafe's own interruptible audio (a hazard alert may cut it off), and
+    /// Siri says nothing, so the two never talk over each other or over an alert. Stopped, paused, stale or in the
+    /// background: nothing plays, and Siri says StepSafe is not checking the path (thrown as the intent's error).
     @MainActor
-    func perform() async throws -> some IntentResult & ProvidesDialog {
-        .result(dialog: IntentDialog(stringLiteral: AppModel.shared.alerts.whatsAheadForShortcut()))
+    func perform() async throws -> some IntentResult {
+        if let notChecking = AppModel.shared.alerts.whatsAheadForShortcut() { throw NotChecking(text: notChecking) }
+        return .result()
+    }
+
+    struct NotChecking: Error, CustomLocalizedStringResourceConvertible {
+        let text: String
+        var localizedStringResource: LocalizedStringResource { "\(text)" }
     }
 }
 

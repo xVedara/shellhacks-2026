@@ -91,7 +91,8 @@ enum Tuning {
     /// Haptic-only drop-off reminder every dropOffReminderSeconds while a P1-cued drop-off episode stays within 2 m
     /// (no audio). Needs alertEpisodes (it rides on the episode tracks).
     static var dropOffHapticReminder = true
-    /// Ground obstacles and closing objects keep the world-point repeat rules (ground gating lost chest-mount tags).
+    /// Ground obstacles and closing objects are not gated by episodes (ground gating lost chest-mount tags). Ground
+    /// keeps the world-point repeat rules, with the 1 m tier added (escalateTiersM) when alertEpisodes is on.
     static let episodeKinds: Set<HazardKind> = [.dropOff, .headHeight]
     /// Same episode: same kind, same side word, lateral within this of the track.
     static let episodeLateralTolM: Float = 0.4

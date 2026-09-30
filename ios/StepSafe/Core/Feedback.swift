@@ -107,14 +107,22 @@ struct HapticLimiter {
 
     init(interval: Double = 2) { self.interval = interval }
 
-    /// Closing objects by track id; path-guard hazards by kind (one confirmed slot per kind).
-    static func key(_ d: Detection) -> String {
+    /// Closing objects by track id; drop-offs and head-height hazards by their AlertPolicy episode (one edge
+    /// followed while walking is one key); anything without an episode by kind, priority and world point on a
+    /// 0.5 m grid. So a routine drop-off never delays a priority-1 one, and two different drop-offs within 2 s both
+    /// buzz, while the same persistent hazard is still limited.
+    /// ponytail: a point sliding along a grid line can land in a new cell every ~0.5 m (more buzzes while walking
+    /// with audio down); key ground by an identity if it ever gets one.
+    static func key(_ d: Detection, episode: Int? = nil) -> String {
         if d.kind == .closing { return "closing-\(d.closing.map { String($0.trackId) } ?? "?")" }
-        return "\(d.kind)"
+        if let episode { return "\(d.kind)-episode-\(episode)" }
+        let cell = (d.point / 0.5).rounded(.toNearestOrAwayFromZero)
+        return "\(d.kind)-\(AlertPolicy.priority(d))-\(Int(cell.x)),\(Int(cell.y)),\(Int(cell.z))"
     }
 
-    mutating func allow(_ d: Detection, now: Double) -> Bool {
-        let k = Self.key(d)
+    /// `episode`: AlertPolicy.episodeKey(d) (nil for ground and closing objects, or with episodes off).
+    mutating func allow(_ d: Detection, episode: Int? = nil, now: Double) -> Bool {
+        let k = Self.key(d, episode: episode)
         if let t = last[k], now - t < interval { return false }
         last[k] = now
         return true
@@ -129,13 +137,17 @@ enum WhatsAheadAvailability: Equatable {
     /// The last analysis output must be at most this old.
     static let maxFrameAgeSeconds = 1.0
 
-    static func of(scanning: Bool, trackingDown: Bool, frameAge: Double?) -> Self {
+    /// `foreground`: the app is not in the background (the sensor session runs only in the foreground). Not
+    /// "active": the Siri overlay makes a foreground app inactive while ARKit keeps running.
+    static func of(scanning: Bool, trackingDown: Bool, frameAge: Double?, foreground: Bool) -> Self {
         guard scanning else { return .stopped }
+        guard foreground else { return .paused }
         guard !trackingDown, let age = frameAge, age <= maxFrameAgeSeconds else { return .paused }
         return .ready
     }
 
-    /// Siri dialog text when not ready (on-screen/Siri speech, not a bundled clip).
+    /// Siri dialog text when not ready (on-screen/Siri speech, not a bundled clip). Ready: nil, and Siri says
+    /// nothing; the answer plays only through StepSafe's own interruptible audio (AlertManager.whatsAhead).
     func dialog(lang: String) -> String? {
         let es = lang == "es"
         switch self {

@@ -208,7 +208,7 @@ final class AlertManager {
         drainNotices()
     }
 
-    /// Non-visual "StepSafe is not working": the fault buzz plus a VoiceOver announcement, repeated while it lasts;
+    /// Non-visual "StepSafe is not working": the fault buzz (plus our own spoken notice when audio works), repeated while it lasts;
     /// "Audio back" once audio returns. Never in place of, or on top of, a priority-1 alert or its haptic.
     private func checkFaults() {
         switch audioFault.update(down: !audioReady, scanning: isScanning, now: now) {
@@ -228,17 +228,9 @@ final class AlertManager {
             // Our own voice through the notice queue: it waits for every alert and every alert cuts it off.
             // (A VoiceOver announcement here could talk over a priority-1 phrase.)
             notice(.say(failed ? Notices.pathGuardFailed : Notices.pathGuardPaused))
-            return
         }
-        // Audio down: no alert phrase can play, so VoiceOver (when on) cannot talk over one.
-        let es = TTSChoice.lang() == "es"
-        let text: String
-        switch fault {
-        case .audio: text = es ? "Audio de StepSafe detenido" : "StepSafe audio stopped"
-        case .tracking where failed: text = es ? "Guía de camino falló, reinicie" : Notices.pathGuardFailed
-        case .tracking: text = es ? "Guía de camino en pausa" : Notices.pathGuardPaused
-        }
-        UIAccessibility.post(notification: .announcement, argument: text)
+        // Audio down: the fault haptic only. No VoiceOver announcement: it is untracked and could overlap a
+        // priority-1 phrase replayed after recovery. The header's accessibility value says "Audio stopped".
     }
 
     /// Deactivates the session so other audio apps can resume.
@@ -459,7 +451,7 @@ final class AlertManager {
             policy.markAnnounced(d, now: now)
             policy.noteSpoken(d, now: now)
             if !d.preCued && !pingedNow { playHaptic(haptic, urgent: urgent) }
-        } else if hapticOnly.allow(d, now: now), !pingedNow {
+        } else if hapticOnly.allow(d, episode: policy.episodeKey(d), now: now), !pingedNow {
             // Audio down: not marked, so it replays after recovery; the haptic still warns meanwhile
             // (per hazard, so a routine haptic never swallows an urgent one).
             playHaptic(haptic, urgent: urgent)
@@ -627,14 +619,16 @@ final class AlertManager {
 
     var isMuted: Bool { policy.isMuted(now: now) }
 
-    /// App Shortcut "What's ahead": the text Siri shows and speaks (also when our own audio is interrupted).
-    /// Stopped, tracking lost, or no fresh analysis output: says so and plays nothing, never "Nothing detected ahead".
-    func whatsAheadForShortcut() -> String {
+    /// App Shortcut "What's ahead". Live: answers through our own audio and returns nil (Siri says nothing).
+    /// Stopped, tracking lost, no fresh analysis output or in the background: plays nothing and returns what Siri
+    /// says instead, never "Nothing detected ahead".
+    func whatsAheadForShortcut() -> String? {
         let availability = WhatsAheadAvailability.of(scanning: isScanning, trackingDown: trackingDown,
-                                                     frameAge: lastUpdate.map { now - $0 })
-        if let text = availability.dialog(lang: TTSChoice.lang()) { return text }
-        whatsAhead()
-        return phrases.localized(AlertPolicy.whatsAheadPhrase(latest, atCurb: atCurb))
+                                                     frameAge: lastUpdate.map { now - $0 },
+                                                     foreground: UIApplication.shared.applicationState != .background)
+        if let text = availability.dialog(lang: TTSChoice.lang()) { return text } // plays nothing
+        whatsAhead() // the answer, only through our interruptible channel (alerts may cut it off)
+        return nil
     }
 
     /// Mute silences routine alerts (priority 2 and lower) for Tuning.muteDuration; priority 1 (closing objects,

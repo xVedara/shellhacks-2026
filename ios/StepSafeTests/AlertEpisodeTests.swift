@@ -244,6 +244,57 @@ final class AlertEpisodeTests: XCTestCase {
         XCTAssertNotNil(p.next([.dropOff: jumped], now: t + 0.2, playing: nil))
     }
 
+    // MARK: Review round
+
+    /// V3 queue is per episode: a different P1 drop-off on the same edge (a jump) gets its own haptic at once.
+    func testQueuedP1IsPerEpisode() {
+        var p = AlertPolicy()
+        let carrier = Self.det(.dropOff, ahead: 2.6, x: -0.34)
+        let playing = { (now: Double) in AlertPolicy.Playing(priority: 2, hazard: carrier, endsAt: now + 0.5, startedAt: now - 1) }
+        let a = Self.det(.dropOff, ahead: 1.9, x: -0.34)
+        p.observe([.dropOff: a], now: 0)
+        XCTAssertEqual(p.holdBehindSameEdge(a, playing: playing(0), now: 0, walkerSpeed: 1), .queued)
+        p.observe([.dropOff: a], now: 0.1)
+        XCTAssertEqual(p.holdBehindSameEdge(a, playing: playing(0.1), now: 0.1, walkerSpeed: 1), .waiting)
+        let b = Self.det(.dropOff, ahead: 1.3, x: -0.34) // nearest point jumped 0.6 m: another object
+        p.observe([.dropOff: b], now: 0.2)
+        XCTAssertEqual(p.holdBehindSameEdge(b, playing: playing(0.2), now: 0.2, walkerSpeed: 1), .queued)
+        // The edge gone past the track gap, then back: a new episode, its own haptic.
+        p.observe([:], now: 0.6)
+        p.observe([.dropOff: b], now: 0.7)
+        XCTAssertEqual(p.holdBehindSameEdge(b, playing: playing(0.7), now: 0.7, walkerSpeed: 1), .queued)
+    }
+
+    /// A cut-off phrase un-speaks the episode it was said for, even when this tick maps the hazard elsewhere.
+    func testCutOffUnspeaksItsOwnEpisodeAfterTheTrackSwitched() {
+        var p = AlertPolicy()
+        let left = Self.det(.dropOff, ahead: 2.5, x: -0.34)
+        p.observe([.dropOff: left], now: 0)
+        XCTAssertNotNil(p.next([.dropOff: left], now: 0, playing: nil))
+        p.markAnnounced(left, now: 0); p.noteSpoken(left, now: 0)
+        p.observe([.dropOff: Self.det(.dropOff, ahead: 2.5, x: -0.05)], now: 0.1) // side flips to "ahead" for a frame
+        p.unmark(left) // the phrase is cut off now
+        p.observe([.dropOff: left], now: 0.2) // back on the left: the same (still live) episode
+        XCTAssertNotNil(p.next([.dropOff: left], now: 0.2, playing: nil), "never heard: said again")
+    }
+
+    /// A same-words P1 counted as said by its P2 carrier is un-marked when the carrier is cut off.
+    func testSameWordsP1IsUnmarkedWhenItsCarrierIsCutOff() {
+        var p = AlertPolicy()
+        let carrier = Self.det(.dropOff, ahead: 2.2, x: -0.34)
+        p.observe([.dropOff: carrier], now: 0)
+        p.markAnnounced(carrier, now: 0); p.noteSpoken(carrier, now: 0)
+        let p1 = Self.det(.dropOff, ahead: 1.95, x: -0.34, walkerZ: 1.5) // 1.25 m from the carrier's world point
+        XCTAssertEqual(AlertPolicy.phrase(p1), AlertPolicy.phrase(carrier))
+        p.observe([.dropOff: p1], now: 1.2)
+        let playing = AlertPolicy.Playing(priority: 2, hazard: carrier, endsAt: 1.6, startedAt: 0)
+        XCTAssertEqual(p.holdBehindSameEdge(p1, playing: playing, now: 1.2, walkerSpeed: 1), .sameWords)
+        p.observe([.dropOff: p1], now: 1.4)
+        XCTAssertNil(p.next([.dropOff: p1], now: 1.4, playing: nil), "counted as said")
+        p.unmark(carrier) // the carrier is cut off before the end
+        XCTAssertEqual(p.next([.dropOff: p1], now: 1.4, playing: nil)?.ahead, 1.95, "not heard: the P1 plays")
+    }
+
     func testHapticReminderEveryFiveSecondsAndNoAudio() {
         var sim = Driver()
         for i in 0...60 { // curb at 1.8 m on the left for 12 s, sliding with the walker
