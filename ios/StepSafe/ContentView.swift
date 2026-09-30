@@ -195,10 +195,24 @@ struct ContentView: View {
             ForEach(hazards, id: \.kind) { d in
                 hazardRow(d)
             }
+            pathGuardV2
             ServerStatusView(link: model.link)
         }
         .padding(16)
         .cardSurface()
+    }
+
+    @AppStorage(Tuning.edgeDedupeKey) private var edgeDedupe = true
+    @AppStorage(Tuning.dropoff010Key) private var dropoff010 = true
+
+    /// Field A/B switches for the PathGuard v2 test branch (Tuning.edgeDedupeOn, dropoff010On); next frame on.
+    private var pathGuardV2: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Toggle("One alert per drop-off edge", isOn: $edgeDedupe)
+            Toggle("Drop-off threshold 10 cm (off: 12 cm)", isOn: $dropoff010)
+        }
+        .font(.subheadline)
+        .foregroundStyle(Color.ink)
     }
 
     /// Height bands use the locked sheet. A live closing vehicle has no tile on that sheet.

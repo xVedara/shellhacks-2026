@@ -28,6 +28,8 @@ Sensing:
   (crossing assist), ego-motion and head-rotation invariant.
 - `VehicleDetector.swift` — YOLO11s (WiSE blend) Core ML detector (cars, bikes, people) beyond
   LiDAR range.
+- Test branch `exp/pathguard-v2`: same-edge drop-off dedupe and the 0.10 m drop threshold
+  are Debug-panel toggles (`Tuning.edgeDedupeOn`, `dropoff010On`; both on by default).
 - `Core/BoxTracker.swift` — IoU tracking of YOLO boxes plus closing math from box
   growth, roll- and rotation-compensated. Standing with the head still, a close car
   growing fast can alert on 0.4 s of samples (a car crossing in front).
