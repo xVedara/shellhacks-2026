@@ -559,20 +559,39 @@ enum Spoken {
         return capitalized(label) + (lang == "es" ? spanishTail(rest) : rest)
     }
 
-    /// "Scaffolding, 40 feet, right" (PLAN.md section 7, priority 4). Feet rounded to 5.
+    /// "Reported scaffolding, 40 feet, right, 2 days ago" (PLAN.md section 7, priority 4). Feet rounded to 5.
+    /// Said as a crowd report with its age (the pin's lastSeen: last report or confirmation), so it never sounds like
+    /// a live detection ("Obstacle, 3 feet, right"). No lastSeen (older server): no age.
     /// `taxonomy` + `lang` turn the pin's type id into the phone's language; nil taxonomy keeps the label.
-    static func headsUp(_ due: HeadsUpState.Due, lang: String = "en", taxonomy: [HazardTypeEntry]? = nil) -> String {
+    static func headsUp(_ due: HeadsUpState.Due, lang: String = "en", taxonomy: [HazardTypeEntry]? = nil,
+                        now: Date = Date()) -> String {
         // English keeps the pin's own label. Spanish uses the taxonomy name when the type id is known.
         let name = lang == "es"
             ? Taxonomy.displayName(type: due.pin.type, label: due.pin.label, in: taxonomy, lang: "es")
             : due.pin.spokenName
         let feet = max(5, Int((due.distanceM * 3.28084 / 5).rounded()) * 5)
+        let age = due.pin.lastSeen.flatMap(Community.date).map { ", " + reportAge(now.timeIntervalSince($0), lang: lang) } ?? ""
         if lang == "es" {
             let side = abs(due.relativeDeg) <= MapTuning.headsUpAheadDeg ? "al frente" : due.relativeDeg < 0 ? "izquierda" : "derecha"
-            return "\(name), \(feet) pies, \(side)"
+            return "Reporte: \(name.prefix(1).lowercased() + name.dropFirst()), \(feet) pies, \(side)\(age)"
         }
         let side = abs(due.relativeDeg) <= MapTuning.headsUpAheadDeg ? "ahead" : due.relativeDeg < 0 ? "left" : "right"
-        return "\(name), \(feet) feet, \(side)"
+        return "Reported \(name.prefix(1).lowercased() + name.dropFirst()), \(feet) feet, \(side)\(age)"
+    }
+
+    /// "today", "1 day ago", "5 days ago", "3 weeks ago", "2 months ago" (Spanish "hoy", "hace 5 días", ...).
+    static func reportAge(_ seconds: TimeInterval, lang: String = "en") -> String {
+        let days = max(0, Int(seconds / 86_400))
+        let es = lang == "es"
+        func ago(_ n: Int, _ en: String, _ esOne: String, _ esMany: String) -> String {
+            es ? "hace \(n) \(n == 1 ? esOne : esMany)" : "\(n) \(en)\(n == 1 ? "" : "s") ago"
+        }
+        switch days {
+        case 0: return es ? "hoy" : "today"
+        case ..<14: return ago(days, "day", "día", "días")
+        case ..<60: return ago(days / 7, "week", "semana", "semanas")
+        default: return ago(days / 30, "month", "mes", "meses")
+        }
     }
 
     /// ", 9 feet, right" -> ", 9 pies, derecha". Only the distance tail, not the hazard name.

@@ -25,6 +25,8 @@ struct RootView: View {
                 .tag(Tab.community)
         }
         .tint(Color.control)
+        // Started from a shortcut (StartWalkingIntent) on another tab: walking belongs on Walker.
+        .onChange(of: model.running) { _, running in if running { tab = .walker } }
     }
 }
 

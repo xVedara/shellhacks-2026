@@ -51,12 +51,12 @@ final class MapRulesTests: XCTestCase {
                     pin("behind", 5, 180), pin("cleared", 3, 0, status: "cleared")]
         let due = HeadsUpState.ahead(pins, walker: home, heading: 0)
         XCTAssertEqual(due.map(\.pin.id), ["left", "ahead"]) // nearest first; outside cone, too far, behind, cleared dropped
-        XCTAssertEqual(Spoken.headsUp(due[0]), "Trash bin, 20 feet, left") // 6 m = 19.7 ft -> 20
-        XCTAssertEqual(Spoken.headsUp(due[1]), "Trash bin, 35 feet, ahead") // 10 m = 32.8 ft -> 35, 5 degrees off
+        XCTAssertEqual(Spoken.headsUp(due[0]), "Reported trash bin, 20 feet, left") // 6 m = 19.7 ft -> 20
+        XCTAssertEqual(Spoken.headsUp(due[1]), "Reported trash bin, 35 feet, ahead") // 10 m = 32.8 ft -> 35, 5 degrees off
         // Walking west, the north pin is to the right and outside the cone.
         XCTAssertTrue(HeadsUpState.ahead(pins, walker: home, heading: 270).isEmpty)
         XCTAssertEqual(HeadsUpState.ahead([pin("r", 10, 300)], walker: home, heading: 270).first.map { Spoken.headsUp($0) },
-                       "Trash bin, 35 feet, right")
+                       "Reported trash bin, 35 feet, right")
     }
 
     func testHeadsUpReleaseLetsADroppedPinSpeakAgain() {
@@ -74,8 +74,8 @@ final class MapRulesTests: XCTestCase {
         var p = pin("left", 6, 330)
         p.type = "trash-bin"
         let due = try XCTUnwrap(HeadsUpState.ahead([p], walker: home, heading: 0).first)
-        XCTAssertEqual(Spoken.headsUp(due, lang: "es", taxonomy: tax), "Cubo de basura, 20 pies, izquierda")
-        XCTAssertEqual(Spoken.headsUp(due), "Trash bin, 20 feet, left") // no taxonomy: the English label
+        XCTAssertEqual(Spoken.headsUp(due, lang: "es", taxonomy: tax), "Reporte: cubo de basura, 20 pies, izquierda")
+        XCTAssertEqual(Spoken.headsUp(due), "Reported trash bin, 20 feet, left") // no taxonomy: the English label
         XCTAssertEqual(Taxonomy.localize("Trash Bin", lang: "es", in: tax), "cubo de basura")
         XCTAssertEqual(Taxonomy.localize("Trash Bin", lang: "en", in: tax), "Trash Bin")
         XCTAssertEqual(Taxonomy.localize("open manhole", lang: "es", in: tax), "open manhole")

@@ -3,6 +3,7 @@ import CoreHaptics
 import MediaPlayer
 import os
 import simd
+import UIKit
 
 /// Plays what AlertPolicy decides: one prioritized sound or phrase at a time (PLAN.md section 7).
 /// Spatial tones go through one AVAudioEngine + AVAudioEnvironmentNode (HRTF), placed at the
@@ -58,10 +59,18 @@ final class AlertManager {
     private var current: (priority: Int, hazard: Detection?, startedAt: Double, ttc: Float)?
     private var busyUntil: Double = 0
     private var pending = NoticeQueue<Notice>()
-    private var lastPress: Double = -.infinity
     private var lastRouteChange: Double = -.infinity
     private var lastAudioRetry: Double = -.infinity
     private var lastHapticOnly: Double = -.infinity
+    /// Last priority-1 haptic: the fault buzz never lands on top of one.
+    private var lastUrgentHaptic: Double = -.infinity
+    /// Fault cues (FaultCue): audio down, AR tracking lost. Only while scanning.
+    private var audioFault = FaultCue(grace: Tuning.faultAudioGraceSeconds, repeatSeconds: Tuning.faultRepeatSeconds)
+    private var trackingFault = FaultCue(grace: Tuning.faultTrackingGraceSeconds, repeatSeconds: Tuning.faultRepeatSeconds)
+    /// Path guard paused or failed (pathGuardStatus).
+    private var trackingDown = false
+    /// A fault cue waiting for a priority-1 alert (and its haptic) to finish.
+    private var faultDue: String?
     private var tick: Timer?
     /// Engine running and not interrupted: only then does an alert count as announced.
     private var audioReady = false { didSet { if audioReady != oldValue { onAudioState?(audioReady) } } }
@@ -108,6 +117,11 @@ final class AlertManager {
                 self.recoverAudio()
             }
         }
+        center.addObserver(forName: AVAudioSession.mediaServicesWereResetNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.audioLog.info("media services reset")
+            self?.cutOff()
+            self?.audioReady = false // the tick retries once a second
+        }
         center.addObserver(forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main) { [weak self] _ in
             self?.audioLog.info("engine configuration change (route)")
             self?.cutOff()
@@ -135,19 +149,47 @@ final class AlertManager {
         policy.clearHistory()
         latest = [:]
         pending.removeAll()
+        audioFault = FaultCue(grace: Tuning.faultAudioGraceSeconds, repeatSeconds: Tuning.faultRepeatSeconds)
+        trackingFault = FaultCue(grace: Tuning.faultTrackingGraceSeconds, repeatSeconds: Tuning.faultRepeatSeconds)
+        trackingDown = false
+        faultDue = nil
         lastAudioRetry = now
         audioReady = startAudio()
         tick = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in self?.onTick() }
     }
 
-    /// Housekeeping while scanning: audio retry (at most once a second), mute expiry, queued notices.
+    /// Housekeeping while scanning: audio retry (at most once a second), fault cue, mute expiry, queued notices.
     private func onTick() {
+        if audioReady && (!engine.isRunning || AVAudioSession.sharedInstance().currentRoute.outputs.isEmpty) {
+            audioLog.error("engine stopped or no output route")
+            cutOff()
+            audioReady = false
+        }
         if !audioReady && now - lastAudioRetry >= 1 { recoverAudio() }
+        checkFaults()
         if policy.muteExpired(now: now) {
             onMuteChange?(false)
             notice(.say(Notices.alertsOn))
         }
         drainNotices()
+    }
+
+    /// Non-visual "StepSafe is not working": the fault buzz plus a VoiceOver announcement, repeated while it lasts;
+    /// "Audio back" once audio returns. Never in place of, or on top of, a priority-1 alert or its haptic.
+    private func checkFaults() {
+        let es = TTSChoice.lang() == "es"
+        switch audioFault.update(down: !audioReady, scanning: isScanning, now: now) {
+        case .cue: faultDue = es ? "Audio de StepSafe detenido" : "StepSafe audio stopped"
+        case .recovered: notice(.say(Notices.audioBack))
+        case nil: break
+        }
+        if trackingFault.update(down: trackingDown, scanning: isScanning, now: now) == .cue, faultDue == nil {
+            faultDue = es ? "Guía de camino en pausa" : Notices.pathGuardPaused
+        }
+        guard let text = faultDue, playingPriority != 1, now - lastUrgentHaptic >= 1 else { return }
+        faultDue = nil
+        playHaptic(.fault, urgent: false)
+        UIAccessibility.post(notification: .announcement, argument: text) // spoken only when VoiceOver is on
     }
 
     /// Deactivates the session so other audio apps can resume.
@@ -246,8 +288,8 @@ final class AlertManager {
         return current?.priority
     }
 
-    /// Remote-command handlers are not on main. Already-on-main calls run inline so a double-press
-    /// keeps its timing; otherwise the work is serialized with analysis updates and SwiftUI.
+    /// Remote-command handlers are not on main. Already-on-main calls run inline; otherwise the work is
+    /// serialized with analysis updates and SwiftUI.
     private func onMain(_ body: @escaping (AlertManager) -> Void) {
         if Thread.isMainThread {
             body(self)
@@ -281,7 +323,7 @@ final class AlertManager {
             playDropOffTone(at: point)
         }
         guard let d = policy.dropOffToCue(confirmed, playing: playing, now: now) else { return }
-        playHaptic() // now, over the closing words; the tone waits for them to end (no tone over words)
+        playHaptic(.dropOff, urgent: true) // now, over the closing words; the tone waits for them to end (no tone over words)
         dropToneAfterWords = (d.point, busyUntil)
     }
 
@@ -308,7 +350,7 @@ final class AlertManager {
         }
         for c in fresh {
             if let id = c.closing?.trackId { pinged.insert(id) }
-            playHaptic()
+            playHaptic(.closing, urgent: true)
             guard audioReady, let buffer = tones[.crossing], let copy = Self.copy(buffer) else { continue }
             let point = c.point
             audioQueue.async { [self, copy] in
@@ -344,19 +386,20 @@ final class AlertManager {
         drainNotices()
     }
 
-    /// Haptic for every priority 1 (never-muted) alert.
+    /// Every announced alert gets its kind's haptic (HapticGrammar); priority 1 at full strength.
     private func announce(_ d: Detection) {
         let urgent = AlertPolicy.neverMuted(d)
+        let haptic = HapticGrammar.kind(d.kind)
         // A pre-cued follow-on plays the drop-off tone first (right after the closing words) and no second haptic.
         let tone: Tone? = d.followOn && !d.preCued ? nil : Self.tone(for: d.kind)
         if d.preCued { dropToneAfterWords = nil }
         if play(tone: tone, at: d.point, phrase: AlertPolicy.phrase(d), priority: AlertPolicy.priority(d), hazard: d) {
             policy.markAnnounced(d, now: now)
-            if urgent && !d.preCued { playHaptic() }
-        } else if urgent, now - lastHapticOnly >= 2 {
+            if !d.preCued { playHaptic(haptic, urgent: urgent) }
+        } else if now - lastHapticOnly >= 2 {
             // Audio down: not marked, so it replays after recovery; the haptic still warns meanwhile.
             lastHapticOnly = now
-            playHaptic()
+            playHaptic(haptic, urgent: urgent)
         }
     }
 
@@ -467,6 +510,7 @@ final class AlertManager {
     }
 
     func pathGuardStatus(_ status: SensorSession.Status) {
+        trackingDown = status == .paused || status == .failed
         switch status {
         case .on: notice(.say(Notices.pathGuardOn))
         case .back: notice(.say(Notices.pathGuardBack))
@@ -484,14 +528,16 @@ final class AlertManager {
         }
     }
 
-    private func playHaptic() {
+    /// Independent of mute and audio: the haptic engine is haptics-only (init).
+    private func playHaptic(_ kind: HapticGrammar.Kind, urgent: Bool) {
+        if urgent { lastUrgentHaptic = now }
         guard let haptics else { return }
         try? haptics.start() // no-op if running; restarts it if the system stopped it
-        let events = (0..<3).map { i in
-            CHHapticEvent(eventType: .hapticTransient, parameters: [
-                CHHapticEventParameter(parameterID: .hapticIntensity, value: 1),
-                CHHapticEventParameter(parameterID: .hapticSharpness, value: 1),
-            ], relativeTime: Double(i) * 0.1)
+        let events = HapticGrammar.events(kind, urgent: urgent).map { e in
+            let parameters = [CHHapticEventParameter(parameterID: .hapticIntensity, value: e.intensity),
+                              CHHapticEventParameter(parameterID: .hapticSharpness, value: e.sharpness)]
+            return e.duration.map { CHHapticEvent(eventType: .hapticContinuous, parameters: parameters, relativeTime: e.time, duration: $0) }
+                ?? CHHapticEvent(eventType: .hapticTransient, parameters: parameters, relativeTime: e.time)
         }
         try? haptics.makePlayer(with: CHHapticPattern(events: events, parameters: [])).start(atTime: 0)
     }
@@ -512,7 +558,8 @@ final class AlertManager {
 
     var isMuted: Bool { policy.isMuted(now: now) }
 
-    /// Mute silences priority 2 and lower for Tuning.muteDuration; priority 1 and closing objects still play.
+    /// Mute silences routine alerts (priority 2 and lower) for Tuning.muteDuration; priority 1 (closing objects,
+    /// drop-offs within 2 m) still plays, and the notice says so.
     func toggleMute() {
         let mute = !isMuted
         policy.setMuted(mute, now: now)
@@ -520,49 +567,27 @@ final class AlertManager {
         notice(.say(mute ? Notices.muted : Notices.alertsOn))
     }
 
-    /// Play/pause press: first = what's ahead; a second within 2 s = mute toggle.
-    func handlePress(source: String) {
-        let t = now
-        let isDouble = t - lastPress < Tuning.doublePressWindow
-        log.info("remote command \(source, privacy: .public) -> \(isDouble ? "mute toggle" : "what's ahead", privacy: .public)")
-        if isDouble {
-            lastPress = -.infinity
-            toggleMute()
-        } else {
-            lastPress = t
-            whatsAhead()
+    /// A headset command (RemoteControls): play/pause = what's ahead, never mute; next track = mute toggle.
+    func handle(_ command: RemoteCommand) {
+        let action = RemoteControls.action(command, sinceRouteChange: now - lastRouteChange)
+        log.info("remote command \(String(describing: command), privacy: .public) -> \(String(describing: action), privacy: .public)")
+        switch action {
+        case .whatsAhead: whatsAhead()
+        case .toggleMute: toggleMute()
+        case .ignore: break // play/pause right after an AirPod went in or came out
         }
     }
 
     private func registerRemoteCommands() {
         let cc = MPRemoteCommandCenter.shared()
-        cc.togglePlayPauseCommand.isEnabled = true
-        cc.togglePlayPauseCommand.addTarget { [weak self] _ in
-            self?.onMain { $0.handlePress(source: "togglePlayPause") }
-            return .success
-        }
-        // play/pause also arrive when an AirPod is taken out or put in: ignore them right after a route change.
-        for (command, name) in [(cc.playCommand, "play"), (cc.pauseCommand, "pause")] {
+        let commands: [(MPRemoteCommand, RemoteCommand)] = [(cc.togglePlayPauseCommand, .togglePlayPause), (cc.playCommand, .play),
+                                                            (cc.pauseCommand, .pause), (cc.nextTrackCommand, .nextTrack)]
+        for (command, name) in commands {
             command.isEnabled = true
             command.addTarget { [weak self] _ in
-                self?.onMain { manager in
-                    if manager.now - manager.lastRouteChange < 1.5 {
-                        manager.log.info("remote command \(name, privacy: .public) ignored (route change)")
-                    } else {
-                        manager.handlePress(source: name)
-                    }
-                }
+                self?.onMain { $0.handle(name) }
                 return .success
             }
-        }
-        // AirPods double-press arrives as next track.
-        cc.nextTrackCommand.isEnabled = true
-        cc.nextTrackCommand.addTarget { [weak self] _ in
-            self?.onMain { manager in
-                manager.log.info("remote command nextTrack -> mute toggle")
-                manager.toggleMute()
-            }
-            return .success
         }
     }
 

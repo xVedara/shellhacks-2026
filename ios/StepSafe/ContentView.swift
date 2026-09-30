@@ -3,6 +3,9 @@ import UIKit
 
 /// Wires SensorSession to AlertManager and publishes state for the tester screen.
 final class AppModel: ObservableObject {
+    /// The one model: the app scene and the App Shortcuts (StepSafeIntents) share it.
+    static let shared = AppModel()
+
     @Published var running = false
     @Published var muted = false
     @Published var confirmed: [HazardKind: Detection] = [:]
@@ -11,6 +14,8 @@ final class AppModel: ObservableObject {
     @Published var thumbnail: CGImage?
     @Published var pathGuardFailed = false
     @Published var audioFailed = false
+    /// AR tracking lost ("Path guard paused") while running.
+    @Published var trackingPaused = false
 
     let sensors = SensorSession()
     let alerts = AlertManager()
@@ -32,6 +37,7 @@ final class AppModel: ObservableObject {
             DispatchQueue.main.async {
                 guard let self, self.running else { return }
                 self.pathGuardFailed = status == .failed
+                self.trackingPaused = status == .paused
                 alerts.pathGuardStatus(status)
             }
         }
@@ -64,6 +70,7 @@ final class AppModel: ObservableObject {
         thumbnail = nil
         pathGuardFailed = false
         audioFailed = false
+        trackingPaused = false
         if running {
             alerts.startScanning()
             sensors.start()
@@ -98,15 +105,32 @@ struct ContentView: View {
                     .disabled(!SensorSession.isSupported)
                 BigButton(title: "What's ahead", systemImage: "ear", filled: true) { model.alerts.whatsAhead() }
                     .accessibilityHint("Speaks the nearest hazard. Same as one AirPods press")
-                BigButton(title: model.muted ? "Unmute" : "Mute 5 minutes",
+                BigButton(title: muteTitle,
                           systemImage: model.muted ? "speaker.wave.2.fill" : "speaker.slash.fill",
                           filled: false) { model.alerts.toggleMute() }
-                    .accessibilityHint("Same as two AirPods presses")
+                    .accessibilityHint("Cars and drop-offs stay on. Same as an AirPods double-press")
                 debug
             }
             .padding(16)
         }
         .background(Color.page.ignoresSafeArea())
+        // VoiceOver: two-finger double-tap anywhere on Walker = what's ahead.
+        .accessibilityAction(.magicTap) { model.alerts.whatsAhead() }
+        // Escape (two-finger scrub) never stops walking: it only says the status, so nothing ends silently.
+        .accessibilityAction(.escape) {
+            UIAccessibility.post(notification: .announcement, argument: "\(statusText). Use Stop to end walking")
+        }
+    }
+
+    private var muteTitle: String { model.muted ? "Unmute" : "Mute routine alerts" }
+
+    /// Header status, also the header's accessibility value. A fault comes first: it is what the user must know.
+    private var statusText: String {
+        guard model.running else { return "Stopped" }
+        if model.pathGuardFailed { return "Path guard failed, restart" }
+        if model.audioFailed { return "Audio stopped" }
+        if model.trackingPaused { return "Scanning paused, tracking lost" }
+        return model.muted ? "Scanning, routine alerts off" : "Scanning"
     }
 
     private var floorText: String {
@@ -126,13 +150,21 @@ struct ContentView: View {
             HStack(spacing: 8) {
                 Circle().fill(headerMarkColor).frame(width: 8, height: 8)
                     .accessibilityHidden(true)
-                Text(model.running ? (model.muted ? "Scanning, muted" : "Scanning") : "Stopped")
+                Text(statusText)
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(headerStatusColor)
             }
         }
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("StepSafe")
+        .accessibilityValue(statusText)
         .accessibilityAddTraits(.isHeader)
+        // Rotor actions: the whole Walker screen from the header, one-handed.
+        .accessibilityAction(named: model.running ? "Stop" : "Start") {
+            if SensorSession.isSupported { model.toggleRunning() }
+        }
+        .accessibilityAction(named: "What's ahead") { model.alerts.whatsAhead() }
+        .accessibilityAction(named: muteTitle) { model.alerts.toggleMute() }
     }
 
     /// Live scanning words use the link ink. Muted is `--ink-2`. Stopped is `--ink-3`.

@@ -2,7 +2,7 @@ import SwiftUI
 
 @main
 struct StepSafeApp: App {
-    @StateObject private var model = AppModel()
+    @ObservedObject private var model = AppModel.shared
 
     var body: some Scene {
         WindowGroup {

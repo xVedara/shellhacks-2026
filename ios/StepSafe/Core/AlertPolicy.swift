@@ -6,15 +6,18 @@ enum Notices {
     static let pathGuardBack = "Path guard back"
     static let pathGuardPaused = "Path guard paused"
     static let pathGuardFailed = "Path guard failed, restart"
-    static let muted = "Muted for 5 minutes"
+    /// Mute is partial (neverMuted): the words must say so, or a user trusts "muted" and ignores a car alert.
+    static let muted = "Routine alerts off for 5 minutes. Cars and drop-offs stay on."
     static let alertsOn = "Alerts on"
     static let stopped = "StepSafe is stopped"
+    /// Audio came back after the fault cue (FaultCue) fired.
+    static let audioBack = "Audio back"
     /// Never "clear" or "safe": the app only reports what it did not detect.
     static let nothingAhead = "Nothing detected ahead"
     static let listenBeforeCrossing = "Nothing detected. Listen before crossing."
     /// HoldStillHint: vehicle warnings at a curb need a still head (look and hold).
     static let holdStill = "Hold still to check traffic."
-    static let all = [pathGuardOn, pathGuardBack, pathGuardPaused, pathGuardFailed, muted, alertsOn, stopped,
+    static let all = [pathGuardOn, pathGuardBack, pathGuardPaused, pathGuardFailed, muted, alertsOn, stopped, audioBack,
                       nothingAhead, listenBeforeCrossing, holdStill]
 }
 

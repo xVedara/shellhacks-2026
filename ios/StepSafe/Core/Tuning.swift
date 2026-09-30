@@ -162,7 +162,12 @@ enum Tuning {
     static let passiveDownvotesEnabled = true
 
     // MARK: Controls
-    static let doublePressWindow: Double = 2
+    /// Fault cue (FaultCue): audio down this long while scanning, or AR tracking lost this long, gives the fault
+    /// haptic and a VoiceOver announcement, repeated every faultRepeatSeconds. Tracking drops briefly on fast
+    /// head turns (Path guard paused already speaks after trackingPauseSeconds), so it gets a longer grace.
+    static let faultAudioGraceSeconds: Double = 2
+    static let faultTrackingGraceSeconds: Double = 5
+    static let faultRepeatSeconds: Double = 30
     static let muteDuration: Double = 5 * 60
     /// A queued server phrase (label, heads-up) older than this is dropped: its distance is stale.
     static let serverPhraseMaxWaitSeconds: Double = 3

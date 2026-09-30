@@ -398,9 +398,9 @@
    "es": "Guía de camino falló, reinicie"
   },
   {
-   "id": "n-muted",
-   "en": "Muted for 5 minutes",
-   "es": "Silenciado por 5 minutos"
+   "id": "n-muted-routine",
+   "en": "Routine alerts off for 5 minutes. Cars and drop-offs stay on.",
+   "es": "Alertas de rutina apagadas por 5 minutos. Carros y desniveles siguen activos."
   },
   {
    "id": "n-alerts-on",
@@ -411,6 +411,11 @@
    "id": "n-stopped",
    "en": "StepSafe is stopped",
    "es": "StepSafe está detenido"
+  },
+  {
+   "id": "n-audio-back",
+   "en": "Audio back",
+   "es": "Audio reanudado"
   },
   {
    "id": "n-nothing-ahead",
