@@ -44,6 +44,19 @@ struct PhraseBook {
         id.hasPrefix("pg-slope-") ? "pg-dropoff-" + id.dropFirst("pg-slope-".count) : nil
     }
 
+    /// `text` (fixed phrases joined by ". ") in `lang`, or nil if any part is not a fixed phrase.
+    func translate(_ text: String, lang: String) -> String? {
+        guard let ids = ids(for: text) else { return nil }
+        let byId = Dictionary(entries.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        var out = ""
+        for id in ids {
+            guard let e = byId[id] else { return nil }
+            if !out.isEmpty { out += out.hasSuffix(".") ? " " : ". " }
+            out += lang == "es" ? e.es : e.en
+        }
+        return out
+    }
+
     func clipNames(for text: String, lang: String, exists: (String) -> Bool) -> [String]? {
         guard let ids = ids(for: text) else { return nil }
         var names: [String] = []

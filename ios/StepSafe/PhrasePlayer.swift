@@ -24,6 +24,9 @@ final class PhrasePlayer: @unchecked Sendable {
         }
     }
 
+    /// A fixed phrase in the phone's language (App Shortcut dialog); the text itself if it is not fixed.
+    func localized(_ text: String) -> String { book?.translate(text, lang: lang) ?? text }
+
     /// Blocks until every urgent clip is decoded (called before scanning starts; about 0.1-0.5 s at launch).
     func waitUntilReady(timeout: Double = 2) { _ = warm.wait(timeout: .now() + timeout) }
 

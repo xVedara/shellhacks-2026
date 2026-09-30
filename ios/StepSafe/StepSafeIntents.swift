@@ -21,10 +21,11 @@ struct WhatsAheadIntent: AppIntent {
     static let title: LocalizedStringResource = "What's ahead"
     static let description = IntentDescription("Speaks the nearest hazard StepSafe detects, like one AirPods press.")
 
+    /// Siri shows and speaks the answer as a dialog too, so it is heard even if StepSafe's own audio is interrupted.
+    /// Stopped, tracking lost or stale: the dialog says StepSafe is not checking the path (AlertManager).
     @MainActor
-    func perform() async throws -> some IntentResult {
-        AppModel.shared.alerts.whatsAhead() // stopped: says "StepSafe is stopped"
-        return .result()
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        .result(dialog: IntentDialog(stringLiteral: AppModel.shared.alerts.whatsAheadForShortcut()))
     }
 }
 

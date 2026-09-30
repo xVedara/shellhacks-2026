@@ -21,12 +21,13 @@ final class AlertManager {
     private let audioLog = Logger(subsystem: "net.babigian.stepsafe", category: "audio")
 
     private let audioQueue = DispatchQueue(label: "net.babigian.stepsafe.audio", qos: .userInteractive)
-    private let engine = AVAudioEngine()
-    private let environment = AVAudioEnvironmentNode()
-    private let tonePlayer = AVAudioPlayerNode()
-    private let silencePlayer = AVAudioPlayerNode()
+    // The audio graph: replaced (on audioQueue, from main) only after a media-services reset (rebuildAudio).
+    private var engine = AVAudioEngine()
+    private var environment = AVAudioEnvironmentNode()
+    private var tonePlayer = AVAudioPlayerNode()
+    private var silencePlayer = AVAudioPlayerNode()
     /// Server-voiced phrases (TTSPlayer clips), not spatialized.
-    private let clipPlayer = AVAudioPlayerNode()
+    private var clipPlayer = AVAudioPlayerNode()
     /// Format TTSPlayer converts clips to.
     static let clipFormat = AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 1)!
     private let format = AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 1)! // mono, so it spatializes
@@ -61,16 +62,25 @@ final class AlertManager {
     private var pending = NoticeQueue<Notice>()
     private var lastRouteChange: Double = -.infinity
     private var lastAudioRetry: Double = -.infinity
-    private var lastHapticOnly: Double = -.infinity
+    /// Audio-down haptics, one per hazard identity per 2 s.
+    private var hapticOnly = HapticLimiter(interval: 2)
+    /// The playing fault buzz: stopped the moment an urgent haptic starts, so it never masks one.
+    private var faultPlayer: CHHapticPatternPlayer?
+    /// Closing track ids that got their ping haptic in the current update(): no second haptic in the same frame.
+    private var pingedThisFrame: Set<Int> = []
+    /// Last analysis output (update), for the App Shortcut freshness check.
+    private var lastUpdate: Double?
     /// Last priority-1 haptic: the fault buzz never lands on top of one.
     private var lastUrgentHaptic: Double = -.infinity
     /// Fault cues (FaultCue): audio down, AR tracking lost. Only while scanning.
     private var audioFault = FaultCue(grace: Tuning.faultAudioGraceSeconds, repeatSeconds: Tuning.faultRepeatSeconds)
     private var trackingFault = FaultCue(grace: Tuning.faultTrackingGraceSeconds, repeatSeconds: Tuning.faultRepeatSeconds)
-    /// Path guard paused or failed (pathGuardStatus).
-    private var trackingDown = false
+    /// Last path guard status (pathGuardStatus); paused or failed = tracking down.
+    private var trackingStatus: SensorSession.Status?
+    private var trackingDown: Bool { trackingStatus == .paused || trackingStatus == .failed }
+    private enum Fault { case audio, tracking }
     /// A fault cue waiting for a priority-1 alert (and its haptic) to finish.
-    private var faultDue: String?
+    private var faultDue: Fault?
     private var tick: Timer?
     /// Engine running and not interrupted: only then does an alert count as announced.
     private var audioReady = false { didSet { if audioReady != oldValue { onAudioState?(audioReady) } } }
@@ -83,17 +93,7 @@ final class AlertManager {
 
     init() {
         for tone in Tone.allCases { tones[tone] = Self.synthesize(tone, format) }
-        engine.attach(environment)
-        engine.attach(tonePlayer)
-        engine.attach(silencePlayer)
-        engine.attach(clipPlayer)
-        engine.connect(tonePlayer, to: environment, format: format)
-        engine.connect(environment, to: engine.mainMixerNode, format: nil)
-        engine.connect(silencePlayer, to: engine.mainMixerNode, format: format)
-        engine.connect(clipPlayer, to: engine.mainMixerNode, format: Self.clipFormat)
-        tonePlayer.renderingAlgorithm = .HRTFHQ
-        environment.distanceAttenuationParameters.referenceDistance = 1
-        environment.distanceAttenuationParameters.rolloffFactor = 0.3 // 5 m away must still be clearly audible
+        buildGraph()
 
         haptics = try? CHHapticEngine()
         // Haptics only: the engine does not depend on the audio session, so P1 haptics survive audio interruptions.
@@ -118,14 +118,18 @@ final class AlertManager {
             }
         }
         center.addObserver(forName: AVAudioSession.mediaServicesWereResetNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.audioLog.info("media services reset")
-            self?.cutOff()
-            self?.audioReady = false // the tick retries once a second
+            guard let self else { return }
+            self.audioLog.info("media services reset: rebuilding the audio graph")
+            self.cutOff()
+            self.audioReady = false
+            self.rebuildAudio() // the old engine and nodes are invalid; the tick restarts audio within a second
         }
-        center.addObserver(forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main) { [weak self] _ in
-            self?.audioLog.info("engine configuration change (route)")
-            self?.cutOff()
-            self?.recoverAudio() // AirPods connected or disconnected; the engine stopped
+        // object nil: the engine is replaced after a media-services reset; only the current one counts.
+        center.addObserver(forName: .AVAudioEngineConfigurationChange, object: nil, queue: .main) { [weak self] n in
+            guard let self, (n.object as AnyObject?) === self.engine else { return }
+            self.audioLog.info("engine configuration change (route)")
+            self.cutOff()
+            self.recoverAudio() // AirPods connected or disconnected; the engine stopped
         }
         center.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main) { [weak self] n in
             guard let self,
@@ -135,6 +139,34 @@ final class AlertManager {
             self.lastRouteChange = self.now // an AirPod went in or came out; iOS may send play/pause for it
         }
         registerRemoteCommands()
+    }
+
+    /// Wires the audio graph (init, and rebuildAudio on audioQueue).
+    private func buildGraph() {
+        engine.attach(environment)
+        engine.attach(tonePlayer)
+        engine.attach(silencePlayer)
+        engine.attach(clipPlayer)
+        engine.connect(tonePlayer, to: environment, format: format)
+        engine.connect(environment, to: engine.mainMixerNode, format: nil)
+        engine.connect(silencePlayer, to: engine.mainMixerNode, format: format)
+        engine.connect(clipPlayer, to: engine.mainMixerNode, format: Self.clipFormat)
+        tonePlayer.renderingAlgorithm = .HRTFHQ
+        environment.distanceAttenuationParameters.referenceDistance = 1
+        environment.distanceAttenuationParameters.rolloffFactor = 0.3 // 5 m away must still be clearly audible
+    }
+
+    /// After a media-services reset every engine and node is invalid: build a fresh graph. Main thread; the
+    /// swap runs on audioQueue so no queued audio work sees a half-built graph.
+    private func rebuildAudio() {
+        audioQueue.sync {
+            engine = AVAudioEngine()
+            environment = AVAudioEnvironmentNode()
+            tonePlayer = AVAudioPlayerNode()
+            silencePlayer = AVAudioPlayerNode()
+            clipPlayer = AVAudioPlayerNode()
+            buildGraph()
+        }
     }
 
     // MARK: Scanning lifecycle
@@ -151,8 +183,10 @@ final class AlertManager {
         pending.removeAll()
         audioFault = FaultCue(grace: Tuning.faultAudioGraceSeconds, repeatSeconds: Tuning.faultRepeatSeconds)
         trackingFault = FaultCue(grace: Tuning.faultTrackingGraceSeconds, repeatSeconds: Tuning.faultRepeatSeconds)
-        trackingDown = false
+        trackingStatus = nil
         faultDue = nil
+        lastUpdate = nil
+        hapticOnly = HapticLimiter(interval: 2)
         lastAudioRetry = now
         audioReady = startAudio()
         tick = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in self?.onTick() }
@@ -165,8 +199,8 @@ final class AlertManager {
             cutOff()
             audioReady = false
         }
+        checkFaults() // before the retry: an outage that ends on this tick is still cued (FaultCue also latches)
         if !audioReady && now - lastAudioRetry >= 1 { recoverAudio() }
-        checkFaults()
         if policy.muteExpired(now: now) {
             onMuteChange?(false)
             notice(.say(Notices.alertsOn))
@@ -177,19 +211,34 @@ final class AlertManager {
     /// Non-visual "StepSafe is not working": the fault buzz plus a VoiceOver announcement, repeated while it lasts;
     /// "Audio back" once audio returns. Never in place of, or on top of, a priority-1 alert or its haptic.
     private func checkFaults() {
-        let es = TTSChoice.lang() == "es"
         switch audioFault.update(down: !audioReady, scanning: isScanning, now: now) {
-        case .cue: faultDue = es ? "Audio de StepSafe detenido" : "StepSafe audio stopped"
+        case .cue: faultDue = .audio
         case .recovered: notice(.say(Notices.audioBack))
         case nil: break
         }
         if trackingFault.update(down: trackingDown, scanning: isScanning, now: now) == .cue, faultDue == nil {
-            faultDue = es ? "Guía de camino en pausa" : Notices.pathGuardPaused
+            faultDue = .tracking
         }
-        guard let text = faultDue, playingPriority != 1, now - lastUrgentHaptic >= 1 else { return }
+        guard let fault = faultDue, playingPriority != 1, now - lastUrgentHaptic >= 1 else { return }
         faultDue = nil
+        if fault == .audio && audioReady { return } // came back while the cue waited: "Audio back" is queued
         playHaptic(.fault, urgent: false)
-        UIAccessibility.post(notification: .announcement, argument: text) // spoken only when VoiceOver is on
+        let failed = trackingStatus == .failed
+        if audioReady {
+            // Our own voice through the notice queue: it waits for every alert and every alert cuts it off.
+            // (A VoiceOver announcement here could talk over a priority-1 phrase.)
+            notice(.say(failed ? Notices.pathGuardFailed : Notices.pathGuardPaused))
+            return
+        }
+        // Audio down: no alert phrase can play, so VoiceOver (when on) cannot talk over one.
+        let es = TTSChoice.lang() == "es"
+        let text: String
+        switch fault {
+        case .audio: text = es ? "Audio de StepSafe detenido" : "StepSafe audio stopped"
+        case .tracking where failed: text = es ? "Guía de camino falló, reinicie" : Notices.pathGuardFailed
+        case .tracking: text = es ? "Guía de camino en pausa" : Notices.pathGuardPaused
+        }
+        UIAccessibility.post(notification: .announcement, argument: text)
     }
 
     /// Deactivates the session so other audio apps can resume.
@@ -274,7 +323,7 @@ final class AlertManager {
         let position = AVAudio3DPoint(x: t.columns.3.x, y: t.columns.3.y, z: t.columns.3.z)
         let orientation = AVAudio3DVectorOrientation(forward: AVAudio3DVector(x: forward.x, y: forward.y, z: forward.z),
                                                      up: AVAudio3DVector(x: up.x, y: up.y, z: up.z))
-        audioQueue.async { [environment] in
+        audioQueue.async { [self] in // environment read on audioQueue: rebuildAudio may replace it
             environment.listenerPosition = position
             environment.listenerVectorOrientation = orientation
         }
@@ -349,7 +398,7 @@ final class AlertManager {
             return ka > kb
         }
         for c in fresh {
-            if let id = c.closing?.trackId { pinged.insert(id) }
+            if let id = c.closing?.trackId { pinged.insert(id); pingedThisFrame.insert(id) }
             playHaptic(.closing, urgent: true)
             guard audioReady, let buffer = tones[.crossing], let copy = Self.copy(buffer) else { continue }
             let point = c.point
@@ -374,6 +423,9 @@ final class AlertManager {
     /// `closings` is every closing object this frame. Empty falls back to the single `confirmed[.closing]` slot.
     func update(_ confirmed: [HazardKind: Detection], closings: [Detection] = []) {
         latest = confirmed
+        lastUpdate = now
+        pingedThisFrame = []
+        defer { pingedThisFrame = [] } // only this frame's ping suppresses announce's haptic
         policy.observe(confirmed, now: now) // episodes (no-op with Tuning.alertEpisodes off)
         if policy.dropOffReminderDue(confirmed, now: now) { playHaptic(.dropOff, urgent: true) } // haptic only, no audio
         let tracks = closings.isEmpty ? (confirmed[.closing].map { [$0] } ?? []) : closings
@@ -401,13 +453,15 @@ final class AlertManager {
         // A pre-cued follow-on plays the drop-off tone first (right after the closing words) and no second haptic.
         let tone: Tone? = d.followOn && !d.preCued ? nil : Self.tone(for: d.kind)
         if d.preCued { dropToneAfterWords = nil }
+        // A new closing object pinged this same frame already felt its haptic.
+        let pingedNow = d.closing.map { pingedThisFrame.contains($0.trackId) } == true
         if play(tone: tone, at: d.point, phrase: AlertPolicy.phrase(d), priority: AlertPolicy.priority(d), hazard: d) {
             policy.markAnnounced(d, now: now)
             policy.noteSpoken(d, now: now)
-            if !d.preCued { playHaptic(haptic, urgent: urgent) }
-        } else if now - lastHapticOnly >= 2 {
-            // Audio down: not marked, so it replays after recovery; the haptic still warns meanwhile.
-            lastHapticOnly = now
+            if !d.preCued && !pingedNow { playHaptic(haptic, urgent: urgent) }
+        } else if hapticOnly.allow(d, now: now), !pingedNow {
+            // Audio down: not marked, so it replays after recovery; the haptic still warns meanwhile
+            // (per hazard, so a routine haptic never swallows an urgent one).
             playHaptic(haptic, urgent: urgent)
         }
     }
@@ -519,7 +573,7 @@ final class AlertManager {
     }
 
     func pathGuardStatus(_ status: SensorSession.Status) {
-        trackingDown = status == .paused || status == .failed
+        trackingStatus = status
         switch status {
         case .on: notice(.say(Notices.pathGuardOn))
         case .back: notice(.say(Notices.pathGuardBack))
@@ -539,7 +593,11 @@ final class AlertManager {
 
     /// Independent of mute and audio: the haptic engine is haptics-only (init).
     private func playHaptic(_ kind: HapticGrammar.Kind, urgent: Bool) {
-        if urgent { lastUrgentHaptic = now }
+        if urgent {
+            lastUrgentHaptic = now
+            try? faultPlayer?.stop(atTime: CHHapticTimeImmediate) // the fault buzz never masks an urgent haptic
+            faultPlayer = nil
+        }
         guard let haptics else { return }
         try? haptics.start() // no-op if running; restarts it if the system stopped it
         let events = HapticGrammar.events(kind, urgent: urgent).map { e in
@@ -548,7 +606,9 @@ final class AlertManager {
             return e.duration.map { CHHapticEvent(eventType: .hapticContinuous, parameters: parameters, relativeTime: e.time, duration: $0) }
                 ?? CHHapticEvent(eventType: .hapticTransient, parameters: parameters, relativeTime: e.time)
         }
-        try? haptics.makePlayer(with: CHHapticPattern(events: events, parameters: [])).start(atTime: 0)
+        guard let player = try? haptics.makePlayer(with: CHHapticPattern(events: events, parameters: [])) else { return }
+        try? player.start(atTime: CHHapticTimeImmediate)
+        if kind == .fault { faultPlayer = player }
     }
 
     // MARK: Controls (AirPods and on-screen buttons)
@@ -566,6 +626,16 @@ final class AlertManager {
     }
 
     var isMuted: Bool { policy.isMuted(now: now) }
+
+    /// App Shortcut "What's ahead": the text Siri shows and speaks (also when our own audio is interrupted).
+    /// Stopped, tracking lost, or no fresh analysis output: says so and plays nothing, never "Nothing detected ahead".
+    func whatsAheadForShortcut() -> String {
+        let availability = WhatsAheadAvailability.of(scanning: isScanning, trackingDown: trackingDown,
+                                                     frameAge: lastUpdate.map { now - $0 })
+        if let text = availability.dialog(lang: TTSChoice.lang()) { return text }
+        whatsAhead()
+        return phrases.localized(AlertPolicy.whatsAheadPhrase(latest, atCurb: atCurb))
+    }
 
     /// Mute silences routine alerts (priority 2 and lower) for Tuning.muteDuration; priority 1 (closing objects,
     /// drop-offs within 2 m) still plays, and the notice says so.

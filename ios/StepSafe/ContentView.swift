@@ -118,7 +118,8 @@ struct ContentView: View {
         .accessibilityAction(.magicTap) { model.alerts.whatsAhead() }
         // Escape (two-finger scrub) never stops walking: it only says the status, so nothing ends silently.
         .accessibilityAction(.escape) {
-            UIAccessibility.post(notification: .announcement, argument: "\(statusText). Use Stop to end walking")
+            UIAccessibility.post(notification: .announcement,
+                                 argument: model.running ? "\(statusText). Use Stop to end walking" : statusText)
         }
     }
 

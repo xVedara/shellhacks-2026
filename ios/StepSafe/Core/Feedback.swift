@@ -83,7 +83,9 @@ struct FaultCue {
     mutating func update(down: Bool, scanning: Bool, now: Double) -> Event? {
         guard scanning else { self = FaultCue(grace: grace, repeatSeconds: repeatSeconds); return nil }
         guard down else {
-            let was = faulted
+            // Latched: an outage past the grace that ends before any cue fired (recovered between ticks, or
+            // on the tick that would have cued) is still announced as recovered.
+            let was = faulted || downSince.map { now - $0 >= grace } == true
             self = FaultCue(grace: grace, repeatSeconds: repeatSeconds)
             return was ? .recovered : nil
         }
@@ -93,5 +95,53 @@ struct FaultCue {
         lastCue = now
         faulted = true
         return .cue
+    }
+}
+
+/// Audio down: an alert is never marked announced, so decide() offers it again every frame. One haptic per hazard
+/// identity per `interval`. Identities are independent: a routine haptic never swallows an urgent one, and two
+/// different urgent hazards both get theirs.
+struct HapticLimiter {
+    let interval: Double
+    private var last: [String: Double] = [:]
+
+    init(interval: Double = 2) { self.interval = interval }
+
+    /// Closing objects by track id; path-guard hazards by kind (one confirmed slot per kind).
+    static func key(_ d: Detection) -> String {
+        if d.kind == .closing { return "closing-\(d.closing.map { String($0.trackId) } ?? "?")" }
+        return "\(d.kind)"
+    }
+
+    mutating func allow(_ d: Detection, now: Double) -> Bool {
+        let k = Self.key(d)
+        if let t = last[k], now - t < interval { return false }
+        last[k] = now
+        return true
+    }
+}
+
+/// Whether "what's ahead" from an App Shortcut can answer from live data. Otherwise Siri says why, never
+/// "Nothing detected ahead" (which would claim a check that did not happen).
+enum WhatsAheadAvailability: Equatable {
+    case stopped, paused, ready
+
+    /// The last analysis output must be at most this old.
+    static let maxFrameAgeSeconds = 1.0
+
+    static func of(scanning: Bool, trackingDown: Bool, frameAge: Double?) -> Self {
+        guard scanning else { return .stopped }
+        guard !trackingDown, let age = frameAge, age <= maxFrameAgeSeconds else { return .paused }
+        return .ready
+    }
+
+    /// Siri dialog text when not ready (on-screen/Siri speech, not a bundled clip).
+    func dialog(lang: String) -> String? {
+        let es = lang == "es"
+        switch self {
+        case .stopped: return es ? "StepSafe está detenido y no revisa el camino." : "StepSafe is stopped and not checking the path."
+        case .paused: return es ? "StepSafe está en pausa y no revisa el camino." : "StepSafe is paused and not checking the path."
+        case .ready: return nil
+        }
     }
 }

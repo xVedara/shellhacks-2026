@@ -126,4 +126,61 @@ final class FeedbackTests: XCTestCase {
         XCTAssertEqual(Spoken.reportAge(-50), "today", "clock skew")
         XCTAssertFalse(Spoken.headsUp(due(), now: now).contains("metre"))
     }
+
+    // MARK: Fix round
+
+    func testAudioDownHapticsArePerHazardSoRoutineNeverSwallowsUrgent() {
+        var l = HapticLimiter(interval: 2)
+        let ground = det(.ground, ahead: 1), drop = det(.dropOff, ahead: 1.5)
+        let car = Detection(kind: .closing, point: .zero, ahead: 5, lateral: 1, pointCount: 0,
+                            closing: .init(speed: 5, ttc: 1, label: "Car", trackId: 3))
+        let car2 = Detection(kind: .closing, point: .zero, ahead: 6, lateral: -1, pointCount: 0,
+                             closing: .init(speed: 5, ttc: 1.2, label: "Car", trackId: 4))
+        XCTAssertTrue(l.allow(ground, now: 0))
+        XCTAssertTrue(l.allow(drop, now: 0.5), "ground then drop-off within 0.5 s: both")
+        XCTAssertTrue(l.allow(car, now: 0.8), "two urgent within 2 s: both")
+        XCTAssertTrue(l.allow(car2, now: 0.9), "a second car is its own hazard")
+        XCTAssertFalse(l.allow(drop, now: 1.0), "the same drop-off every frame: limited")
+        XCTAssertFalse(l.allow(car, now: 1.5))
+        XCTAssertTrue(l.allow(drop, now: 2.5))
+    }
+
+    func testFaultCueLatchesAnOutageThatEndsBeforeItsCue() {
+        var f = FaultCue(grace: 2, repeatSeconds: 30)
+        XCTAssertNil(f.update(down: true, scanning: true, now: 0))
+        XCTAssertNil(f.update(down: true, scanning: true, now: 1.9))
+        XCTAssertEqual(f.update(down: false, scanning: true, now: 2.15), .recovered, "down 2.15 s, recovered on the cue tick")
+    }
+
+    func testShortcutWhatsAheadNeverClaimsACheckItDidNotMake() {
+        XCTAssertEqual(WhatsAheadAvailability.of(scanning: false, trackingDown: false, frameAge: 0.1), .stopped)
+        XCTAssertEqual(WhatsAheadAvailability.of(scanning: true, trackingDown: true, frameAge: 0.1), .paused)
+        XCTAssertEqual(WhatsAheadAvailability.of(scanning: true, trackingDown: false, frameAge: 1.5), .paused, "stale")
+        XCTAssertEqual(WhatsAheadAvailability.of(scanning: true, trackingDown: false, frameAge: nil), .paused, "no frame yet")
+        XCTAssertEqual(WhatsAheadAvailability.of(scanning: true, trackingDown: false, frameAge: 0.5), .ready)
+        XCTAssertNil(WhatsAheadAvailability.ready.dialog(lang: "en"))
+        for a in [WhatsAheadAvailability.stopped, .paused] {
+            for lang in ["en", "es"] {
+                let text = try! XCTUnwrap(a.dialog(lang: lang))
+                XCTAssertFalse(text.contains(Notices.nothingAhead))
+                XCTAssertNil(text.range(of: "\\b(safe|clear|segur[oa]|despejad[oa])\\b", options: [.regularExpression, .caseInsensitive]), text)
+            }
+        }
+    }
+
+    func testShortcutDialogTranslatesFixedPhrases() throws {
+        let b = try PhraseBookTests().book()
+        XCTAssertEqual(b.translate("Drop-off, 3 feet, ahead. Nothing detected. Listen before crossing.", lang: "es"),
+                       "Desnivel, 3 pies, al frente. Nada detectado. Escuche antes de cruzar.")
+        XCTAssertEqual(b.translate("Car approaching, right. Drop-off ahead.", lang: "es"), "Carro acercándose, derecha. Desnivel al frente.")
+        XCTAssertEqual(b.translate(Notices.nothingAhead, lang: "en"), Notices.nothingAhead)
+        XCTAssertNil(b.translate("Trash bin, 6 feet, left", lang: "es"))
+    }
+
+    func testHeadsUpKeepsAcronyms() {
+        XCTAssertEqual(Spoken.lowerFirst("Pothole"), "pothole")
+        XCTAssertEqual(Spoken.lowerFirst("ATM"), "ATM")
+        XCTAssertEqual(Spoken.lowerFirst("EV charger"), "EV charger")
+        XCTAssertEqual(Spoken.lowerFirst("X"), "X")
+    }
 }

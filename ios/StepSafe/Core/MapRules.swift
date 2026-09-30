@@ -573,10 +573,16 @@ enum Spoken {
         let age = due.pin.lastSeen.flatMap(Community.date).map { ", " + reportAge(now.timeIntervalSince($0), lang: lang) } ?? ""
         if lang == "es" {
             let side = abs(due.relativeDeg) <= MapTuning.headsUpAheadDeg ? "al frente" : due.relativeDeg < 0 ? "izquierda" : "derecha"
-            return "Reporte: \(name.prefix(1).lowercased() + name.dropFirst()), \(feet) pies, \(side)\(age)"
+            return "Reporte: \(lowerFirst(name)), \(feet) pies, \(side)\(age)"
         }
         let side = abs(due.relativeDeg) <= MapTuning.headsUpAheadDeg ? "ahead" : due.relativeDeg < 0 ? "left" : "right"
-        return "Reported \(name.prefix(1).lowercased() + name.dropFirst()), \(feet) feet, \(side)\(age)"
+        return "Reported \(lowerFirst(name)), \(feet) feet, \(side)\(age)"
+    }
+
+    /// "Pothole" -> "pothole" after "Reported"; an acronym ("ATM", "EV charger") keeps its capitals.
+    static func lowerFirst(_ s: String) -> String {
+        guard let second = s.dropFirst().first, second.isLowercase else { return s }
+        return s.prefix(1).lowercased() + s.dropFirst()
     }
 
     /// "today", "1 day ago", "5 days ago", "3 weeks ago", "2 months ago" (Spanish "hoy", "hace 5 días", ...).
