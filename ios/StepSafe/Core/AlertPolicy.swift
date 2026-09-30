@@ -170,6 +170,9 @@ struct AlertPolicy {
     /// V3: the episode whose priority-1 drop-off is held behind a priority-2 phrase about the same edge (its haptic
     /// already fired). -1 = a drop-off without a track. Cleared when that episode is no longer tracked.
     private var queuedP1: Int?
+    /// Last V3 queue haptic: at most one per v3BuzzSeconds on the same edge (the nearest point can keep jumping).
+    private var lastV3Buzz: (d: Detection, at: Double)?
+    static let v3BuzzSeconds = 1.0
     /// The last hazard phrase started (noteSpoken) and its episode, plus a same-words P1 counted as said with it
     /// (V3). A cut-off un-speaks exactly these episodes, even if this tick's tracks have moved on.
     private var heard: (hazard: Detection, episode: Int?, rider: (d: Detection, episode: Int?)?)?
@@ -275,7 +278,9 @@ struct AlertPolicy {
         }
         let id = episode(for: d) ?? -1
         guard queuedP1 != id else { return .waiting } // this episode's haptic already fired
-        queuedP1 = id // a different episode on the same edge gets its own haptic
+        queuedP1 = id // a different episode on the same edge gets its own haptic...
+        if let b = lastV3Buzz, now - b.at < Self.v3BuzzSeconds, Self.sameEdge(b.d, d) { return .waiting } // ...at most 1/s
+        lastV3Buzz = (d, now)
         if let i = track(for: d) { tracks[i].lastP1Cue = now }
         return .queued
     }
@@ -489,7 +494,7 @@ struct AlertPolicy {
 
     mutating func clearHistory() {
         history = []; spokenClosing = []; pending = nil; blocked = []; cuedPhraseStart = nil
-        tracks = []; current = [:]; queuedP1 = nil; heard = nil
+        tracks = []; current = [:]; queuedP1 = nil; heard = nil; lastV3Buzz = nil
     }
 
     /// The hazard to announce now, or nil.

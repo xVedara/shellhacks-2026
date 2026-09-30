@@ -625,7 +625,8 @@ final class AlertManager {
     func whatsAheadForShortcut() -> String? {
         let availability = WhatsAheadAvailability.of(scanning: isScanning, trackingDown: trackingDown,
                                                      frameAge: lastUpdate.map { now - $0 },
-                                                     foreground: UIApplication.shared.applicationState != .background)
+                                                     foreground: UIApplication.shared.applicationState != .background,
+                                                     audioReady: audioReady)
         if let text = availability.dialog(lang: TTSChoice.lang()) { return text } // plays nothing
         whatsAhead() // the answer, only through our interruptible channel (alerts may cut it off)
         return nil

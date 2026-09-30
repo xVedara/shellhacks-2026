@@ -167,6 +167,21 @@ final class FeedbackTests: XCTestCase {
         let slid = Detection(kind: .dropOff, point: SIMD3(0.34, 0, -2.6), ahead: 1.7, lateral: 0.34, pointCount: 100)
         p.observe([.dropOff: slid], now: 0.4)
         XCTAssertFalse(l.allow(slid, episode: p.episodeKey(slid), now: 0.4))
+        // One episode crossing 2 m: the P2 buzz at 2.3 m never delays its P1 buzz at 1.9 m 0.5 s later.
+        var q = AlertPolicy()
+        var m = HapticLimiter(interval: 2)
+        let p2 = Detection(kind: .dropOff, point: SIMD3(-0.34, 0, -2.3), ahead: 2.3, lateral: -0.34, pointCount: 100)
+        let p1 = Detection(kind: .dropOff, point: SIMD3(-0.34, 0, -1.9), ahead: 1.9, lateral: -0.34, pointCount: 100)
+        q.observe([.dropOff: p2], now: 5)
+        let e2 = q.episodeKey(p2)
+        XCTAssertTrue(m.allow(p2, episode: e2, now: 5))
+        for (t, ahead) in [(5.2, Float(2.15)), (5.4, 2.0)] { // walking up to it at 5 Hz: one track
+            q.observe([.dropOff: Detection(kind: .dropOff, point: SIMD3(-0.34, 0, -ahead), ahead: ahead, lateral: -0.34,
+                                           pointCount: 100)], now: t)
+        }
+        q.observe([.dropOff: p1], now: 5.5)
+        XCTAssertEqual(q.episodeKey(p1), e2, "same episode (0.4 m, under the jump guard)")
+        XCTAssertTrue(m.allow(p1, episode: q.episodeKey(p1), now: 5.5), "P1 buzz at once")
         // No episode (ground): kind, priority and point on a 0.5 m grid.
         XCTAssertTrue(l.allow(det(.ground, ahead: 1), now: 1))
         XCTAssertTrue(l.allow(det(.ground, ahead: 2), now: 1.1), "another obstacle 1 m away")
@@ -181,13 +196,18 @@ final class FeedbackTests: XCTestCase {
     }
 
     func testShortcutWhatsAheadNeverClaimsACheckItDidNotMake() {
-        XCTAssertEqual(WhatsAheadAvailability.of(scanning: false, trackingDown: false, frameAge: 0.1, foreground: true), .stopped)
-        XCTAssertEqual(WhatsAheadAvailability.of(scanning: true, trackingDown: true, frameAge: 0.1, foreground: true), .paused)
-        XCTAssertEqual(WhatsAheadAvailability.of(scanning: true, trackingDown: false, frameAge: 1.5, foreground: true), .paused, "stale")
-        XCTAssertEqual(WhatsAheadAvailability.of(scanning: true, trackingDown: false, frameAge: nil, foreground: true), .paused, "no frame yet")
-        XCTAssertEqual(WhatsAheadAvailability.of(scanning: true, trackingDown: false, frameAge: 0.5, foreground: true), .ready)
-        XCTAssertEqual(WhatsAheadAvailability.of(scanning: true, trackingDown: false, frameAge: 0.1, foreground: false), .paused,
+        XCTAssertEqual(WhatsAheadAvailability.of(scanning: false, trackingDown: false, frameAge: 0.1, foreground: true, audioReady: true), .stopped)
+        XCTAssertEqual(WhatsAheadAvailability.of(scanning: true, trackingDown: true, frameAge: 0.1, foreground: true, audioReady: true), .paused)
+        XCTAssertEqual(WhatsAheadAvailability.of(scanning: true, trackingDown: false, frameAge: 1.5, foreground: true, audioReady: true), .paused, "stale")
+        XCTAssertEqual(WhatsAheadAvailability.of(scanning: true, trackingDown: false, frameAge: nil, foreground: true, audioReady: true), .paused, "no frame yet")
+        XCTAssertEqual(WhatsAheadAvailability.of(scanning: true, trackingDown: false, frameAge: 0.5, foreground: true, audioReady: true), .ready)
+        XCTAssertEqual(WhatsAheadAvailability.of(scanning: true, trackingDown: false, frameAge: 0.1, foreground: false, audioReady: true), .paused,
                        "backgrounded: the sensor session is not running, whatever the last frame says")
+        let down = WhatsAheadAvailability.of(scanning: true, trackingDown: false, frameAge: 0.1, foreground: true,
+                                             audioReady: false)
+        XCTAssertEqual(down, .audioDown, "live but our audio is down: nothing would be heard")
+        XCTAssertEqual(down.dialog(lang: "en"), "StepSafe audio stopped")
+        XCTAssertEqual(down.dialog(lang: "es"), "Audio de StepSafe detenido")
         // Live: Siri says nothing (the answer plays only through our own audio); otherwise Siri says why, we play nothing.
         XCTAssertNil(WhatsAheadAvailability.ready.dialog(lang: "en"))
         XCTAssertNotNil(WhatsAheadAvailability.paused.dialog(lang: "en"))

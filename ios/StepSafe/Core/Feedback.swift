@@ -107,15 +107,15 @@ struct HapticLimiter {
 
     init(interval: Double = 2) { self.interval = interval }
 
-    /// Closing objects by track id; drop-offs and head-height hazards by their AlertPolicy episode (one edge
-    /// followed while walking is one key); anything without an episode by kind, priority and world point on a
-    /// 0.5 m grid. So a routine drop-off never delays a priority-1 one, and two different drop-offs within 2 s both
-    /// buzz, while the same persistent hazard is still limited.
+    /// Closing objects by track id; drop-offs and head-height hazards by priority and their AlertPolicy episode
+    /// (one edge followed while walking is one key per priority); anything without an episode by kind, priority and
+    /// world point on a 0.5 m grid. So a routine (P2) buzz never delays the P1 buzz of the same edge once it crosses
+    /// 2 m, two different drop-offs within 2 s both buzz, and the same persistent hazard is still limited.
     /// ponytail: a point sliding along a grid line can land in a new cell every ~0.5 m (more buzzes while walking
     /// with audio down); key ground by an identity if it ever gets one.
     static func key(_ d: Detection, episode: Int? = nil) -> String {
         if d.kind == .closing { return "closing-\(d.closing.map { String($0.trackId) } ?? "?")" }
-        if let episode { return "\(d.kind)-episode-\(episode)" }
+        if let episode { return "\(d.kind)-\(AlertPolicy.priority(d))-episode-\(episode)" }
         let cell = (d.point / 0.5).rounded(.toNearestOrAwayFromZero)
         return "\(d.kind)-\(AlertPolicy.priority(d))-\(Int(cell.x)),\(Int(cell.y)),\(Int(cell.z))"
     }
@@ -132,18 +132,19 @@ struct HapticLimiter {
 /// Whether "what's ahead" from an App Shortcut can answer from live data. Otherwise Siri says why, never
 /// "Nothing detected ahead" (which would claim a check that did not happen).
 enum WhatsAheadAvailability: Equatable {
-    case stopped, paused, ready
+    case stopped, paused, audioDown, ready
 
     /// The last analysis output must be at most this old.
     static let maxFrameAgeSeconds = 1.0
 
     /// `foreground`: the app is not in the background (the sensor session runs only in the foreground). Not
     /// "active": the Siri overlay makes a foreground app inactive while ARKit keeps running.
-    static func of(scanning: Bool, trackingDown: Bool, frameAge: Double?, foreground: Bool) -> Self {
+    /// `audioReady`: our own audio can play the answer; if not, nothing would be heard, so Siri says so instead.
+    static func of(scanning: Bool, trackingDown: Bool, frameAge: Double?, foreground: Bool, audioReady: Bool) -> Self {
         guard scanning else { return .stopped }
         guard foreground else { return .paused }
         guard !trackingDown, let age = frameAge, age <= maxFrameAgeSeconds else { return .paused }
-        return .ready
+        return audioReady ? .ready : .audioDown
     }
 
     /// Siri dialog text when not ready (on-screen/Siri speech, not a bundled clip). Ready: nil, and Siri says
@@ -153,6 +154,7 @@ enum WhatsAheadAvailability: Equatable {
         switch self {
         case .stopped: return es ? "StepSafe está detenido y no revisa el camino." : "StepSafe is stopped and not checking the path."
         case .paused: return es ? "StepSafe está en pausa y no revisa el camino." : "StepSafe is paused and not checking the path."
+        case .audioDown: return es ? "Audio de StepSafe detenido" : "StepSafe audio stopped"
         case .ready: return nil
         }
     }

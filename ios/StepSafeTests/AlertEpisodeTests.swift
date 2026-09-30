@@ -254,15 +254,36 @@ final class AlertEpisodeTests: XCTestCase {
         let a = Self.det(.dropOff, ahead: 1.9, x: -0.34)
         p.observe([.dropOff: a], now: 0)
         XCTAssertEqual(p.holdBehindSameEdge(a, playing: playing(0), now: 0, walkerSpeed: 1), .queued)
-        p.observe([.dropOff: a], now: 0.1)
-        XCTAssertEqual(p.holdBehindSameEdge(a, playing: playing(0.1), now: 0.1, walkerSpeed: 1), .waiting)
+        for now in stride(from: 0.2, through: 1.0, by: 0.2) {
+            p.observe([.dropOff: a], now: now)
+            XCTAssertEqual(p.holdBehindSameEdge(a, playing: playing(now), now: now, walkerSpeed: 1), .waiting)
+        }
         let b = Self.det(.dropOff, ahead: 1.3, x: -0.34) // nearest point jumped 0.6 m: another object
-        p.observe([.dropOff: b], now: 0.2)
-        XCTAssertEqual(p.holdBehindSameEdge(b, playing: playing(0.2), now: 0.2, walkerSpeed: 1), .queued)
+        p.observe([.dropOff: b], now: 1.2)
+        XCTAssertEqual(p.holdBehindSameEdge(b, playing: playing(1.2), now: 1.2, walkerSpeed: 1), .queued)
         // The edge gone past the track gap, then back: a new episode, its own haptic.
-        p.observe([:], now: 0.6)
-        p.observe([.dropOff: b], now: 0.7)
-        XCTAssertEqual(p.holdBehindSameEdge(b, playing: playing(0.7), now: 0.7, walkerSpeed: 1), .queued)
+        p.observe([:], now: 1.6)
+        p.observe([.dropOff: b], now: 2.3)
+        XCTAssertEqual(p.holdBehindSameEdge(b, playing: playing(2.3), now: 2.3, walkerSpeed: 1), .queued)
+    }
+
+    /// V3 queue haptics on one edge: at most one per second, however often the episode id changes.
+    func testV3QueueBuzzAtMostOncePerSecondOnTheSameEdge() {
+        var p = AlertPolicy()
+        let carrier = Self.det(.dropOff, ahead: 2.6, x: -0.34)
+        var buzzes = 0
+        for (i, ahead) in [Float(1.95), 1.4, 1.95, 1.4, 1.95].enumerated() { // jumps 0.55 m: a new episode id each frame
+            let now = Double(i) * 0.2
+            let d = Self.det(.dropOff, ahead: ahead, x: -0.34)
+            p.observe([.dropOff: d], now: now)
+            let playing = AlertPolicy.Playing(priority: 2, hazard: carrier, endsAt: now + 0.3, startedAt: now - 1)
+            if p.holdBehindSameEdge(d, playing: playing, now: now, walkerSpeed: 1) == .queued { buzzes += 1 }
+        }
+        XCTAssertEqual(buzzes, 1, "4 id changes in 0.8 s: one buzz")
+        let d = Self.det(.dropOff, ahead: 1.4, x: -0.34)
+        p.observe([.dropOff: d], now: 1.2)
+        let playing = AlertPolicy.Playing(priority: 2, hazard: carrier, endsAt: 1.5, startedAt: 0)
+        XCTAssertEqual(p.holdBehindSameEdge(d, playing: playing, now: 1.2, walkerSpeed: 1), .queued, "a second later: buzzes")
     }
 
     /// A cut-off phrase un-speaks the episode it was said for, even when this tick maps the hazard elsewhere.
