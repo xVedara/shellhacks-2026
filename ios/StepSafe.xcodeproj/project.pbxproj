@@ -45,6 +45,7 @@
 		A38B8299299CDCFEE2D40C39 /* ServerLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = 556BB89ED53BFA792964A285 /* ServerLink.swift */; };
 		A708EF983E71AAEECD37BFB7 /* VoteStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C22A47F5888988D540A9DF5F /* VoteStore.swift */; };
 		AF9466510B90D100A2D85EEB /* TrackingDebounce.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63F2E8796DBDCC7F3DA5B0F2 /* TrackingDebounce.swift */; };
+		B002451A82BEF7B9AC6DAC36 /* AlertEpisodeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7C265D644736A9576C4332C /* AlertEpisodeTests.swift */; };
 		B0F31929D183C64F79BB52E3 /* StepSafeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E074A56398607FDE4729FD90 /* StepSafeApp.swift */; };
 		B15A0DB507DD2C2C518F04C5 /* MapRules.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E94EF705BC93542C4D872AC /* MapRules.swift */; };
 		B84D6502AD809081542B6B52 /* SensorSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20F9BE3BE4FC4C1489A5352F /* SensorSession.swift */; };
@@ -109,6 +110,7 @@
 		E074A56398607FDE4729FD90 /* StepSafeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StepSafeApp.swift; sourceTree = "<group>"; };
 		E4520DB080FCCB10EDDF352E /* Feedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Feedback.swift; sourceTree = "<group>"; };
 		E6EFDD0ECE64133E5D035ACF /* AlertPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlertPolicy.swift; sourceTree = "<group>"; };
+		E7C265D644736A9576C4332C /* AlertEpisodeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlertEpisodeTests.swift; sourceTree = "<group>"; };
 		E7FA805DD99B7D224C553DA4 /* VoteStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoteStoreTests.swift; sourceTree = "<group>"; };
 		E893A816788F11597F9B6034 /* HazardIcons */ = {isa = PBXFileReference; lastKnownFileType = folder; name = HazardIcons; path = StepSafe/HazardIcons; sourceTree = SOURCE_ROOT; };
 		F03246C97817669361667AC9 /* StepSafeIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StepSafeIntents.swift; sourceTree = "<group>"; };
@@ -132,6 +134,7 @@
 		6338FAC4E1A0435F257EB3A3 /* StepSafeTests */ = {
 			isa = PBXGroup;
 			children = (
+				E7C265D644736A9576C4332C /* AlertEpisodeTests.swift */,
 				734358435B5F3C063F69C2E0 /* AlertPolicyTests.swift */,
 				D531260C3CAA1ADEE92BC2B5 /* CommunityTests.swift */,
 				736324E99413968B183D28CE /* CrossingCurbTests.swift */,
@@ -347,6 +350,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B002451A82BEF7B9AC6DAC36 /* AlertEpisodeTests.swift in Sources */,
 				CD27C6C0EC7A96E22C8D894E /* AlertPolicy.swift in Sources */,
 				24E9C93544221CE03188C3E5 /* AlertPolicyTests.swift in Sources */,
 				58C7A0ED3A5D17A05087D674 /* BoxTracker.swift in Sources */,

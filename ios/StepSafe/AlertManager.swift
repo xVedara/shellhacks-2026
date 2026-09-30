@@ -374,11 +374,19 @@ final class AlertManager {
     /// `closings` is every closing object this frame. Empty falls back to the single `confirmed[.closing]` slot.
     func update(_ confirmed: [HazardKind: Detection], closings: [Detection] = []) {
         latest = confirmed
+        policy.observe(confirmed, now: now) // episodes (no-op with Tuning.alertEpisodes off)
+        if policy.dropOffReminderDue(confirmed, now: now) { playHaptic(.dropOff, urgent: true) } // haptic only, no audio
         let tracks = closings.isEmpty ? (confirmed[.closing].map { [$0] } ?? []) : closings
         pingNewClosing(tracks)
         cueBlockedDropOff(confirmed)
+        let playing = self.playing
         if let d = policy.decide(confirmed, now: now, playing: playing, walkerSpeed: walkerSpeed) {
-            announce(d)
+            // V3: a P1 drop-off waits behind a P2 phrase about the same edge; its haptic fires now.
+            switch policy.holdBehindSameEdge(d, playing: playing, now: now, walkerSpeed: walkerSpeed) {
+            case .sameWords?, .queued?: playHaptic(.dropOff, urgent: true)
+            case .waiting?: break
+            case nil: announce(d)
+            }
         }
         if holdStillHint.update(now: now, atCurb: atCurb, walkerSpeed: walkerSpeed, headStill: headStill) {
             notice(.say(Notices.holdStill))
@@ -395,6 +403,7 @@ final class AlertManager {
         if d.preCued { dropToneAfterWords = nil }
         if play(tone: tone, at: d.point, phrase: AlertPolicy.phrase(d), priority: AlertPolicy.priority(d), hazard: d) {
             policy.markAnnounced(d, now: now)
+            policy.noteSpoken(d, now: now)
             if !d.preCued { playHaptic(haptic, urgent: urgent) }
         } else if now - lastHapticOnly >= 2 {
             // Audio down: not marked, so it replays after recovery; the haptic still warns meanwhile.

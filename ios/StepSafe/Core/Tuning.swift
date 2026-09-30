@@ -81,6 +81,28 @@ enum Tuning {
     /// Lateral offset beyond which a hazard is spoken as "left"/"right" instead of "ahead".
     static let sideDeadband: Float = 0.15
 
+    // MARK: Alert episodes (analysis/alert_sim/VARIANTS.md, winner; offline on 5 recordings, all hard checks pass)
+    /// Walker-frame episodes for drop-offs and head-height hazards (AlertPolicy.observe): one edge followed while
+    /// walking is said once, then again only on a closer tier, a side change or a label change; a 0.5 m jump of the
+    /// nearest point is a new episode. Also V3: a priority-1 drop-off does not cut off a priority-2 phrase about the
+    /// same edge that it can wait for (haptic now; same words = no second phrase). Off = the world-point rules only.
+    /// `var` so tests can run the old rules (AlertPolicyFlagsOffTests); the app never changes it.
+    static var alertEpisodes = true
+    /// Haptic-only drop-off reminder every dropOffReminderSeconds while a P1-cued drop-off episode stays within 2 m
+    /// (no audio). Needs alertEpisodes (it rides on the episode tracks).
+    static var dropOffHapticReminder = true
+    /// Ground obstacles and closing objects keep the world-point repeat rules (ground gating lost chest-mount tags).
+    static let episodeKinds: Set<HazardKind> = [.dropOff, .headHeight]
+    /// Same episode: same kind, same side word, lateral within this of the track.
+    static let episodeLateralTolM: Float = 0.4
+    /// An episode ends when its track is not updated for this long (wall clock).
+    static let episodeTrackGapSeconds: Double = 0.3
+    /// The nearest point moving more than this ahead/back between updates = another object, a new episode.
+    static let episodeJumpM: Float = 0.5
+    /// Re-speak tiers, closest last (2.0 = repeatCloseDistance). Also the world-point history's tiers.
+    static let escalateTiersM: [Float] = [2.0, 1.0]
+    static let dropOffReminderSeconds: Double = 5
+
     // MARK: Crossing assist (ClosingDetector; names for the replay)
     /// Trigger when time to contact is below this...
     static let ttcSeconds: Float = 3.0

@@ -111,7 +111,8 @@ struct AlertPolicy {
         /// Closing objects: the detector's track id is the identity (they move).
         let trackId: Int?
         var time: Double
-        var close: Bool
+        /// Distance tiers crossed by any announcement of it (tier(_:)); tier >= 1 = said within repeatCloseDistance.
+        var tier: Int
         /// Announced as "Slope down": a later "Drop-off" for the same hazard is due again (the scarier words).
         var slope = false
     }
@@ -142,6 +143,124 @@ struct AlertPolicy {
 
     private var history: [Announced] = []
     private(set) var mutedUntil: Double?
+
+    // MARK: Walker-frame episodes (Tuning.alertEpisodes; analysis/alert_sim/VARIANTS.md, winner)
+    // One drop-off edge or head-height hazard followed while walking is ONE episode, however far its world point
+    // slides: said once, then again only when it crosses a closer tier (2 m, 1 m), changes side, or changes label.
+    // The first alert of an episode is never held back. Ground obstacles and closing objects keep the world rules.
+
+    private struct EpisodeTrack {
+        let kind: HazardKind
+        var side: Side
+        var lateral: Float
+        var ahead: Float
+        var lastSeen: Double
+        /// The last phrase heard for this episode; nil = not spoken yet (its next alert always plays).
+        var spoken: (ahead: Float, side: Side, slope: Bool)?
+        /// Last priority-1 cue (phrase haptic or V3 haptic) for this episode: the haptic reminder's clock.
+        var lastP1Cue: Double?
+    }
+    enum Side { case left, ahead, right }
+    private var tracks: [EpisodeTrack] = []
+    /// This tick's track (index into tracks) per kind, set by observe().
+    private var current: [HazardKind: Int] = [:]
+    /// V3: the priority-1 drop-off held behind a priority-2 phrase about the same edge (its haptic already fired).
+    private var queuedP1: Detection?
+
+    static func side(_ d: Detection) -> Side {
+        d.lateral < -Tuning.sideDeadband ? .left : d.lateral > Tuning.sideDeadband ? .right : .ahead
+    }
+
+    /// How many distance tiers `ahead` is inside: 2 m and 1 m with episodes on, else only repeatCloseDistance.
+    static func tier(_ ahead: Float) -> Int {
+        (Tuning.alertEpisodes ? Tuning.escalateTiersM : [Tuning.repeatCloseDistance]).filter { ahead <= $0 }.count
+    }
+
+    /// Call every analysis tick with the confirmed hazards, before decide(). No-op with episodes off.
+    mutating func observe(_ confirmed: [HazardKind: Detection], now: Double) {
+        guard Tuning.alertEpisodes else { return }
+        tracks.removeAll { now - $0.lastSeen > Tuning.episodeTrackGapSeconds }
+        current = [:]
+        for (kind, d) in confirmed where Tuning.episodeKinds.contains(kind) {
+            let side = Self.side(d)
+            var i = tracks.indices.filter { tracks[$0].kind == kind && tracks[$0].side == side
+                && abs(tracks[$0].lateral - d.lateral) <= Tuning.episodeLateralTolM }
+                .min { abs(tracks[$0].lateral - d.lateral) < abs(tracks[$1].lateral - d.lateral) }
+            let fresh = EpisodeTrack(kind: kind, side: side, lateral: d.lateral, ahead: d.ahead, lastSeen: now)
+            if let j = i, abs(d.ahead - tracks[j].ahead) > Tuning.episodeJumpM {
+                tracks[j] = fresh // the nearest point jumped: another object, a new episode (replaced in place)
+            } else if i == nil {
+                tracks.append(fresh)
+                i = tracks.count - 1
+            }
+            let j = i!
+            tracks[j].side = side; tracks[j].lateral = d.lateral; tracks[j].ahead = d.ahead; tracks[j].lastSeen = now
+            current[kind] = j
+        }
+    }
+
+    /// This tick's track for `d`, only if `d` still fits it.
+    private func track(for d: Detection) -> Int? {
+        guard let i = current[d.kind], i < tracks.count else { return nil }
+        return tracks[i].side == Self.side(d) && abs(tracks[i].lateral - d.lateral) <= Tuning.episodeLateralTolM ? i : nil
+    }
+
+    /// false = a repeat of an episode already spoken that carries no new information.
+    private func episodeAllows(_ d: Detection) -> Bool {
+        guard Tuning.alertEpisodes, Tuning.episodeKinds.contains(d.kind), let i = track(for: d),
+              let s = tracks[i].spoken else { return true } // first alert of an episode: always
+        if Self.side(d) != s.side || d.slope != s.slope { return true }
+        return Self.tier(d.ahead) > Self.tier(s.ahead) // crossed 2 m or 1 m since it was last spoken
+    }
+
+    /// Call once a phrase for `d` has started (after markAnnounced): the episode has been spoken.
+    mutating func noteSpoken(_ d: Detection, now: Double) {
+        guard Tuning.alertEpisodes, let i = track(for: d) else { return }
+        tracks[i].spoken = (d.ahead, Self.side(d), d.slope)
+        if Self.priority(d) == 1 { tracks[i].lastP1Cue = now }
+    }
+
+    /// Same drop-off edge (V3): same object, or same side within episodeLateralTolM.
+    static func sameEdge(_ a: Detection, _ b: Detection) -> Bool {
+        a.kind == .dropOff && b.kind == .dropOff && (sameObject(a, b)
+            || (side(a) == side(b) && abs(a.lateral - b.lateral) <= Tuning.episodeLateralTolM))
+    }
+
+    enum SameEdgeHold { case sameWords, queued, waiting }
+
+    /// V3, for the hazard decide() returned: a priority-1 drop-off does not cut off a playing priority-2 phrase
+    /// about the same edge when it can wait (TTC - time left >= p1LeadSeconds). `.sameWords`: that phrase already
+    /// says these words; haptic now, counted as announced, no second phrase. `.queued`: haptic now, the phrase
+    /// waits (decide() offers it again). `.waiting`: still waiting, nothing to do. nil: play it (clears the queue).
+    mutating func holdBehindSameEdge(_ d: Detection, playing: Playing?, now: Double, walkerSpeed: Float) -> SameEdgeHold? {
+        guard Tuning.alertEpisodes, Self.priority(d) == 1, d.kind == .dropOff, let p = playing, p.priority == 2,
+              let cur = p.hazard, Self.sameEdge(d, cur),
+              Double(Self.ttc(d, walkerSpeed: walkerSpeed)) - (p.endsAt - now) >= Tuning.p1LeadSeconds else {
+            queuedP1 = nil
+            return nil
+        }
+        if Self.phrase(d) == Self.phrase(cur) {
+            markAnnounced(d, now: now)
+            noteSpoken(d, now: now) // priority 1: also the episode's P1 cue
+            queuedP1 = nil
+            return .sameWords
+        }
+        let first = queuedP1 == nil
+        queuedP1 = d
+        guard first else { return .waiting }
+        if let i = track(for: d) { tracks[i].lastP1Cue = now }
+        return .queued
+    }
+
+    /// Haptic-only reminder (Tuning.dropOffHapticReminder): true (play the drop-off haptic, no audio) every
+    /// dropOffReminderSeconds without a priority-1 cue while a drop-off episode already P1-cued stays within 2 m.
+    mutating func dropOffReminderDue(_ confirmed: [HazardKind: Detection], now: Double) -> Bool {
+        guard Tuning.dropOffHapticReminder, let d = confirmed[.dropOff], d.ahead <= Tuning.dropUrgentDistance,
+              let i = track(for: d), let last = tracks[i].lastP1Cue,
+              now - last >= Tuning.dropOffReminderSeconds else { return false }
+        tracks[i].lastP1Cue = now
+        return true
+    }
 
     static func priority(_ d: Detection) -> Int {
         // Future crossing-assist detections (approaching cars, fast-closing objects) MUST return 1: never muted.
@@ -340,7 +459,10 @@ struct AlertPolicy {
         return true
     }
 
-    mutating func clearHistory() { history = []; spokenClosing = []; pending = nil; blocked = []; cuedPhraseStart = nil }
+    mutating func clearHistory() {
+        history = []; spokenClosing = []; pending = nil; blocked = []; cuedPhraseStart = nil
+        tracks = []; current = [:]; queuedP1 = nil
+    }
 
     /// The hazard to announce now, or nil.
     func next(_ confirmed: [HazardKind: Detection], now: Double, playing: Playing?, walkerSpeed: Float = 0) -> Detection? {
@@ -421,19 +543,20 @@ struct AlertPolicy {
             markAnnounced(Detection(kind: .dropOff, point: p, ahead: d.closing?.dropOffAhead ?? 0, lateral: 0, pointCount: 0), now: now)
         }
         history.removeAll { now - $0.time >= ($0.kind == .closing ? Tuning.closingRepeatSeconds : Tuning.repeatWindow) }
-        let close = d.ahead <= Tuning.repeatCloseDistance
+        let tier = Self.tier(d.ahead)
         if let i = match(d, now: now) {
             history[i].time = now
-            history[i].close = history[i].close || close
+            history[i].tier = max(history[i].tier, tier)
             history[i].slope = history[i].slope && d.slope && !d.followOn // "Drop-off ahead." was said
         } else {
-            history.append(Announced(kind: d.kind, point: d.point, trackId: d.closing?.trackId, time: now, close: close,
+            history.append(Announced(kind: d.kind, point: d.point, trackId: d.closing?.trackId, time: now, tier: tier,
                                      slope: d.kind == .dropOff && d.slope && !d.followOn))
         }
     }
 
     /// The alert was cut off before it finished: forget it so it can replay.
     mutating func unmark(_ d: Detection) {
+        if Tuning.alertEpisodes, let i = track(for: d) { tracks[i].spoken = nil } // not heard: its episode speaks next
         if let i = history.lastIndex(where: { same($0, d) }) {
             history.remove(at: i)
         }
@@ -443,10 +566,10 @@ struct AlertPolicy {
     }
 
     private func isDue(_ d: Detection, now: Double) -> Bool {
-        guard let i = match(d, now: now) else { return true } // new hazard, or window expired
+        guard let i = match(d, now: now) else { return episodeAllows(d) } // new hazard, or window expired
         if d.kind == .closing { return false } // re-announced after closingRepeatSeconds (match expires)
-        if history[i].slope, !d.slope { return true } // said "Slope down", now "Drop-off": say the scarier words
-        return d.ahead <= Tuning.repeatCloseDistance && !history[i].close
+        if history[i].slope, !d.slope { return episodeAllows(d) } // said "Slope down", now "Drop-off": the scarier words
+        return Self.tier(d.ahead) > history[i].tier && episodeAllows(d) // closer tier: 2 m (and 1 m with episodes)
     }
 
     private func same(_ a: Announced, _ d: Detection) -> Bool {
