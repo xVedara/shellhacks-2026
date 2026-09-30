@@ -4,7 +4,19 @@
 // Distances are metres, times are seconds, point counts are full-resolution (256x192) depth pixels.
 // "Ahead" is along the walking direction (camera forward flattened); heights are above the floor.
 
+import Foundation
+
 enum Tuning {
+    // MARK: PathGuard v2 field A/B switches (test branch exp/pathguard-v2)
+    // Offline: analysis/pathguard_v2/README.md. Each is a debug-panel toggle (Walker tab > Debug), persisted in
+    // UserDefaults under its key; both default ON. Unset a key (or delete the app) to get the default back.
+    /// Same-edge dedupe (AlertPolicy.sameEdge): speech only, detection unchanged.
+    static var edgeDedupeOn: Bool { switchOn(edgeDedupeKey) }
+    /// Drop pixel threshold 0.10 m instead of 0.12 m (dropoffDepthM).
+    static var dropoff010On: Bool { switchOn(dropoff010Key) }
+    static let edgeDedupeKey = "pg.edgeDedupe", dropoff010Key = "pg.dropoff010"
+    private static func switchOn(_ key: String) -> Bool { UserDefaults.standard.object(forKey: key) as? Bool ?? true }
+
     // MARK: Path guard (params.tuned.json)
     static let laneHalfWidthM: Float = 0.35
     static let laneNearM: Float = 0.5
@@ -15,8 +27,9 @@ enum Tuning {
     static let headBandMaxM: Float = 2.0
     static let dropoffNearM: Float = 1.0
     static let dropoffFarM: Float = 3.0
-    /// A measured point this far below the floor is a drop pixel.
-    static let dropoffDepthM: Float = 0.12  // below 0.15 so a standard 15 cm curb fires reliably (float32)
+    /// A measured point this far below the floor is a drop pixel. 0.12 below 0.15 so a standard 15 cm curb fires
+    /// reliably (float32); 0.10 (switch dropoff010On) caught 4 more curb-ramp tags offline on the chest walks.
+    static var dropoffDepthM: Float { dropoff010On ? 0.10 : 0.12 }
     /// Missing-floor rule: at least this many expected floor pixels in the zone...
     static let dropoffMinExpectedPoints = 200
     /// ...of which at least this share have no valid depth.
@@ -78,6 +91,16 @@ enum Tuning {
     static let repeatCloseDistance: Float = 2.0
     /// Same kind within this distance of the point where it was first announced = the same hazard.
     static let sameHazardRadius: Float = 0.75
+    /// Drop-offs (edgeDedupeOn): an announced edge followed continuously stays the same hazard (AlertPolicy.sameEdge)
+    /// - seen again within this long...
+    static let edgeGapSeconds: Double = 1.0
+    /// ...with its drop point within this of where it was last seen (world, or ahead and lateral each). Offline
+    /// (analysis/pathguard_v2/out/dedupe_compare.json, 0.10 m, with edgeRecedeM): held-out test route 4.40 spoken
+    /// drop-offs/min, no tag lost on any walk.
+    static let edgeJumpM: Float = 1.0
+    /// ...and never moving away: a drop point whose distance ahead grew by more than this since last seen is a new
+    /// edge (a curb running beside the walker, then the corner curb ahead).
+    static let edgeRecedeM: Float = 0.4
     /// Lateral offset beyond which a hazard is spoken as "left"/"right" instead of "ahead".
     static let sideDeadband: Float = 0.15
 

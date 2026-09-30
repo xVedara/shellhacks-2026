@@ -111,6 +111,13 @@ struct AlertPolicy {
         var close: Bool
         /// Announced as "Slope down": a later "Drop-off" for the same hazard is due again (the scarier words).
         var slope = false
+        /// Drop-offs: where and when the same edge was last seen (followEdges), and its distance / side then. The
+        /// nearest drop point moves with the walker along a sloping or wrongly-floored edge; followed continuously it
+        /// stays the same hazard.
+        var lastPoint: SIMD3<Float>
+        var lastSeen: Double
+        var lastAhead: Float
+        var lastLateral: Float
     }
 
     /// What is playing: its priority, the hazard if it is an alert, and when it ends.
@@ -357,6 +364,7 @@ struct AlertPolicy {
     /// confirmed, even if it left the camera view, so it is said when the voice frees; only a more urgent closing
     /// object replaces it. AlertManager and the policy sims call this.
     mutating func decide(_ confirmed: [HazardKind: Detection], now: Double, playing: Playing?, walkerSpeed: Float = 0) -> Detection? {
+        if let d = confirmed[.dropOff] { followEdge(d, now: now) }
         // Expiry: kept through whatever is playing; dropped only if still unspoken pendingClosingSeconds after the
         // first idle opportunity, or once its time to contact has passed, or when it is no longer due.
         if let p = pending, !isDue(p.d, now: now) || p.d.closing.map({ $0.ttc - Float(now - p.lastSeen) <= 0 }) == true
@@ -425,7 +433,8 @@ struct AlertPolicy {
             history[i].slope = history[i].slope && d.slope && !d.followOn // "Drop-off ahead." was said
         } else {
             history.append(Announced(kind: d.kind, point: d.point, trackId: d.closing?.trackId, time: now, close: close,
-                                     slope: d.kind == .dropOff && d.slope && !d.followOn))
+                                     slope: d.kind == .dropOff && d.slope && !d.followOn, lastPoint: d.point,
+                                     lastSeen: now, lastAhead: d.ahead, lastLateral: d.lateral))
         }
     }
 
@@ -453,8 +462,35 @@ struct AlertPolicy {
     }
 
     /// A closing object still coming is repeated after one clip length (Tuning.closingRepeatSeconds), never later.
+    /// A drop-off also matches an announced edge it continues (sameEdge).
     private func match(_ d: Detection, now: Double) -> Int? {
         let window = d.kind == .closing ? Tuning.closingRepeatSeconds : Tuning.repeatWindow
-        return history.firstIndex { now - $0.time < window && same($0, d) }
+        return history.firstIndex { now - $0.time < window && (same($0, d) || sameEdge($0, d, now: now)) }
+    }
+
+    /// The same drop-off edge, followed continuously: seen within edgeGapSeconds, not further ahead by more than
+    /// edgeRecedeM, and the new drop point within edgeJumpM of where it was last seen - in the world (horizontal), OR
+    /// relative to the walker (ahead and lateral each; immune to ARKit position jumps). A new edge (seen after a gap,
+    /// a drop point that moved away, or a jump of more than edgeJumpM in both frames: the next curb, stairs after a
+    /// curb) is a new hazard.
+    /// OR, not AND (analysis/pathguard_v2/out/dedupe_compare.json, 0.10 m): spoken drop-offs/min chest 2.87, head 0.57,
+    /// night 2.53, held-out 4.40, no tag lost; AND gives held-out 23.63 and a 2.5 m world cap 20.33, because ARKit
+    /// jumps 3-18 m on 18-28-58Z. The relative clause merged 0 distinct edges during clean tracking: all 96 far merges
+    /// were within 5 s of an ARKit glitch, and 6/6 eyeballed were the same physical spot. Residual: a distinct edge
+    /// at the same relative spot within 1 s (a quick head turn to another curb) is merged for the repeat window.
+    private func sameEdge(_ a: Announced, _ d: Detection, now: Double) -> Bool {
+        guard Tuning.edgeDedupeOn, a.kind == .dropOff, d.kind == .dropOff, now - a.lastSeen <= Tuning.edgeGapSeconds
+        else { return false }
+        guard d.ahead - a.lastAhead <= Tuning.edgeRecedeM else { return false } // a followed edge never moves away
+        let dp = d.point - a.lastPoint
+        return simd_length(SIMD2(dp.x, dp.z)) <= Tuning.edgeJumpM ||
+            (abs(d.ahead - a.lastAhead) <= Tuning.edgeJumpM && abs(d.lateral - a.lastLateral) <= Tuning.edgeJumpM)
+    }
+
+    /// Every frame (decide): the confirmed drop-off updates the announced edge it continues.
+    private mutating func followEdge(_ d: Detection, now: Double) {
+        guard let i = match(d, now: now) else { return }
+        history[i].lastPoint = d.point; history[i].lastSeen = now
+        history[i].lastAhead = d.ahead; history[i].lastLateral = d.lateral
     }
 }
